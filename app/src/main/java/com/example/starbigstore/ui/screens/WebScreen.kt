@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.storage.FirebaseStorage
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -17,6 +18,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.util.*
 
 class WebAppInterface(
     private val mContext: Context,
@@ -28,8 +30,10 @@ class WebAppInterface(
 
     @JavascriptInterface
     fun registerUser(firstName: String, lastName: String, email: String, phone: String, address: String) {
+        // En un entorno real, las fotos se subirían primero. 
+        // Por ahora registramos los datos y marcamos como 'unverified'
         val db = FirebaseFirestore.getInstance()
-        val user: HashMap<String, Any> = hashMapOf(
+        val user = hashMapOf<String, Any>(
             "firstName" to firstName,
             "lastName" to lastName,
             "name" to "$firstName $lastName",
@@ -37,16 +41,20 @@ class WebAppInterface(
             "phone" to phone,
             "address" to address,
             "status" to "unverified",
-            "photoUrl" to "",
+            "photoUrl" to "", 
+            "idCardUrl" to "",
             "timestamp" to System.currentTimeMillis()
         )
-        db.collection("registros_clientes").add(user).addOnSuccessListener {
-            syncToGoogleSheets(user)
-            Toast.makeText(mContext, "Registro enviado", Toast.LENGTH_LONG).show()
-        }
+
+        db.collection("registros_clientes")
+            .add(user)
+            .addOnSuccessListener {
+                syncToGoogleSheets(user)
+                Toast.makeText(mContext, "Solicitud enviada. Verificaremos tu perfil.", Toast.LENGTH_LONG).show()
+            }
     }
 
-    private fun syncToGoogleSheets(user: HashMap<String, Any>) {
+    private fun syncToGoogleSheets(user: Map<String, Any>) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val client = OkHttpClient()
