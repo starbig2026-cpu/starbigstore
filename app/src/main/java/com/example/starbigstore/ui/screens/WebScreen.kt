@@ -1,12 +1,11 @@
 package com.example.starbigstore.ui.screens
 
 import android.content.Context
-import android.webkit.JavascriptInterface
-import android.webkit.WebView
-import android.webkit.WebViewClient
+import android.net.Uri
+import android.webkit.*
 import android.widget.Toast
 import androidx.biometric.BiometricManager
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.firebase.auth.FirebaseAuth
@@ -37,24 +36,21 @@ class WebAppInterface(
             "email" to email,
             "phone" to phone,
             "address" to address,
-            "status" to "unverified", // Estatus inicial bloqueado
+            "status" to "unverified",
             "photoUrl" to "",
             "timestamp" to System.currentTimeMillis()
         )
-
-        db.collection("registros_clientes")
-            .add(user)
-            .addOnSuccessListener {
-                syncToGoogleSheets(user)
-                Toast.makeText(mContext, "Registro enviado. Espera la verificación del administrador.", Toast.LENGTH_LONG).show()
-            }
+        db.collection("registros_clientes").add(user).addOnSuccessListener {
+            syncToGoogleSheets(user)
+            Toast.makeText(mContext, "Registro enviado", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun syncToGoogleSheets(user: HashMap<String, Any>) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val client = OkHttpClient()
-                val json = "{\"name\":\"${user["name"]}\",\"email\":\"${user["email"]}\",\"phone\":\"${user["phone"]}\",\"address\":\"${user["address"]}\",\"status\":\"pending\"}"
+                val json = "{\"name\":\"${user["name"]}\",\"email\":\"${user["email"]}\",\"phone\":\"${user["phone"]}\",\"address\":\"${user["address"]}\",\"status\":\"unverified\"}"
                 val body = json.toRequestBody("application/json".toMediaType())
                 val request = Request.Builder().url(googleSheetsUrl).post(body).build()
                 client.newCall(request).execute()
@@ -64,41 +60,25 @@ class WebAppInterface(
 
     @JavascriptInterface
     fun loginUser(email: String, pass: String) {
-        val auth = FirebaseAuth.getInstance()
-        auth.signInWithEmailAndPassword(email, pass)
-            .addOnSuccessListener {
-                fetchUserDataAndPopulateProfile(email)
-            }
-            .addOnFailureListener {
-                Toast.makeText(mContext, "Credenciales incorrectas", Toast.LENGTH_SHORT).show()
-            }
+        FirebaseAuth.getInstance().signInWithEmailAndPassword(email, pass)
+            .addOnSuccessListener { fetchUserData(email) }
+            .addOnFailureListener { Toast.makeText(mContext, "Credenciales incorrectas", Toast.LENGTH_SHORT).show() }
     }
 
-    private fun fetchUserDataAndPopulateProfile(email: String) {
-        val db = FirebaseFirestore.getInstance()
-        db.collection("registros_clientes")
-            .whereEqualTo("email", email)
-            .get()
-            .addOnSuccessListener { docs ->
+    private fun fetchUserData(email: String) {
+        FirebaseFirestore.getInstance().collection("registros_clientes")
+            .whereEqualTo("email", email).get().addOnSuccessListener { docs ->
                 if (!docs.isEmpty) {
-                    val user = docs.documents[0]
-                    val name = user.getString("name") ?: ""
-                    val photoUrl = user.getString("photoUrl") ?: ""
-                    val status = user.getString("status") ?: "En verificación"
-                    
-                    // Llamamos a la función de JavaScript en index.html
-                    webView.post {
-                        webView.evaluateJavascript("window.updateUserProfile('$name', '$email', '$photoUrl', '$status')", null)
+                    val u = docs.documents[0]
+                    webView.post { 
+                        webView.evaluateJavascript("window.updateUserProfile('${u.getString("name")}', '$email', '${u.getString("photoUrl")}', '${u.getString("status")}')", null) 
                     }
                 }
             }
     }
 
     @JavascriptInterface
-    fun isBiometricAvailable(): Boolean {
-        val biometricManager = BiometricManager.from(mContext)
-        return biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS
-    }
+    fun isBiometricAvailable() = BiometricManager.from(mContext).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS
 
     @JavascriptInterface
     fun requestBiometric() { onBiometricRequest() }
@@ -111,7 +91,8 @@ class WebAppInterface(
 fun WebScreen(
     url: String, 
     onAdminRequest: () -> Unit, 
-    onBiometricRequest: () -> Unit,
+    onBiometricRequest: () -> Unit, 
+    onFileChoose: (ValueCallback<Array<Uri>>?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     AndroidView(
@@ -119,8 +100,17 @@ fun WebScreen(
         factory = { context ->
             WebView(context).apply {
                 webViewClient = WebViewClient()
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = true
+                webChromeClient = object : WebChromeClient() {
+                    override fun onShowFileChooser(wv: WebView?, fpc: ValueCallback<Array<Uri>>?, fci: FileChooserParams?): Boolean {
+                        onFileChoose(fpc)
+                        return true
+                    }
+                }
+                settings.apply {
+                    javaScriptEnabled = true
+                    domStorageEnabled = true
+                    allowFileAccess = true
+                }
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 addJavascriptInterface(WebAppInterface(context, this, onAdminRequest, onBiometricRequest), "AndroidApp")
                 loadUrl(url)

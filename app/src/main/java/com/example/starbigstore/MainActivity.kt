@@ -1,9 +1,14 @@
 package com.example.starbigstore
 
+import android.net.Uri
 import android.os.Bundle
+import android.webkit.ValueCallback
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
@@ -29,29 +34,28 @@ import com.example.starbigstore.ui.theme.StarbigStoreTheme
 import java.util.concurrent.Executor
 
 class MainActivity : FragmentActivity() {
-    private lateinit var executor: Executor
-    private lateinit var biometricPrompt: BiometricPrompt
-    private lateinit var promptInfo: BiometricPrompt.PromptInfo
+    private var filePathCallback: ValueCallback<Array<Uri>>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         
-        executor = ContextCompat.getMainExecutor(this)
-        
         setContent {
             StarbigStoreTheme(darkTheme = true) {
                 var currentTab by remember { mutableIntStateOf(0) }
+                
+                val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+                    filePathCallback?.onReceiveValue(if (uri != null) arrayOf(uri) else null)
+                    filePathCallback = null
+                }
 
                 Box(modifier = Modifier.fillMaxSize()) {
-                    // Fondo de la App
                     Image(
                         painter = painterResource(id = R.drawable.main_bg_app),
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize().blur(8.dp),
                         contentScale = ContentScale.Crop
                     )
-                    
                     Surface(modifier = Modifier.fillMaxSize(), color = Color.Black.copy(alpha = 0.5f)) {}
 
                     Scaffold(
@@ -63,56 +67,31 @@ class MainActivity : FragmentActivity() {
                                     contentColor = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.navigationBarsPadding()
                                 ) {
-                                    NavigationBarItem(
-                                        selected = currentTab == 0,
-                                        onClick = { currentTab = 0 },
-                                        icon = { Icon(Icons.Default.Home, null) },
-                                        label = { Text("Tienda") }
-                                    )
-                                    NavigationBarItem(
-                                        selected = currentTab == 1,
-                                        onClick = { currentTab = 1 },
-                                        icon = { Icon(Icons.Default.ShoppingCart, null) },
-                                        label = { Text("Catálogo") }
-                                    )
-                                    NavigationBarItem(
-                                        selected = currentTab == 3,
-                                        onClick = { currentTab = 3 },
-                                        icon = { Icon(Icons.Default.CreditCard, null) },
-                                        label = { Text("Crédito") }
-                                    )
-                                    NavigationBarItem(
-                                        selected = currentTab == 4,
-                                        onClick = { currentTab = 4 },
-                                        icon = { Icon(Icons.Default.ShoppingBag, null) },
-                                        label = { Text("Carrito") }
-                                    )
+                                    NavigationBarItem(selected = currentTab == 0, onClick = { currentTab = 0 }, icon = { Icon(Icons.Default.Home, null) }, label = { Text("Tienda") })
+                                    NavigationBarItem(selected = currentTab == 1, onClick = { currentTab = 1 }, icon = { Icon(Icons.Default.ShoppingCart, null) }, label = { Text("Catálogo") })
+                                    NavigationBarItem(selected = currentTab == 3, onClick = { currentTab = 3 }, icon = { Icon(Icons.Default.CreditCard, null) }, label = { Text("Crédito") })
+                                    NavigationBarItem(selected = currentTab == 4, onClick = { currentTab = 4 }, icon = { Icon(Icons.Default.ShoppingBag, null) }, label = { Text("Carrito") })
                                 }
                             }
                         },
                         modifier = Modifier.fillMaxSize()
                     ) { innerPadding ->
-                        // Box que contiene las pantallas con márgenes para evitar notch/cámara
-                        Box(modifier = Modifier
-                            .fillMaxSize()
-                            .padding(bottom = innerPadding.calculateBottomPadding())
-                            .statusBarsPadding() // Esto baja el contenido para que no lo tape la cámara
-                        ) {
+                        Box(modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding()).statusBarsPadding()) {
                             when (currentTab) {
                                 0 -> WebScreen(
                                     url = "file:///android_asset/index.html",
                                     onAdminRequest = { currentTab = 2 },
                                     onBiometricRequest = { showBiometricPrompt() },
+                                    onFileChoose = { callback ->
+                                        filePathCallback?.onReceiveValue(null)
+                                        filePathCallback = callback
+                                        pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                    },
                                     modifier = Modifier.fillMaxSize()
                                 )
                                 1 -> HomeScreen(modifier = Modifier.fillMaxSize())
                                 2 -> AdminScreen(onBack = { currentTab = 0 }, modifier = Modifier.fillMaxSize())
-                                3 -> Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) { 
-                                    Text("Solicitud de Crédito", color = Color.White) 
-                                }
-                                4 -> Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) { 
-                                    Text("Carrito de Compras", color = Color.White) 
-                                }
+                                else -> Box(Modifier.fillMaxSize())
                             }
                         }
                     }
@@ -122,25 +101,14 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun showBiometricPrompt() {
-        promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Autenticación Starbig")
-            .setSubtitle("Usa tu huella para entrar")
-            .setNegativeButtonText("Cancelar")
-            .build()
-
-        biometricPrompt = BiometricPrompt(this, executor,
-            object : BiometricPrompt.AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                    super.onAuthenticationSucceeded(result)
-                    Toast.makeText(applicationContext, "¡Huella reconocida! Bienvenido.", Toast.LENGTH_SHORT).show()
-                }
-
-                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                    super.onAuthenticationError(errorCode, errString)
-                    Toast.makeText(applicationContext, "Error: $errString", Toast.LENGTH_SHORT).show()
-                }
-            })
-
+        val executor = ContextCompat.getMainExecutor(this)
+        val biometricPrompt = BiometricPrompt(this, executor, object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                super.onAuthenticationSucceeded(result)
+                Toast.makeText(applicationContext, "Bienvenido", Toast.LENGTH_SHORT).show()
+            }
+        })
+        val promptInfo = BiometricPrompt.PromptInfo.Builder().setTitle("Starbig Auth").setSubtitle("Usa tu huella").setNegativeButtonText("Cancelar").build()
         biometricPrompt.authenticate(promptInfo)
     }
 }

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-
-    <style name="Theme.StarbigStore" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Usamos DayNight para compatibilidad total con modo oscuro/claro -->
+    <style name="Theme.StarbigStore" parent="Theme.Material3.DayNight.NoActionBar" />
 </resources>
