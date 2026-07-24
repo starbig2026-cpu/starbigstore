@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "94012933332",
+    "project_id": "starbigstore",
+    "storage_bucket": "starbigstore.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:94012933332:android:5bf4c4d48afe801a60a741",
+        "android_client_info": {
+          "package_name": "com.example.starbigstore"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAdKUDDG7c6jf_QWn7DVwnm8BIZbiIXgcg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

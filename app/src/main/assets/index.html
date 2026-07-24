@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Starbig Store - Fashion & Tech</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<header class="navbar">
+    <div class="logo" onclick="handleLogoClick()">STARBIG<span>STORE</span></div>
+    <div class="search-bar">
+        <i data-lucide="search"></i>
+        <input type="text" placeholder="Buscar perfumes, tecnología...">
+    </div>
+    <div class="nav-icons">
+        <button class="icon-btn" onclick="openAuth()">
+            <div id="user-photo-container" style="display: none; width: 32px; height: 32px; border-radius: 50%; overflow: hidden; border: 1px solid #c5a059;">
+                <img id="user-photo-nav" src="" style="width: 100%; height: 100%; object-fit: cover;" alt="Perfil">
+            </div>
+            <i data-lucide="user" id="user-icon-nav"></i>
+        </button>
+    </div>
+</header>
+
+<!-- FORMULARIO PANTALLA COMPLETA (MODAL) -->
+<div id="auth-modal" class="modal">
+    <div class="modal-content">
+        <span class="close-modal" onclick="closeAuth()">&times;</span>
+
+        <div class="auth-tabs">
+            <button id="tab-reg" class="tab-btn active" onclick="switchAuth('register')">Registro</button>
+            <button id="tab-log" class="tab-btn" onclick="switchAuth('login')">Iniciar Sesión</button>
+        </div>
+
+        <div id="register-container" class="auth-container">
+            <h2>Crear Cuenta <span>Starbig</span></h2>
+            <p>Únete para disfrutar de crédito inmediato.</p>
+            <form id="register-form">
+                <div class="input-group"><label>Nombre Completo</label><input type="text" required></div>
+                <div class="input-group"><label>Correo Electrónico</label><input type="email" required></div>
+                <div class="input-group"><label>WhatsApp</label><input type="tel" required></div>
+                <div class="input-group"><label>Dirección</label><input type="text" required></div>
+                <div class="input-group"><label>Foto de Perfil</label><input type="file" accept="image/*" required></div>
+                <div class="input-group"><label>ID (Foto)</label><input type="file" accept="image/*" required></div>
+                <div class="input-group"><label>Contraseña</label><input type="password" required></div>
+                <div class="terms-group">
+                    <input type="checkbox" required> <label>Acepto los términos y condiciones.</label>
+                </div>
+                <button type="submit" class="btn-primary full-width">Registrarme Ahora</button>
+            </form>
+        </div>
+
+        <div id="login-container" class="auth-container" style="display: none;">
+            <h2>Bienvenido</h2>
+            <form id="login-form">
+                <div class="input-group"><label>Email</label><input type="email" id="login-email" required></div>
+                <div class="input-group"><label>Contraseña</label><input type="password" id="login-pass" required></div>
+                <button type="submit" class="btn-primary full-width">Entrar</button>
+                <div id="biometric-btn-container" style="display: none; margin-top: 15px;">
+                    <button type="button" class="btn-secondary full-width" onclick="handleBiometric()">Entrar con Huella</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="profile-container" class="auth-container" style="display: none; text-align: center;">
+            <div class="profile-avatar"><img id="profile-img-large" src="" alt=""></div>
+            <h2 id="profile-name">Cargando...</h2>
+            <div class="status-box"><span>ESTADO:</span><strong id="profile-status">VERIFICANDO</strong></div>
+            <button onclick="location.reload()" class="btn-secondary full-width">Cerrar Sesión</button>
+        </div>
+    </div>
+</div>
+
+<!-- HERO BANNER -->
+<section class="hero">
+    <div class="hero-content">
+        <span class="tag">NUEVA COLECCIÓN & TECNOLOGÍA</span>
+        <h1>Estilo & Poder <br><span>Sin Pagos De Una</span></h1>
+        <p>Pide tus perfumes, gorras y equipos tecnológicos favoritos. ¡Págalos poco a poco con nuestro crédito inmediato!</p>
+        <div class="hero-btns">
+            <a href="#productos" class="btn-primary">Ver Catálogo</a>
+            <button onclick="openAuth()" class="btn-secondary">Solicitar Crédito</button>
+        </div>
+    </div>
+</section>
+
+<!-- CATEGORÍAS -->
+<section class="categories">
+    <h2>Explora por Categoría</h2>
+    <div class="category-grid">
+        <div class="cat-card"><i data-lucide="sparkles"></i> Perfumes</div>
+        <div class="cat-card"><i data-lucide="crown"></i> Gorras</div>
+        <div class="cat-card"><i data-lucide="smartphone"></i> Tecnología</div>
+    </div>
+</section>
+
+<!-- PRODUCTOS DESTACADOS -->
+<section class="products" id="productos">
+    <h2>Lo Más Pedido</h2>
+    <div class="product-grid">
+        <div class="product-card">
+            <div class="badge">Crédito Disponible</div>
+            <div class="img-placeholder">[ Foto Perfume ]</div>
+            <h3>Perfume Tom Ford Black Orchid</h3>
+            <p class="category-label">Fragancias Premium</p>
+            <div class="price-container">
+                <span class="price-cash">$120 contado</span>
+                <span class="price-credit">o 4 cuotas de <span>$33/sem</span></span>
+            </div>
+            <button onclick="openAuth()" class="add-btn">Lo Quiero a Crédito</button>
+        </div>
+
+        <div class="product-card">
+            <div class="badge">Trending</div>
+            <div class="img-placeholder">[ Foto Gorra ]</div>
+            <h3>Gorra Goorin Bros Freedom</h3>
+            <p class="category-label">Streetwear</p>
+            <div class="price-container">
+                <span class="price-cash">$45 contado</span>
+                <span class="price-credit">o 3 cuotas de <span>$16/sem</span></span>
+            </div>
+            <button onclick="openAuth()" class="add-btn">Lo Quiero a Crédito</button>
+        </div>
+    </div>
+</section>
+
+<script>
+    lucide.createIcons();
+    const modal = document.getElementById("auth-modal");
+
+    function openAuth() { modal.style.display = "block"; document.body.style.overflow = "hidden"; }
+    function closeAuth() { modal.style.display = "none"; document.body.style.overflow = "auto"; }
+
+    function switchAuth(type) {
+        document.getElementById('register-container').style.display = type === 'register' ? 'block' : 'none';
+        document.getElementById('login-container').style.display = type === 'login' ? 'block' : 'none';
+        document.getElementById('profile-container').style.display = 'none';
+        document.getElementById('tab-reg').classList.toggle('active', type === 'register');
+        document.getElementById('tab-log').classList.toggle('active', type === 'login');
+    }
+
+    let clicks = 0;
+    function handleLogoClick() {
+        clicks++;
+        if(clicks === 3) {
+            if(window.AndroidApp) window.AndroidApp.goToAdmin();
+            clicks = 0;
+        }
+        setTimeout(() => clicks = 0, 1000);
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+# Android Studio / IntelliJ
+*.iml
+*.iws
+*.ipr
+.idea/
+.gradle/
+build/
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Project specific
+/captures
+.externalNativeBuild
+.cxx
+
+# Log files
+*.log
+
+# Keystore files
+*.jks
+*.keystore
+
+# Google Services file (Uncomment if you want to keep it private)
+# app/google-services.json
