@@ -58,8 +58,20 @@ class WebAppInterface(
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val client = OkHttpClient()
-                val json = "{\"name\":\"${user["name"]}\",\"email\":\"${user["email"]}\",\"phone\":\"${user["phone"]}\",\"address\":\"${user["address"]}\",\"status\":\"unverified\"}"
-                val body = json.toRequestBody("application/json".toMediaType())
+                // Enviamos nombre y apellido por separado para la planilla
+                val json = """
+                {
+                    "firstName": "${user["firstName"]}",
+                    "lastName": "${user["lastName"]}",
+                    "email": "${user["email"]}",
+                    "phone": "${user["phone"]}",
+                    "address": "${user["address"]}",
+                    "status": "unverified",
+                    "photoUrl": "${user["photoUrl"]}",
+                    "idCardUrl": "${user["idCardUrl"]}"
+                }
+                """.trimIndent()
+                val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
                 val request = Request.Builder().url(googleSheetsUrl).post(body).build()
                 client.newCall(request).execute()
             } catch (e: Exception) { e.printStackTrace() }
