@@ -28,15 +28,17 @@ class WebAppInterface(
     private val googleSheetsUrl = "https://script.google.com/macros/s/AKfycbzvorSsMtjvqzw6l6FUKwkCBgWjl3rOyhle7AjaGalXfnet6jtDAsjdtxehUxxqwSmPtg/exec"
 
     @JavascriptInterface
-    fun registerUser(name: String, email: String, phone: String, address: String) {
+    fun registerUser(firstName: String, lastName: String, email: String, phone: String, address: String) {
         val db = FirebaseFirestore.getInstance()
         val user: HashMap<String, Any> = hashMapOf(
-            "name" to name,
+            "firstName" to firstName,
+            "lastName" to lastName,
+            "name" to "$firstName $lastName",
             "email" to email,
             "phone" to phone,
             "address" to address,
-            "status" to "pending",
-            "photoUrl" to "", // Se actualizaría tras subir la imagen real
+            "status" to "unverified", // Estatus inicial bloqueado
+            "photoUrl" to "",
             "timestamp" to System.currentTimeMillis()
         )
 
@@ -44,7 +46,7 @@ class WebAppInterface(
             .add(user)
             .addOnSuccessListener {
                 syncToGoogleSheets(user)
-                Toast.makeText(mContext, "Registro guardado y respaldado", Toast.LENGTH_LONG).show()
+                Toast.makeText(mContext, "Registro enviado. Espera la verificación del administrador.", Toast.LENGTH_LONG).show()
             }
     }
 

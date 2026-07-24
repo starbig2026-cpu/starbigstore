@@ -6,50 +6,93 @@
     <title>Starbig Store | Boutique</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
 <header class="navbar">
     <div class="logo" onclick="handleLogoClick()">STARBIG<span>STORE</span></div>
     <div class="nav-icons">
-        <button class="icon-btn" onclick="openAuth()"><i data-lucide="user"></i></button>
+        <button class="icon-btn" onclick="openAuth()">
+            <div id="user-photo-container" style="display: none; width: 32px; height: 32px; border-radius: 50%; overflow: hidden; border: 1px solid #c5a059;">
+                <img id="user-photo-nav" src="" style="width: 100%; height: 100%; object-fit: cover;" alt="Perfil">
+            </div>
+            <i data-lucide="user" id="user-icon-nav"></i>
+        </button>
     </div>
 </header>
 
 <!-- OVERLAY DE AUTENTICACIÓN -->
 <div id="auth-modal" class="modal">
     <div class="modal-content">
-        <span class="close-modal" onclick="closeAuth()" style="position:fixed; top:40px; right:40px; font-size:40px; cursor:pointer;">&times;</span>
+        <span class="close-modal" onclick="closeAuth()">&times;</span>
 
-        <div class="auth-tabs" style="display:flex; gap:40px; margin-bottom:4rem;">
-            <h3 id="tab-reg" class="active" onclick="switchAuth('register')" style="cursor:pointer; font-weight:800; letter-spacing:2px;">REGISTRO</h3>
-            <h3 id="tab-log" onclick="switchAuth('login')" style="cursor:pointer; color:#444; font-weight:800; letter-spacing:2px;">LOGIN</h3>
+        <div id="auth-tabs-container">
+            <div class="auth-tabs">
+                <button id="tab-reg" class="tab-btn active" onclick="switchAuth('register')">REGISTRO</button>
+                <button id="tab-log" class="tab-btn" onclick="switchAuth('login')">LOGIN</button>
+            </div>
         </div>
 
-        <div id="register-container">
-            <h2 style="font-family:'Playfair Display',serif; font-size:2.5rem; margin-bottom:3rem;">Únete a la <br><span>Experiencia</span></h2>
+        <div id="register-container" class="auth-container">
+            <h2 class="auth-title">Crear Perfil <span>Fashion</span></h2>
+            <p class="auth-subtitle">Únete para solicitar tu crédito inmediato.</p>
             <form id="register-form">
-                <div class="input-group"><label>Nombre Completo</label><input type="text" placeholder="Ej. Alex Smith" required></div>
-                <div class="input-group"><label>WhatsApp</label><input type="tel" placeholder="+58..." required></div>
-                <div class="input-group"><label>Dirección Editorial</label><input type="text" placeholder="Calle, Ciudad..." required></div>
-                <div class="input-group"><label>Documento de Identidad</label><input type="file" required></div>
-
-                <label class="terms-group">
-                    <input type="checkbox" required>
-                    <span style="font-size:0.8rem; color:#888;">Acepto los términos de privacidad y crédito.</span>
-                </label>
-
-                <button type="submit" class="btn-primary full-width">SOLICITAR ACCESO</button>
+                <div class="input-group">
+                    <label>Nombre(s)</label>
+                    <input type="text" id="reg-name" oninput="this.value=this.value.replace(/[^a-zA-Z\s]/g,'')" required>
+                </div>
+                <div class="input-group">
+                    <label>Apellido(s)</label>
+                    <input type="text" id="reg-lastname" oninput="this.value=this.value.replace(/[^a-zA-Z\s]/g,'')" required>
+                </div>
+                <div class="input-group">
+                    <label>Correo Electrónico</label>
+                    <input type="email" id="reg-email" placeholder="ejemplo@gmail.com" required>
+                </div>
+                <div class="input-group">
+                    <label>WhatsApp</label>
+                    <input type="tel" id="reg-phone" oninput="this.value=this.value.replace(/[^0-9]/g,'')" required>
+                </div>
+                <div class="input-group">
+                    <label>Dirección Editorial</label>
+                    <input type="text" id="reg-address" required>
+                </div>
+                <div class="input-group">
+                    <label>Foto de Perfil (Avatar)</label>
+                    <div class="file-input-wrapper">
+                        <input type="file" id="reg-photo" accept="image/*" required>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label>Contraseña</label>
+                    <input type="password" id="reg-pass" required>
+                </div>
+                <button type="submit" class="btn-primary full-width">SOLICITAR VERIFICACIÓN</button>
             </form>
         </div>
 
-        <div id="login-container" style="display:none;">
-            <h2 style="font-family:'Playfair Display',serif; font-size:2.5rem; margin-bottom:3rem;">Bienvenido <br><span>De Nuevo</span></h2>
+        <div id="login-container" class="auth-container" style="display:none;">
+            <h2 class="auth-title">Bienvenido <span>de Nuevo</span></h2>
             <form id="login-form">
-                <div class="input-group"><label>Email</label><input type="email" required></div>
-                <div class="input-group"><label>Contraseña</label><input type="password" required></div>
+                <div class="input-group"><label>Email</label><input type="email" id="login-email" required></div>
+                <div class="input-group"><label>Contraseña</label><input type="password" id="login-pass" required></div>
                 <button type="submit" class="btn-primary full-width">ENTRAR</button>
             </form>
+        </div>
+
+        <div id="profile-container" class="auth-container" style="display:none; text-align:center;">
+            <div class="profile-avatar"><img id="profile-img-large" src="" alt=""></div>
+            <h2 id="profile-name">Cargando...</h2>
+            <div class="status-box">
+                <span>ESTADO DE CUENTA:</span>
+                <strong id="profile-status">VERIFICANDO</strong>
+            </div>
+            <p id="unverified-msg" style="color:#ff4444; font-size:0.8rem; margin-bottom:20px; display:none;">
+                * Debes esperar aprobación para comprar o pedir crédito.
+            </p>
+            <button onclick="location.reload()" class="btn-secondary full-width">Cerrar Sesión</button>
         </div>
     </div>
 </div>
@@ -63,13 +106,13 @@
     <h1>Estilo & Poder <br><span>Sin Límites</span></h1>
     <p>Adquiere lo último en perfumes y tecnología con nuestro sistema de crédito exclusivo.</p>
     <div class="hero-btns">
-        <button onclick="openAuth()" class="btn-primary">VER CATÁLOGO</button>
-        <button onclick="openAuth()" class="btn-secondary">SOLICITAR CRÉDITO</button>
+        <button onclick="checkAccess()" class="btn-primary">VER CATÁLOGO</button>
+        <button onclick="checkAccess()" class="btn-secondary">SOLICITAR CRÉDITO</button>
     </div>
 </section>
 
-<section class="categories" style="padding: 4rem 6% 0;">
-    <h2 class="section-title" style="margin-left: 0; margin-top: 0;">Explorar <span>Colecciones</span></h2>
+<section class="categories">
+    <h2 class="section-title">Explorar <span>Colecciones</span></h2>
     <div class="category-grid">
         <div class="cat-card"><i data-lucide="sparkles"></i> Perfumes</div>
         <div class="cat-card"><i data-lucide="smartphone"></i> Tecnología</div>
@@ -83,19 +126,21 @@
 <h2 class="section-title">Lo Más <span>Deseado</span></h2>
 <div class="product-grid">
     <div class="product-card">
+        <div class="badge">Crédito Disponible</div>
         <div class="product-img"></div>
         <div class="product-info">
             <h3>Fragancia Tom Ford</h3>
             <p class="product-price">$120.00</p>
-            <button onclick="openAuth()" class="btn-primary" style="padding:10px 20px; margin-top:15px; font-size:0.7rem;">RESERVAR</button>
+            <button onclick="checkAccess()" class="add-btn">RESERVAR</button>
         </div>
     </div>
     <div class="product-card">
+        <div class="badge">Trending</div>
         <div class="product-img"></div>
         <div class="product-info">
             <h3>Tecnología iPhone 15</h3>
             <p class="product-price">$999.00</p>
-            <button onclick="openAuth()" class="btn-primary" style="padding:10px 20px; margin-top:15px; font-size:0.7rem;">RESERVAR</button>
+            <button onclick="checkAccess()" class="add-btn">RESERVAR</button>
         </div>
     </div>
 </div>
@@ -103,25 +148,73 @@
 <script>
     lucide.createIcons();
     const modal = document.getElementById("auth-modal");
+    let userStatus = "guest";
 
-    function openAuth() { modal.style.display = "block"; }
-    function closeAuth() { modal.style.display = "none"; }
+    function openAuth() { modal.style.display = "block"; document.body.style.overflow = "hidden"; }
+    function closeAuth() { modal.style.display = "none"; document.body.style.overflow = "auto"; }
+
+    function checkAccess() {
+        if(userStatus === "unverified") {
+            alert("⚠️ USUARIO NO VERIFICADO: Tu cuenta está en revisión. Te avisaremos por WhatsApp al aprobarla.");
+        } else if(userStatus === "guest") {
+            openAuth();
+        } else {
+            alert("Abriendo opciones...");
+        }
+    }
 
     function switchAuth(type) {
         const isReg = type === 'register';
         document.getElementById('register-container').style.display = isReg ? 'block' : 'none';
         document.getElementById('login-container').style.display = isReg ? 'none' : 'block';
-        document.getElementById('tab-reg').style.color = isReg ? '#c5a059' : '#444';
-        document.getElementById('tab-log').style.color = isReg ? '#444' : '#c5a059';
+        document.getElementById('tab-reg').classList.toggle('active', isReg);
+        document.getElementById('tab-log').classList.toggle('active', !isReg);
     }
+
+    document.getElementById('register-form').onsubmit = (e) => {
+        e.preventDefault();
+        const email = document.getElementById('reg-email').value;
+        if(!email.includes('@') || !email.toLowerCase().endsWith('.com')) {
+            alert("Error: El correo debe contener '@' y terminar en '.com'");
+            return;
+        }
+
+        if(window.AndroidApp) {
+            window.AndroidApp.registerUser(
+                document.getElementById('reg-name').value,
+                document.getElementById('reg-lastname').value,
+                email,
+                document.getElementById('reg-phone').value,
+                document.getElementById('reg-address').value
+            );
+        }
+        alert("¡Registro enviado! Aparecerás como 'No Verificado' hasta que el admin te apruebe.");
+        closeAuth();
+    };
+
+    window.updateUserProfile = (name, email, photoUrl, status) => {
+        userStatus = status;
+        document.getElementById('auth-tabs-container').style.display = 'none';
+        document.getElementById('register-container').style.display = 'none';
+        document.getElementById('login-container').style.display = 'none';
+        document.getElementById('profile-container').style.display = 'block';
+
+        document.getElementById('profile-name').innerText = name;
+        document.getElementById('profile-status').innerText = status === 'unverified' ? 'USUARIO NO VERIFICADO' : 'CUENTA ACTIVA';
+        document.getElementById('unverified-msg').style.display = status === 'unverified' ? 'block' : 'none';
+
+        if(photoUrl) {
+            document.getElementById('user-icon-nav').style.display = 'none';
+            document.getElementById('user-photo-container').style.display = 'block';
+            document.getElementById('user-photo-nav').src = photoUrl;
+            document.getElementById('profile-img-large').src = photoUrl;
+        }
+    };
 
     let clicks = 0;
     function handleLogoClick() {
         clicks++;
-        if(clicks === 3) {
-            if(window.AndroidApp) window.AndroidApp.goToAdmin();
-            clicks = 0;
-        }
+        if(clicks === 3 && window.AndroidApp) window.AndroidApp.goToAdmin();
         setTimeout(() => clicks = 0, 1000);
     }
 </script>
