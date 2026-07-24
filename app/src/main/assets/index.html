@@ -61,9 +61,11 @@
                 </div>
                 <div class="input-group">
                     <label>Foto de Perfil (Avatar)</label>
-                    <div class="file-input-wrapper">
-                        <input type="file" id="reg-photo" accept="image/*" required>
-                    </div>
+                    <input type="file" id="reg-photo" accept="image/*" required>
+                </div>
+                <div class="input-group">
+                    <label>Documento de Identidad (Cédula/DNI)</label>
+                    <input type="file" id="reg-id-card" accept="image/*" required>
                 </div>
                 <div class="input-group">
                     <label>Contraseña</label>
@@ -92,6 +94,12 @@
             <p id="unverified-msg" style="color:#ff4444; font-size:0.8rem; margin-bottom:20px; display:none;">
                 * Debes esperar aprobación para comprar o pedir crédito.
             </p>
+
+            <button id="whatsapp-verify-btn" onclick="contactAdmin()" class="btn-primary full-width" style="margin-bottom: 15px; background: #25D366; border: none; display: none;">
+                <i data-lucide="message-circle" style="vertical-align: middle; margin-right: 8px;"></i>
+                PEDIR VERIFICACIÓN POR WHATSAPP
+            </button>
+
             <button onclick="location.reload()" class="btn-secondary full-width">Cerrar Sesión</button>
         </div>
     </div>
@@ -163,34 +171,46 @@
         }
     }
 
-    function switchAuth(type) {
-        const isReg = type === 'register';
-        document.getElementById('register-container').style.display = isReg ? 'block' : 'none';
-        document.getElementById('login-container').style.display = isReg ? 'none' : 'block';
-        document.getElementById('tab-reg').classList.toggle('active', isReg);
-        document.getElementById('tab-log').classList.toggle('active', !isReg);
-    }
-
     document.getElementById('register-form').onsubmit = (e) => {
         e.preventDefault();
         const email = document.getElementById('reg-email').value;
+        const name = document.getElementById('reg-name').value;
+        const lastname = document.getElementById('reg-lastname').value;
+        const phone = document.getElementById('reg-phone').value;
+        const address = document.getElementById('reg-address').value;
+
+        // Validación estricta de Email
         if(!email.includes('@') || !email.toLowerCase().endsWith('.com')) {
-            alert("Error: El correo debe contener '@' y terminar en '.com'");
+            alert("❌ Error: El correo debe contener '@' y terminar en '.com'");
             return;
         }
 
         if(window.AndroidApp) {
-            window.AndroidApp.registerUser(
-                document.getElementById('reg-name').value,
-                document.getElementById('reg-lastname').value,
-                email,
-                document.getElementById('reg-phone').value,
-                document.getElementById('reg-address').value
-            );
+            window.AndroidApp.registerUser(name, lastname, email, phone, address);
         }
-        alert("¡Registro enviado! Aparecerás como 'No Verificado' hasta que el admin te apruebe.");
+
+        alert("✅ Solicitud Enviada: Tu perfil está en fase de verificación. Te contactaremos por WhatsApp.");
         closeAuth();
+        e.target.reset();
     };
+
+    document.getElementById('login-form').onsubmit = (e) => {
+        e.preventDefault();
+        const email = document.getElementById('login-email').value;
+        const pass = document.getElementById('login-pass').value;
+
+        if(window.AndroidApp) {
+            window.AndroidApp.loginUser(email, pass);
+        } else {
+            alert("Login simulado en web para: " + email);
+        }
+    };
+
+    function handleBiometric() {
+        if(window.AndroidApp) {
+            window.AndroidApp.requestBiometric();
+        }
+    }
 
     window.updateUserProfile = (name, email, photoUrl, status) => {
         userStatus = status;
@@ -202,6 +222,7 @@
         document.getElementById('profile-name').innerText = name;
         document.getElementById('profile-status').innerText = status === 'unverified' ? 'USUARIO NO VERIFICADO' : 'CUENTA ACTIVA';
         document.getElementById('unverified-msg').style.display = status === 'unverified' ? 'block' : 'none';
+        document.getElementById('whatsapp-verify-btn').style.display = status === 'unverified' ? 'block' : 'none';
 
         if(photoUrl) {
             document.getElementById('user-icon-nav').style.display = 'none';
@@ -209,7 +230,26 @@
             document.getElementById('user-photo-nav').src = photoUrl;
             document.getElementById('profile-img-large').src = photoUrl;
         }
+
+        // Si el usuario ya está activo, quitamos las restricciones de los botones
+        if(status !== 'unverified') {
+            const btns = document.querySelectorAll('.add-btn, .btn-primary, .btn-secondary');
+            btns.forEach(b => b.classList.remove('disabled'));
+        }
     };
+
+    function logout() {
+        if(confirm("¿Estás seguro de que deseas cerrar sesión?")) {
+            location.reload();
+        }
+    }
+
+    function contactAdmin() {
+        const name = document.getElementById('profile-name').innerText;
+        const message = `Hola Starbig Store, mi nombre es ${name}. He creado mi perfil en la app y deseo solicitar mi verificación para empezar a comprar.`;
+        const phone = "584129431568"; // Número de Starbig Store
+        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+    }
 
     let clicks = 0;
     function handleLogoClick() {
