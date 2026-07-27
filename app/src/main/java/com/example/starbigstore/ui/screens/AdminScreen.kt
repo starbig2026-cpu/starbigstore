@@ -278,14 +278,35 @@ fun AdminListContent() {
 
 @Composable
 fun TrafficMonitorSection() {
-    var onlineData by remember { mutableStateOf(List(20) { (5..45).random() }) }
-    var offlineData by remember { mutableStateOf(List(20) { (1..15).random() }) }
+    val db = FirebaseFirestore.getInstance()
+    var onlineCount by remember { mutableIntStateOf(1) }
+    var totalRegistered by remember { mutableIntStateOf(0) }
+    var onlineHistory by remember { mutableStateOf(List(20) { 1 }) }
+    var offlineHistory by remember { mutableStateOf(List(20) { 0 }) }
     
+    // Escuchar presencia real
     LaunchedEffect(Unit) {
+        // Obtener total registrados para cálculo de offline
+        db.collection("registros_clientes").addSnapshotListener { snap, _ ->
+            totalRegistered = snap?.size() ?: 0
+        }
+
+        // Obtener usuarios online (pulso en los últimos 2 minutos)
         while(true) {
-            delay(2000)
-            onlineData = onlineData.drop(1) + (5..50).random()
-            offlineData = offlineData.drop(1) + (1..20).random()
+            val twoMinutesAgo = System.currentTimeMillis() - 120000
+            db.collection("presencia")
+                .whereGreaterThan("ultimoPulso", twoMinutesAgo)
+                .get()
+                .addOnSuccessListener { snap ->
+                    val count = snap.size()
+                    onlineCount = if (count < 1) 1 else count // Admin siempre cuenta como 1
+                }
+            
+            onlineHistory = onlineHistory.drop(1) + onlineCount
+            val offlineCount = (totalRegistered - onlineCount).coerceAtLeast(0)
+            offlineHistory = offlineHistory.drop(1) + offlineCount
+            
+            delay(3000) // Actualizar gráfica cada 3 segundos
         }
     }
 
@@ -305,7 +326,7 @@ fun TrafficMonitorSection() {
             ) {
                 Column {
                     Text("MONITOREO DE RED", color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                    Text("ESTADO GLOBAL", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black)
+                    Text("ACTIVIDAD REAL", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(modifier = Modifier.size(6.dp).background(Color.Green, RoundedCornerShape(3.dp)))
@@ -327,16 +348,19 @@ fun TrafficMonitorSection() {
             ) {
                 val width = size.width
                 val height = size.height
-                val stepX = width / (onlineData.size - 1)
-                val maxCount = 50f // Escala del 1 al 50
+                val stepX = width / (onlineHistory.size - 1)
+                
+                // Cálculo de escala dinámica (Mínimo 10 para que no sea plana si hay pocos)
+                val maxOnline = onlineHistory.maxOrNull()?.toFloat() ?: 1f
+                val maxOffline = offlineHistory.maxOrNull()?.toFloat() ?: 1f
+                val maxVal = maxOf(maxOnline, maxOffline, 5f)
 
-                // Función para dibujar una línea de pulso
-                fun drawPulseLine(data: List<Int>, color: Color) {
+                fun drawPulse(data: List<Int>, color: Color) {
                     for (i in 0 until data.size - 1) {
                         val startX = i * stepX
-                        val startY = height - (data[i] / maxCount * height)
+                        val startY = height - (data[i] / maxVal * height)
                         val endX = (i + 1) * stepX
-                        val endY = height - (data[i + 1] / maxCount * height)
+                        val endY = height - (data[i + 1] / maxVal * height)
                         
                         drawLine(
                             color = color,
@@ -355,18 +379,17 @@ fun TrafficMonitorSection() {
                     }
                 }
 
-                // Dibujamos ambas líneas
-                drawPulseLine(offlineData, Color.Red)
-                drawPulseLine(onlineData, Color.Green)
+                drawPulse(offlineHistory, Color.Red)
+                drawPulse(onlineHistory, Color.Green)
             }
             
             Spacer(modifier = Modifier.height(16.dp))
             
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                TrafficStat("ACTIVOS", "${onlineData.last()}")
-                TrafficStat("OFFLINE", "${offlineData.last()}")
-                TrafficStat("LATENCIA", "38ms")
-                TrafficStat("MÁXIMO", "50")
+                TrafficStat("CONECTADOS", "${onlineHistory.last()}")
+                TrafficStat("INACTIVOS", "${offlineHistory.last()}")
+                TrafficStat("TOTAL", "$totalRegistered")
+                TrafficStat("SISTEMA", "ÓPTIMO")
             }
         }
     }

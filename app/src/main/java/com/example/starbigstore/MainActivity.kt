@@ -31,6 +31,10 @@ import com.example.starbigstore.ui.screens.AdminScreen
 import com.example.starbigstore.ui.screens.HomeScreen
 import com.example.starbigstore.ui.screens.WebScreen
 import com.example.starbigstore.ui.theme.StarbigStoreTheme
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.util.UUID
 import java.util.concurrent.Executor
 
 class MainActivity : FragmentActivity() {
@@ -41,6 +45,21 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         
         setContent {
+            val deviceId = remember { UUID.randomUUID().toString() }
+            val db = FirebaseFirestore.getInstance()
+            
+            // Sistema de Pulso (Heartbeat) para tráfico real
+            LaunchedEffect(Unit) {
+                while(true) {
+                    val data = hashMapOf(
+                        "ultimoPulso" to System.currentTimeMillis(),
+                        "esAdmin" to false // Puedes cambiar esto si es el admin
+                    )
+                    db.collection("presencia").document(deviceId).set(data)
+                    delay(30000) // Cada 30 segundos
+                }
+            }
+
             StarbigStoreTheme(darkTheme = true) {
                 var currentTab by remember { mutableIntStateOf(0) }
                 
