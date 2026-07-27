@@ -250,26 +250,51 @@ fun AdminListContent() {
 
         Box(modifier = Modifier.weight(1f)) {
             when (selectedTab) {
-                0 -> InfoSection("Base de datos de operaciones")
-                1 -> InfoSection("Control de inventario boutique")
-                2 -> {
-                    if (isLoading) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = Color(0xFFC5A059), strokeWidth = 2.dp)
-                        }
+                0 -> {
+                    val activeRegistrations = registrations.filter { it.status == "active" }
+                    if (activeRegistrations.isEmpty()) {
+                        InfoSection("No hay usuarios activos")
                     } else {
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(bottom = 24.dp, start = 24.dp, end = 24.dp),
                             verticalArrangement = Arrangement.spacedBy(20.dp)
                         ) {
-                            items(registrations) { reg ->
+                            items(activeRegistrations) { reg ->
                                 CustomerAdminCard(
                                     reg = reg,
-                                    onApprove = { approveCustomer(reg, db, GOOGLE_SHEETS_URL) },
+                                    onApprove = { /* Ya aprobado */ },
                                     onReject = { deleteCustomer(reg, db, GOOGLE_SHEETS_URL) },
                                     onImageClick = { url -> expandedImageUrl = url }
                                 )
+                            }
+                        }
+                    }
+                }
+                1 -> InfoSection("Control de inventario boutique")
+                2 -> {
+                    val pendingRegistrations = registrations.filter { it.status == "unverified" }
+                    if (isLoading) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = Color(0xFFC5A059), strokeWidth = 2.dp)
+                        }
+                    } else {
+                        if (pendingRegistrations.isEmpty()) {
+                            InfoSection("No hay solicitudes pendientes")
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(bottom = 24.dp, start = 24.dp, end = 24.dp),
+                                verticalArrangement = Arrangement.spacedBy(20.dp)
+                            ) {
+                                items(pendingRegistrations) { reg ->
+                                    CustomerAdminCard(
+                                        reg = reg,
+                                        onApprove = { approveCustomer(reg, db, GOOGLE_SHEETS_URL) },
+                                        onReject = { deleteCustomer(reg, db, GOOGLE_SHEETS_URL) },
+                                        onImageClick = { url -> expandedImageUrl = url }
+                                    )
+                                }
                             }
                         }
                     }
@@ -612,23 +637,35 @@ fun CustomerAdminCard(reg: CustomerRegistration, onApprove: () -> Unit, onReject
             Spacer(modifier = Modifier.height(32.dp))
             
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                OutlinedButton(
-                    onClick = onReject,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    shape = RoundedCornerShape(0.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.Red.copy(alpha = 0.5f))
-                ) {
-                    Text("RECHAZAR", fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                }
-                
-                Button(
-                    onClick = onApprove,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    shape = RoundedCornerShape(0.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059))
-                ) {
-                    Text("APROBAR", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+                if (!isActive) {
+                    OutlinedButton(
+                        onClick = onReject,
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(0.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.Red.copy(alpha = 0.5f))
+                    ) {
+                        Text("RECHAZAR", fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    }
+                    
+                    Button(
+                        onClick = onApprove,
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(0.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059))
+                    ) {
+                        Text("APROBAR", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = onReject,
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(0.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.Red.copy(alpha = 0.5f))
+                    ) {
+                        Text("ELIMINAR USUARIO", fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    }
                 }
             }
         }
