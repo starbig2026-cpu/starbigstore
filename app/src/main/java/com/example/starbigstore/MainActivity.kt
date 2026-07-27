@@ -64,7 +64,7 @@ class MainActivity : FragmentActivity() {
                 var currentTab by remember { mutableIntStateOf(0) }
                 
                 val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-                    filePathCallback?.onReceiveValue(if (uri != null) arrayOf(uri) else null)
+                    uri?.let { filePathCallback?.onReceiveValue(arrayOf(it)) } ?: filePathCallback?.onReceiveValue(null)
                     filePathCallback = null
                 }
 

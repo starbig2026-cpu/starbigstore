@@ -26,7 +26,7 @@ class WebAppInterface(
     private val onAdminRequest: () -> Unit,
     private val onBiometricRequest: () -> Unit
 ) {
-    private val googleSheetsUrl = "https://script.google.com/macros/s/AKfycbzvorSsMtjvqzw6l6FUKwkCBgWjl3rOyhle7AjaGalXfnet6jtDAsjdtxehUxxqwSmPtg/exec"
+    private val googleSheetsUrl = "https://script.google.com/macros/s/AKfycbzTKwRkgCmy_m42ZeKjPbczOMr0YHmRKiSmrHPCSEdKixHzI9MG3fhEfEU3pChr45exvw/exec"
 
     @JavascriptInterface
     fun registerUser(firstName: String, lastName: String, email: String, phone: String, address: String, photoBase64: String, idCardBase64: String) {
@@ -65,44 +65,59 @@ class WebAppInterface(
                             try {
                                 val client = OkHttpClient.Builder()
                                     .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
-                                    .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
-                                    .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
                                     .followRedirects(true)
                                     .followSslRedirects(true)
                                     .build()
 
                                 val payload = org.json.JSONObject().apply {
+                                    put("action", "register")
                                     put("firstName", firstName)
                                     put("lastName", lastName)
                                     put("email", email)
                                     put("phone", phone)
                                     put("address", address)
+                                    put("status", "unverified")
                                     put("photoBase64", photoBase64)
                                     put("idCardBase64", idCardBase64)
+                                    put("date", java.text.SimpleDateFormat("dd/MM/yyyy HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date()))
                                 }
                                 
                                 val body = payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
-                                val request = Request.Builder()
-                                    .url(googleSheetsUrl)
-                                    .post(body)
-                                    .build()
+                                val request = Request.Builder().url(googleSheetsUrl).post(body).build()
                                 
                                 client.newCall(request).execute().use { response ->
                                     val responseStr = response.body?.string() ?: ""
-                                    android.util.Log.d("WebScreen", "Response: $responseStr")
+                                    android.util.Log.d("WebScreen", "Sync Result: $responseStr")
                                     
                                     if (response.isSuccessful) {
-                                        val resJson = org.json.JSONObject(responseStr)
-                                        val photoUrl = resJson.optString("photoUrl", "")
-                                        val idCardUrl = resJson.optString("idCardUrl", "")
-                                        
-                                        // 3. Actualizar Firestore con las URLs de Drive
-                                        if (photoUrl.isNotEmpty() || idCardUrl.isNotEmpty()) {
-                                            docRef.update("photoUrl", photoUrl, "idCardUrl", idCardUrl)
-                                            CoroutineScope(Dispatchers.Main).launch {
-                                                Toast.makeText(mContext, "📸 Fotos vinculadas desde Drive", Toast.LENGTH_SHORT).show()
+                                        try {
+                                            val resJson = org.json.JSONObject(responseStr)
+                                            val status = resJson.optString("status", "")
+                                            val photoUrl = resJson.optString("photoUrl", "")
+                                            val idCardUrl = resJson.optString("idCardUrl", "")
+                                            
+                                            if (status == "ok") {
+                                                if (photoUrl.isNotEmpty() || idCardUrl.isNotEmpty()) {
+                                                    docRef.update("photoUrl", photoUrl, "idCardUrl", idCardUrl)
+                                                    CoroutineScope(Dispatchers.Main).launch {
+                                                        Toast.makeText(mContext, "✅ Registro Sincronizado", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                } else {
+                                                    CoroutineScope(Dispatchers.Main).launch {
+                                                        Toast.makeText(mContext, "⚠️ Google no guardó las fotos", Toast.LENGTH_LONG).show()
+                                                    }
+                                                }
+                                            } else {
+                                                val msg = resJson.optString("msg", "Error desconocido")
+                                                CoroutineScope(Dispatchers.Main).launch {
+                                                    Toast.makeText(mContext, "❌ Google Error: $msg", Toast.LENGTH_LONG).show()
+                                                }
                                             }
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("WebScreen", "JSON Error: $responseStr", e)
                                         }
+                                    } else {
+                                        android.util.Log.e("WebScreen", "HTTP Error: ${response.code}")
                                     }
                                 }
                             } catch (e: Exception) {

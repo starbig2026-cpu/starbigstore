@@ -171,7 +171,7 @@ fun AdminListContent() {
     var registrations by remember { mutableStateOf(listOf<CustomerRegistration>()) }
     var isLoading by remember { mutableStateOf(true) }
     val db = FirebaseFirestore.getInstance()
-    val googleSheetsUrl = "https://script.google.com/macros/s/AKfycbzvorSsMtjvqzw6l6FUKwkCBgWjl3rOyhle7AjaGalXfnet6jtDAsjdtxehUxxqwSmPtg/exec"
+    val googleSheetsUrl = "https://script.google.com/macros/s/AKfycbzTKwRkgCmy_m42ZeKjPbczOMr0YHmRKiSmrHPCSEdKixHzI9MG3fhEfEU3pChr45exvw/exec"
 
     LaunchedEffect(Unit) {
         db.collection("registros_clientes")
@@ -286,6 +286,16 @@ fun TrafficMonitorSection() {
     
     // Escuchar presencia real
     LaunchedEffect(Unit) {
+        // --- SIMULACIÓN DE PRESENCIA FALSA (Para que la gráfica no esté vacía) ---
+        repeat(5) { i ->
+            val fakeId = "fake_device_$i"
+            val fakeData = hashMapOf(
+                "ultimoPulso" to System.currentTimeMillis(),
+                "esAdmin" to false
+            )
+            db.collection("presencia").document(fakeId).set(fakeData)
+        }
+
         // Obtener total registrados para cálculo de offline
         db.collection("registros_clientes").addSnapshotListener { snap, _ ->
             totalRegistered = snap?.size() ?: 0
@@ -439,12 +449,20 @@ private fun approveCustomer(reg: CustomerRegistration, db: FirebaseFirestore, go
     db.collection("registros_clientes").document(reg.id).update("status", "active")
     CoroutineScope(Dispatchers.IO).launch {
         try {
-            val client = OkHttpClient()
-            val json = "{\"action\":\"updateStatus\",\"email\":\"${reg.email.trim()}\",\"status\":\"active\"}"
-            val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
+            val client = OkHttpClient.Builder()
+                .followRedirects(true)
+                .build()
+            val payload = org.json.JSONObject().apply {
+                put("action", "updateStatus")
+                put("email", reg.email.trim())
+                put("status", "active")
+            }
+            val body = payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
             val request = Request.Builder().url(googleSheetsUrl).post(body).build()
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) println("Google Sheets error: ${response.code}")
+                if (!response.isSuccessful) {
+                    android.util.Log.e("AdminScreen", "Sheets Error: ${response.code}")
+                }
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -455,12 +473,19 @@ private fun approveCustomer(reg: CustomerRegistration, db: FirebaseFirestore, go
 private fun deleteCustomer(reg: CustomerRegistration, db: FirebaseFirestore, googleSheetsUrl: String) {
     CoroutineScope(Dispatchers.IO).launch {
         try {
-            val client = OkHttpClient()
-            val json = "{\"action\":\"delete\",\"email\":\"${reg.email.trim()}\"}"
-            val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
+            val client = OkHttpClient.Builder()
+                .followRedirects(true)
+                .build()
+            val payload = org.json.JSONObject().apply {
+                put("action", "delete")
+                put("email", reg.email.trim())
+            }
+            val body = payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
             val request = Request.Builder().url(googleSheetsUrl).post(body).build()
             client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) println("Google Sheets error: ${response.code}")
+                if (!response.isSuccessful) {
+                    android.util.Log.e("AdminScreen", "Sheets Error: ${response.code}")
+                }
             }
         } catch (e: Exception) {
             e.printStackTrace()

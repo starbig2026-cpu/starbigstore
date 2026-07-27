@@ -176,7 +176,7 @@
     }
 
     async function getBase64(file) {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.readAsDataURL(file);
             reader.onload = (e) => {
@@ -184,8 +184,8 @@
                 img.src = e.target.result;
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
-                    const MAX_WIDTH = 800;
-                    const MAX_HEIGHT = 800;
+                    const MAX_WIDTH = 600; // Reducido para mayor velocidad
+                    const MAX_HEIGHT = 600;
                     let width = img.width;
                     let height = img.height;
 
@@ -204,14 +204,20 @@
                     canvas.height = height;
                     const ctx = canvas.getContext("2d");
                     ctx.drawImage(img, 0, 0, width, height);
-                    resolve(canvas.toDataURL("image/jpeg", 0.7)); // Comprimir al 70%
+                    resolve(canvas.toDataURL("image/jpeg", 0.6)); // Compresión al 60%
                 };
+                img.onerror = () => reject("Error al cargar imagen");
             };
+            reader.onerror = () => reject("Error al leer archivo");
         });
     }
 
     document.getElementById('register-form').onsubmit = async (e) => {
         e.preventDefault();
+        const btn = e.target.querySelector('button');
+        btn.disabled = true;
+        btn.innerText = "PROCESANDO...";
+
         const email = document.getElementById('reg-email').value;
         const name = document.getElementById('reg-name').value;
         const lastname = document.getElementById('reg-lastname').value;
@@ -220,27 +226,28 @@
         const photoFile = document.getElementById('reg-photo').files[0];
         const idCardFile = document.getElementById('reg-id-card').files[0];
 
-        // Validación estricta de Email
         if(!email.includes('@') || !email.toLowerCase().endsWith('.com')) {
-            alert("❌ Error: El correo debe contener '@' y terminar en '.com'");
+            alert("❌ Correo inválido");
+            btn.disabled = false;
+            btn.innerText = "SOLICITAR VERIFICACIÓN";
             return;
         }
 
-        let photoBase64 = "";
-        let idCardBase64 = "";
-
         try {
-            if (photoFile) photoBase64 = await getBase64(photoFile);
-            if (idCardFile) idCardBase64 = await getBase64(idCardFile);
+            let photoBase64 = photoFile ? await getBase64(photoFile) : "";
+            let idCardBase64 = idCardFile ? await getBase64(idCardFile) : "";
 
             if(window.AndroidApp) {
                 window.AndroidApp.registerUser(name, lastname, email, phone, address, photoBase64, idCardBase64);
-                alert("✅ Solicitud Enviada: Subiendo imágenes y procesando tu perfil. Te contactaremos por WhatsApp.");
+                alert("🚀 Solicitud enviada. Revisa los mensajes en pantalla.");
                 closeAuth();
                 e.target.reset();
             }
         } catch (err) {
-            alert("Error al procesar imágenes: " + err);
+            alert("Error: " + err);
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "SOLICITAR VERIFICACIÓN";
         }
     };
 
