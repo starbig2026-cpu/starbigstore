@@ -34,6 +34,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+private const val GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/AKfycbzTKwRkgCmy_m42ZeKjPbczOMr0YHmRKiSmrHPCSEdKixHzI9MG3fhEfEU3pChr45exvw/exec"
+
 data class CustomerRegistration(
     val id: String = "",
     val name: String = "",
@@ -167,7 +169,6 @@ fun AdminListContent() {
     var registrations by remember { mutableStateOf(listOf<CustomerRegistration>()) }
     var isLoading by remember { mutableStateOf(true) }
     val db = FirebaseFirestore.getInstance()
-    val googleSheetsUrl = "https://script.google.com/macros/s/AKfycbzTKwRkgCmy_m42ZeKjPbczOMr0YHmRKiSmrHPCSEdKixHzI9MG3fhEfEU3pChr45exvw/exec"
 
     LaunchedEffect(Unit) {
         db.collection("registros_clientes")
@@ -260,8 +261,8 @@ fun AdminListContent() {
                             items(registrations) { reg ->
                                 CustomerAdminCard(
                                     reg = reg,
-                                    onApprove = { approveCustomer(reg, db, googleSheetsUrl) },
-                                    onReject = { deleteCustomer(reg, db, googleSheetsUrl) }
+                                    onApprove = { approveCustomer(reg, db, GOOGLE_SHEETS_URL) },
+                                    onReject = { deleteCustomer(reg, db, GOOGLE_SHEETS_URL) }
                                 )
                             }
                         }

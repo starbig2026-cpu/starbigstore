@@ -18,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.util.*
 
+@Suppress("unused")
 class WebAppInterface(
     private val mContext: Context,
     private val webView: WebView,
@@ -142,6 +143,7 @@ fun WebScreen(
                     }
                 }
                 settings.apply {
+                    @Suppress("SetJavaScriptEnabled")
                     javaScriptEnabled = true
                     domStorageEnabled = true
                     allowFileAccess = true
