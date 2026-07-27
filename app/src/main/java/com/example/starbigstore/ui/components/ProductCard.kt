@@ -49,7 +49,7 @@ fun ProductCard(product: Product, onClick: () -> Unit = {}) {
                 color = Color.White
             )
             Text(
-                text = "$${product.price}",
+                text = "$${product.priceUsd}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary // Usando el dorado de la marca
             )

@@ -8,19 +8,20 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
 </head>
 <body>
 
 <header class="navbar">
     <div class="logo" onclick="handleLogoClick()">STARBIG<span>STORE</span></div>
     <div class="nav-icons">
-        <select id="language-selector" onchange="changeLanguage(this.value)" style="background: transparent; color: #c5a059; border: 1px solid #c5a059; border-radius: 4px; padding: 2px 5px; margin-right: 10px; font-size: 12px; cursor: pointer;">
+        <select id="language-selector" onchange="changeLanguage(this.value)" style="background:transparent; color:#c5a059; border:1px solid #c5a059; font-size:12px; cursor:pointer;">
             <option value="es">ES</option>
             <option value="en">EN</option>
         </select>
         <button class="icon-btn" onclick="openAuth()">
             <div id="user-photo-container" style="display: none; width: 32px; height: 32px; border-radius: 50%; overflow: hidden; border: 1px solid #c5a059;">
-                <img id="user-photo-nav" src="" style="width: 100%; height: 100%; object-fit: cover;" alt="Perfil">
+                <img id="user-photo-nav" src="" style="width: 100%; height: 100%; object-fit: cover;" alt="P" referrerpolicy="no-referrer">
             </div>
             <i data-lucide="user" id="user-icon-nav"></i>
         </button>
@@ -31,50 +32,22 @@
 <div id="auth-modal" class="modal">
     <div class="modal-content">
         <span class="close-modal" onclick="closeAuth()">&times;</span>
-
-        <div id="auth-tabs-container">
-            <div class="auth-tabs" style="justify-content: center; border-bottom: 2px solid #1a1a24; padding-bottom: 10px;">
-                <div id="tab-reg" class="tab-btn active" onclick="switchAuth('register')" style="padding: 15px 25px; cursor:pointer;">REGISTRO</div>
-                <div id="tab-log" class="tab-btn" onclick="switchAuth('login')" style="padding: 15px 25px; cursor:pointer;">LOGIN</div>
-            </div>
+        <div id="auth-tabs-container" class="auth-tabs">
+            <div id="tab-reg" class="tab-btn active" onclick="switchAuth('register')">REGISTRO</div>
+            <div id="tab-log" class="tab-btn" onclick="switchAuth('login')">LOGIN</div>
         </div>
 
         <div id="register-container" class="auth-container">
             <h2 class="auth-title">Crear Perfil <span>Fashion</span></h2>
-            <p class="auth-subtitle">Únete para solicitar tu crédito inmediato.</p>
             <form id="register-form">
-                <div class="input-group">
-                    <label>Nombre(s)</label>
-                    <input type="text" id="reg-name" oninput="this.value=this.value.replace(/[^a-zA-Z\s]/g,'')" required>
-                </div>
-                <div class="input-group">
-                    <label>Apellido(s)</label>
-                    <input type="text" id="reg-lastname" oninput="this.value=this.value.replace(/[^a-zA-Z\s]/g,'')" required>
-                </div>
-                <div class="input-group">
-                    <label>Correo Electrónico</label>
-                    <input type="email" id="reg-email" placeholder="ejemplo@gmail.com" required>
-                </div>
-                <div class="input-group">
-                    <label>WhatsApp</label>
-                    <input type="tel" id="reg-phone" oninput="this.value=this.value.replace(/[^0-9]/g,'')" required>
-                </div>
-                <div class="input-group">
-                    <label>Dirección Editorial</label>
-                    <input type="text" id="reg-address" required>
-                </div>
-                <div class="input-group">
-                    <label>Foto de Perfil (Avatar)</label>
-                    <input type="file" id="reg-photo" accept="image/*" required>
-                </div>
-                <div class="input-group">
-                    <label>Documento de Identidad (Cédula/DNI)</label>
-                    <input type="file" id="reg-id-card" accept="image/*" required>
-                </div>
-                <div class="input-group">
-                    <label>Contraseña</label>
-                    <input type="password" id="reg-pass" required>
-                </div>
+                <div class="input-group"><label>Nombre</label><input type="text" id="reg-name" required></div>
+                <div class="input-group"><label>Apellido</label><input type="text" id="reg-lastname" required></div>
+                <div class="input-group"><label>Email</label><input type="email" id="reg-email" required></div>
+                <div class="input-group"><label>WhatsApp</label><input type="tel" id="reg-phone" required></div>
+                <div class="input-group"><label>Dirección</label><input type="text" id="reg-address" required></div>
+                <div class="input-group"><label>Foto Perfil</label><input type="file" id="reg-photo" accept="image/*" required></div>
+                <div class="input-group"><label>ID (Cédula)</label><input type="file" id="reg-id-card" accept="image/*" required></div>
+                <div class="input-group"><label>Contraseña</label><input type="password" id="reg-pass" required></div>
                 <button type="submit" class="btn-primary full-width">SOLICITAR VERIFICACIÓN</button>
             </form>
         </div>
@@ -89,22 +62,11 @@
         </div>
 
         <div id="profile-container" class="auth-container" style="display:none; text-align:center;">
-            <div class="profile-avatar"><img id="profile-img-large" src="" alt=""></div>
+            <div class="profile-avatar"><img id="profile-img-large" src="" alt="Perfil" referrerpolicy="no-referrer"></div>
             <h2 id="profile-name">Cargando...</h2>
-            <div class="status-box">
-                <span>ESTADO DE CUENTA:</span>
-                <strong id="profile-status">VERIFICANDO</strong>
-            </div>
-            <p id="unverified-msg" style="color:#ff4444; font-size:0.8rem; margin-bottom:20px; display:none;">
-                * Debes esperar aprobación para comprar o pedir crédito.
-            </p>
-
-            <button id="whatsapp-verify-btn" onclick="contactAdmin()" class="btn-primary full-width" style="margin-bottom: 15px; background: #25D366; border: none; display: none;">
-                <i data-lucide="message-circle" style="vertical-align: middle; margin-right: 8px;"></i>
-                PEDIR VERIFICACIÓN POR WHATSAPP
-            </button>
-
-            <button onclick="location.reload()" class="btn-secondary full-width">Cerrar Sesión</button>
+            <div class="status-box"><span>ESTADO DE CUENTA:</span> <strong id="profile-status">VERIFICANDO</strong></div>
+            <button id="whatsapp-verify-btn" onclick="contactAdmin()" class="btn-primary full-width" style="background:#25D366; margin-top:15px; display:none;">WHATSAPP VERIFICACIÓN</button>
+            <button onclick="location.reload()" class="btn-secondary full-width" style="margin-top:10px;">Cerrar Sesión</button>
         </div>
     </div>
 </div>
@@ -112,13 +74,13 @@
 <section class="hero">
     <div class="search-bar hero-search">
         <i data-lucide="search" style="color:#666; width:18px;"></i>
-        <input type="text" placeholder="BUSCAR COLECCIÓN...">
+        <input type="text" id="main-search" placeholder="BUSCAR COLECCIÓN..." oninput="filterBySearch(this.value)">
     </div>
     <span class="tag">Nueva Temporada 2026</span>
     <h1>Estilo & Poder <br><span>Sin Límites</span></h1>
     <p>Adquiere lo último en perfumes y tecnología con nuestro sistema de crédito exclusivo.</p>
     <div class="hero-btns">
-        <button onclick="checkAccess()" class="btn-primary">VER CATÁLOGO</button>
+        <button onclick="document.getElementById('products-section').scrollIntoView({behavior:'smooth'})" class="btn-primary">VER CATÁLOGO</button>
         <button onclick="checkAccess()" class="btn-secondary">SOLICITAR CRÉDITO</button>
     </div>
 </section>
@@ -126,334 +88,316 @@
 <section class="categories">
     <h2 class="section-title">Explorar <span>Colecciones</span></h2>
     <div class="category-grid">
-        <div class="cat-card"><i data-lucide="sparkles"></i> Perfumes</div>
-        <div class="cat-card"><i data-lucide="smartphone"></i> Tecnología</div>
-        <div class="cat-card"><i data-lucide="shirt"></i> Ropa</div>
-        <div class="cat-card"><i data-lucide="footprints"></i> Calzado</div>
-        <div class="cat-card"><i data-lucide="droplets"></i> Higiene</div>
-        <div class="cat-card"><i data-lucide="heart"></i> Belleza</div>
+        <div class="cat-card" onclick="filterByCategory('Perfumes')"><i data-lucide="sparkles"></i> Perfumes</div>
+        <div class="cat-card" onclick="filterByCategory('Tecnología')"><i data-lucide="smartphone"></i> Tecnología</div>
+        <div class="cat-card" onclick="filterByCategory('Ropa')"><i data-lucide="shirt"></i> Ropa</div>
+        <div class="cat-card" onclick="filterByCategory('Calzado')"><i data-lucide="footprints"></i> Calzado</div>
     </div>
 </section>
 
-<h2 class="section-title">Lo Más <span>Deseado</span></h2>
-<div class="product-grid">
-    <div class="product-card">
-        <div class="badge">Crédito Disponible</div>
-        <div class="product-img"></div>
-        <div class="product-info">
-            <h3>Fragancia Tom Ford</h3>
-            <p class="product-price">$120.00</p>
-            <button onclick="checkAccess()" class="add-btn">RESERVAR</button>
-        </div>
+<section class="products" id="products-section">
+    <h2 class="section-title">Lo Más <span>Deseado</span></h2>
+    <div id="products-grid" class="product-grid">
+        <!-- Productos dinámicos aquí -->
     </div>
-    <div class="product-card">
-        <div class="badge">Trending</div>
-        <div class="product-img"></div>
-        <div class="product-info">
-            <h3>Tecnología iPhone 15</h3>
-            <p class="product-price">$999.00</p>
-            <button onclick="checkAccess()" class="add-btn">RESERVAR</button>
+</section>
+
+<!-- PANEL ADMIN WEB -->
+<div id="admin-overlay" class="modal" style="z-index: 5000;">
+    <div class="modal-content" style="max-width: 95%; height: 90vh; overflow-y: auto; background: #08080a; padding: 25px;">
+        <span class="close-modal" onclick="closeAdmin()">&times;</span>
+        <h2 style="color:white; border-bottom: 1px solid #c5a059; padding-bottom: 10px; font-weight: 900; letter-spacing: 2px;">STARBIG ADMIN WEB</h2>
+
+        <!-- MONITOR DE RED -->
+        <div id="traffic-monitor-container" style="background:#121216; padding:20px; margin:20px 0; border:0.5px solid #c5a05933;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                <div><div style="color:#C5A059; font-size:10px; font-weight:bold;">MONITOREO</div><div style="color:white; font-size:16px; font-weight:900;">ACTIVIDAD REAL</div></div>
+                <div style="display:flex; gap:15px;"><span style="color:green; font-size:10px;">● ONLINE</span><span style="color:red; font-size:10px;">● OFFLINE</span></div>
+            </div>
+            <canvas id="trafficCanvas" style="width:100%; height:80px;"></canvas>
+            <div style="display:flex; justify-content:space-between; margin-top:15px; border-top:1px solid #ffffff11; padding-top:10px;">
+                <div style="text-align:center;"><div style="color:#888; font-size:8px;">ONLINE</div><div id="stat-online" style="color:white; font-size:14px;">1</div></div>
+                <div style="text-align:center;"><div style="color:#888; font-size:8px;">OFFLINE</div><div id="stat-offline" style="color:white; font-size:14px;">0</div></div>
+                <div style="text-align:center;"><div style="color:#888; font-size:8px;">TOTAL</div><div id="stat-total" style="color:white; font-size:14px;">0</div></div>
+            </div>
+        </div>
+
+        <div class="auth-tabs" style="margin: 20px 0;">
+            <div id="adm-tab-users" class="tab-btn active" onclick="switchAdminTab('users')">SOLICITUDES</div>
+            <div id="adm-tab-db" class="tab-btn" onclick="switchAdminTab('db')">BASE DE DATOS</div>
+            <div id="adm-tab-inv" class="tab-btn" onclick="switchAdminTab('inventory')">INVENTARIO</div>
+        </div>
+
+        <div id="admin-content-users" class="admin-panel-section">
+            <div id="users-list-pending" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;"></div>
+        </div>
+        <div id="admin-content-db" class="admin-panel-section" style="display:none;">
+            <div id="users-list-active" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;"></div>
+        </div>
+        <div id="admin-content-inventory" class="admin-panel-section" style="display:none;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
+                <h3 style="color:white;">STOCK PRODUCTOS</h3>
+                <button onclick="openAddProductModal()" style="background:#C5A059; border:none; padding:8px 15px; border-radius:5px; font-weight:bold; cursor:pointer;">+ AÑADIR</button>
+            </div>
+            <div id="admin-inventory-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px;"></div>
         </div>
     </div>
 </div>
 
-<script>
-    lucide.createIcons();
-    const modal = document.getElementById("auth-modal");
-    let userStatus = "guest";
+<!-- MODAL AÑADIR PRODUCTO (ADMIN WEB) -->
+<div id="add-prod-overlay" class="modal" style="background:rgba(0,0,0,0.8); z-index:6000;">
+    <div class="modal-content" style="background:#121216; border:1px solid #C5A059;">
+        <h2 style="color:white; margin-bottom:20px;">NUEVO PRODUCTO</h2>
+        <input type="text" id="ap-name" class="input-group" placeholder="Nombre" style="width:100%; padding:10px; border-bottom:1px solid #C5A059; margin-bottom:15px; background:transparent; color:white; border-left:none; border-top:none; border-right:none;">
+        <input type="number" id="ap-price" class="input-group" placeholder="Precio USD" style="width:100%; padding:10px; border-bottom:1px solid #C5A059; margin-bottom:15px; background:transparent; color:white; border-left:none; border-top:none; border-right:none;">
+        <select id="ap-cat" style="width:100%; padding:10px; background:#08080a; color:white; border:1px solid #C5A059; margin-bottom:15px;">
+            <option>Perfumes</option><option>Tecnología</option><option>Ropa</option><option>Calzado</option>
+        </select>
+        <input type="file" id="ap-img" style="margin-bottom:20px; color:white;">
+        <button onclick="saveProductWeb()" class="btn-primary full-width">GUARDAR</button>
+        <button onclick="document.getElementById('add-prod-overlay').style.display='none'" class="btn-secondary full-width" style="margin-top:10px;">CANCELAR</button>
+    </div>
+</div>
 
-    function openAuth() { modal.style.display = "block"; document.body.style.overflow = "hidden"; }
-    function closeAuth() { modal.style.display = "none"; document.body.style.overflow = "auto"; }
+<div id="image-light-box" onclick="this.style.display='none'" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:9000; justify-content:center; align-items:center;">
+    <img id="light-box-img" src="" style="max-width:95%; max-height:90%; border:2px solid #c5a059;" referrerpolicy="no-referrer" alt="IMG">
+</div>
+
+<script>
+    const firebaseConfig = { apiKey: "AIzaSyAdKUDDG7c6jf_QWn7DVwnm8BIZbiIXgcg", authDomain: "starbigstore.firebaseapp.com", projectId: "starbigstore", storageBucket: "starbigstore.firebasestorage.app", messagingSenderId: "94012933332", appId: "1:94012933332:web:a245585b5465666f" };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+    const googleSheetsUrl = "https://script.google.com/macros/s/AKfycbzTKwRkgCmy_m42ZeKjPbczOMr0YHmRKiSmrHPCSEdKixHzI9MG3fhEfEU3pChr45exvw/exec";
+
+    let tasaBcv = 36.5;
+    let allProducts = [];
+    let userStatus = "guest";
+    let onlineHistory = Array(20).fill(1);
+    let offlineHistory = Array(20).fill(0);
+
+    lucide.createIcons();
+    listenToTasa();
+    startTrafficMonitor();
+
+    function openAuth() { document.getElementById("auth-modal").style.display = "block"; }
+    function closeAuth() { document.getElementById("auth-modal").style.display = "none"; }
+    function closeAdmin() { document.getElementById("admin-overlay").style.display = "none"; }
+    function openAddProductModal() { document.getElementById('add-prod-overlay').style.display='block'; }
+
+    function fixDriveUrl(url) {
+        if (!url || typeof url !== 'string' || url.includes('subiendo')) return "https://via.placeholder.com/200?text=STARBIG";
+        let id = url.includes("id=") ? url.split("id=")[1].split("&")[0] : (url.includes("file/d/") ? url.split("file/d/")[1].split("/")[0] : "");
+        return id ? `https://lh3.googleusercontent.com/d/${id}` : url;
+    }
+
+    function listenToTasa() {
+        db.collection("config").doc("tasa_bcv").onSnapshot(doc => {
+            if(doc.exists) { tasaBcv = doc.data().valor; loadProducts(); }
+        });
+    }
+
+    function loadProducts() {
+        db.collection("productos").onSnapshot(snapshot => {
+            allProducts = [];
+            snapshot.forEach(doc => { allProducts.push({...doc.data(), id: doc.id}); });
+            renderProducts(allProducts);
+        });
+    }
+
+    function renderProducts(list) {
+        const grid = document.getElementById('products-grid');
+        grid.innerHTML = "";
+        list.forEach(p => {
+            const bss = (p.priceUsd * tasaBcv).toFixed(2);
+            grid.innerHTML += `
+                <div class="product-card">
+                    <div class="badge">${p.allowCredit ? 'Crédito' : (p.collection || 'Premium')}</div>
+                    <div class="product-img" style="background-image: url('${fixDriveUrl(p.imageUrl)}'); background-size: cover; background-position: center;" referrerpolicy="no-referrer"></div>
+                    <div class="product-info">
+                        <h3>${p.name}</h3>
+                        <p class="product-price">$${p.priceUsd} <span style="font-size:10px; color:#aaa;">(${bss} BSS)</span></p>
+                        <button onclick="checkAccess()" class="add-btn">RESERVAR</button>
+                    </div>
+                </div>`;
+        });
+    }
+
+    function filterByCategory(cat) {
+        const filtered = allProducts.filter(p => p.category === cat);
+        renderProducts(filtered);
+        document.getElementById('products-section').scrollIntoView({behavior:'smooth'});
+    }
+
+    function filterBySearch(val) {
+        const filtered = allProducts.filter(p => p.name.toLowerCase().includes(val.toLowerCase()));
+        renderProducts(filtered);
+    }
 
     function checkAccess() {
-        if(userStatus === "unverified") {
-            alert("⚠️ USUARIO NO VERIFICADO: Tu cuenta está en revisión. Te avisaremos por WhatsApp al aprobarla.");
-        } else if(userStatus === "guest") {
-            openAuth();
-        } else {
-            alert("Abriendo opciones...");
+        if(userStatus === "unverified") alert("⚠️ Cuenta en revisión.");
+        else if(userStatus === "guest") openAuth();
+        else alert("Abriendo Catálogo de Créditos...");
+    }
+
+    // ADMIN WEB LOGIC
+    let clicks = 0;
+    function handleLogoClick() {
+        clicks++;
+        if(clicks === 3) {
+            if(window.AndroidApp) window.AndroidApp.goToAdmin();
+            else {
+                const pin = prompt("PIN ADMIN:");
+                if(pin === "1358L") {
+                    document.getElementById('admin-overlay').style.display = 'block';
+                    loadAdminUsers(); loadAdminInventory();
+                }
+            }
+        }
+        setTimeout(() => clicks = 0, 1000);
+    }
+
+    function switchAdminTab(tab) {
+        document.getElementById('admin-content-users').style.display = tab === 'users' ? 'block' : 'none';
+        document.getElementById('admin-content-db').style.display = tab === 'db' ? 'block' : 'none';
+        document.getElementById('admin-content-inventory').style.display = tab === 'inventory' ? 'block' : 'none';
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('adm-tab-' + (tab==='users'?'users':tab==='db'?'db':'inv')).classList.add('active');
+    }
+
+    function loadAdminUsers() {
+        db.collection("registros_clientes").onSnapshot(snap => {
+            const pendingList = document.getElementById('users-list-pending');
+            const activeList = document.getElementById('users-list-active');
+            pendingList.innerHTML = ""; activeList.innerHTML = "";
+            snap.forEach(doc => {
+                const u = doc.data();
+                const card = `
+                    <div style="background:#121216; padding:15px; border:0.5px solid #c5a05944; color:white; margin-bottom:15px;">
+                        <div style="display:flex; align-items:center; margin-bottom:10px;">
+                            <img src="${fixDriveUrl(u.photoUrl)}" onclick="expandImage('${u.photoUrl}')" style="width:60px; height:60px; object-fit:cover; border:1px solid #C5A059; margin-right:15px;" referrerpolicy="no-referrer">
+                            <div><div style="font-weight:bold;">${u.name.toUpperCase()}</div><div style="color:#C5A059; font-size:11px;">${u.email}</div></div>
+                        </div>
+                        <div style="font-size:10px; color:#aaa; margin-bottom:10px;"><strong>DIR:</strong> ${u.address}</div>
+                        <div style="background:#000; height:120px; display:flex; justify-content:center; align-items:center; border:1px dashed #444; margin-bottom:15px; cursor:pointer;" onclick="expandImage('${u.idCardUrl}')">
+                            <img src="${fixDriveUrl(u.idCardUrl)}" style="max-width:100%; max-height:100%;" referrerpolicy="no-referrer">
+                        </div>
+                        <div style="display:flex; gap:10px;">
+                            ${u.status === 'unverified' ? `<button onclick="adminAction('${doc.id}', 'active', '${u.email}')" style="flex:1; background:#C5A059; border:none; padding:8px; font-weight:bold;">APROBAR</button>` : ''}
+                            <button onclick="adminAction('${doc.id}', 'delete', '${u.email}')" style="flex:1; background:transparent; color:#ff4444; border:1px solid #ff4444; padding:8px;">BORRAR</button>
+                        </div>
+                    </div>`;
+                if(u.status === 'active') activeList.innerHTML += card; else pendingList.innerHTML += card;
+            });
+        });
+    }
+
+    function loadAdminInventory() {
+        db.collection("productos").onSnapshot(snap => {
+            const list = document.getElementById('admin-inventory-list'); list.innerHTML = "";
+            snap.forEach(doc => {
+                const p = doc.data();
+                list.innerHTML += `
+                    <div style="background:#121216; padding:10px; border:0.5px solid #ffffff11; display:flex; align-items:center; gap:15px; margin-bottom:10px;">
+                        <img src="${fixDriveUrl(p.imageUrl)}" style="width:50px; height:50px; object-fit:cover;" referrerpolicy="no-referrer">
+                        <div style="flex:1;"><div style="color:white; font-size:12px; font-weight:bold;">${p.name.toUpperCase()}</div><div style="color:#C5A059; font-size:11px;">$${p.priceUsd} | Stock: ${p.stock}</div></div>
+                        <button onclick="db.collection('productos').doc('${doc.id}').delete()" style="background:none; border:none; color:#ff4444; cursor:pointer;"><i data-lucide="trash-2"></i></button>
+                    </div>`;
+            });
+            lucide.createIcons();
+        });
+    }
+
+    async function adminAction(docId, action, email) {
+        if(action === 'active') {
+            await db.collection("registros_clientes").doc(docId).update({status: 'active'});
+            fetch(googleSheetsUrl, { method:'POST', body: JSON.stringify({action:"updateStatus", email: email, status: "active"}) });
+        } else if(confirm("¿Eliminar?")) {
+            await db.collection("registros_clientes").doc(docId).delete();
+            fetch(googleSheetsUrl, { method:'POST', body: JSON.stringify({action:"delete", email: email}) });
         }
     }
 
-    async function getBase64(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = (e) => {
-                const img = new Image();
-                img.src = e.target.result;
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    const MAX_WIDTH = 600; // Reducido para mayor velocidad
-                    const MAX_HEIGHT = 600;
-                    let width = img.width;
-                    let height = img.height;
+    function startTrafficMonitor() {
+        setInterval(async () => {
+            const snap = await db.collection("registros_clientes").get();
+            const total = snap.size;
+            const twoMinAgo = Date.now() - 120000;
+            const onlineSnap = await db.collection("presencia").where("ultimoPulso", ">", twoMinAgo).get();
+            const onlineCount = Math.max(1, onlineSnap.size);
 
-                    if (width > height) {
-                        if (width > MAX_WIDTH) {
-                            height *= MAX_WIDTH / width;
-                            width = MAX_WIDTH;
-                        }
-                    } else {
-                        if (height > MAX_HEIGHT) {
-                            width *= MAX_HEIGHT / height;
-                            height = MAX_HEIGHT;
-                        }
-                    }
-                    canvas.width = width;
-                    canvas.height = height;
-                    const ctx = canvas.getContext("2d");
-                    ctx.drawImage(img, 0, 0, width, height);
-                    resolve(canvas.toDataURL("image/jpeg", 0.6)); // Compresión al 60%
-                };
-                img.onerror = () => reject("Error al cargar imagen");
-            };
-            reader.onerror = () => reject("Error al leer archivo");
-        });
+            document.getElementById('stat-online').innerText = onlineCount;
+            document.getElementById('stat-offline').innerText = Math.max(0, total - onlineCount);
+            document.getElementById('stat-total').innerText = total;
+
+            onlineHistory.shift(); onlineHistory.push(onlineCount);
+            offlineHistory.shift(); offlineHistory.push(Math.max(0, total - onlineCount));
+            drawTrafficGraph();
+        }, 3000);
+    }
+
+    function drawTrafficGraph() {
+        const canvas = document.getElementById('trafficCanvas'); if(!canvas) return;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const max = Math.max(...onlineHistory, ...offlineHistory, 5);
+        const step = canvas.width / 19;
+        function draw(data, color) {
+            ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 2;
+            data.forEach((val, i) => {
+                let x = i * step; let y = canvas.height - (val / max * canvas.height);
+                if(i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+        }
+        draw(offlineHistory, 'red'); draw(onlineHistory, 'green');
+    }
+
+    function expandImage(url) {
+        const fixed = fixDriveUrl(url);
+        if(!fixed || fixed.includes('placeholder')) return;
+        document.getElementById('light-box-img').src = fixed;
+        document.getElementById('image-light-box').style.display = 'flex';
+    }
+
+    function switchAuth(tab) {
+        document.getElementById('register-container').style.display = tab === 'register' ? 'block' : 'none';
+        document.getElementById('login-container').style.display = tab === 'login' ? 'block' : 'none';
+        document.getElementById('tab-reg').classList.toggle('active', tab === 'register');
+        document.getElementById('tab-log').classList.toggle('active', tab === 'login');
     }
 
     document.getElementById('register-form').onsubmit = async (e) => {
         e.preventDefault();
         const btn = e.target.querySelector('button');
-        btn.disabled = true;
-        btn.innerText = "PROCESANDO...";
-
-        const email = document.getElementById('reg-email').value;
-        const name = document.getElementById('reg-name').value;
-        const lastname = document.getElementById('reg-lastname').value;
-        const phone = document.getElementById('reg-phone').value;
-        const address = document.getElementById('reg-address').value;
-        const photoFile = document.getElementById('reg-photo').files[0];
-        const idCardFile = document.getElementById('reg-id-card').files[0];
-
-        if(!email.includes('@') || !email.toLowerCase().endsWith('.com')) {
-            alert("❌ Correo inválido");
-            btn.disabled = false;
-            btn.innerText = "SOLICITAR VERIFICACIÓN";
-            return;
-        }
-
+        btn.disabled = true; btn.innerText = "PROCESANDO...";
         try {
-            let photoBase64 = photoFile ? await getBase64(photoFile) : "";
-            let idCardBase64 = idCardFile ? await getBase64(idCardFile) : "";
-
+            const photo64 = await getBase64(document.getElementById('reg-photo').files[0]);
+            const id64 = await getBase64(document.getElementById('reg-id-card').files[0]);
+            const name = document.getElementById('reg-name').value;
+            const email = document.getElementById('reg-email').value;
             if(window.AndroidApp) {
-                window.AndroidApp.registerUser(name, lastname, email, phone, address, photoBase64, idCardBase64);
-                alert("🚀 Solicitud enviada. Revisa los mensajes en pantalla.");
-                closeAuth();
-                e.target.reset();
+                window.AndroidApp.registerUser(name, "", email, document.getElementById('reg-phone').value, document.getElementById('reg-address').value, photo64, id64);
+            } else {
+                await db.collection("registros_clientes").add({ name, email, phone: document.getElementById('reg-phone').value, address: document.getElementById('reg-address').value, status: "unverified", timestamp: Date.now(), photoUrl: "subiendo...", idCardUrl: "subiendo..." });
+                fetch(googleSheetsUrl, { method: 'POST', body: JSON.stringify({action: "register", firstName: name, lastName: "", email: email, phone: document.getElementById('reg-phone').value, address: document.getElementById('reg-address').value, photoBase64: photo64, idCardBase64: id64}) });
             }
-        } catch (err) {
-            alert("Error: " + err);
-        } finally {
-            btn.disabled = false;
-            btn.innerText = "SOLICITAR VERIFICACIÓN";
-        }
+            alert("✅ Solicitud enviada."); closeAuth();
+        } catch(err) { alert("Error: " + err.message); }
+        finally { btn.disabled = false; btn.innerText = "SOLICITAR VERIFICACIÓN"; }
     };
 
-    document.getElementById('login-form').onsubmit = (e) => {
-        e.preventDefault();
-        const email = document.getElementById('login-email').value;
-        const pass = document.getElementById('login-pass').value;
-
-        if(window.AndroidApp) {
-            window.AndroidApp.loginUser(email, pass);
-        } else {
-            alert("Login simulado en web para: " + email);
-        }
-    };
-
-    function handleBiometric() {
-        if(window.AndroidApp) {
-            window.AndroidApp.requestBiometric();
-        }
+    async function getBase64(file) {
+        return new Promise((resolve) => {
+            if(!file) { resolve(""); return; }
+            const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = () => resolve(reader.result);
+        });
     }
 
-    window.updateUserProfile = (name, email, photoUrl, status) => {
-        userStatus = status;
-        document.getElementById('auth-tabs-container').style.display = 'none';
-        document.getElementById('register-container').style.display = 'none';
-        document.getElementById('login-container').style.display = 'none';
-        document.getElementById('profile-container').style.display = 'block';
-
-        document.getElementById('profile-name').innerText = name;
-        document.getElementById('profile-status').innerText = status === 'unverified' ? 'USUARIO NO VERIFICADO' : 'CUENTA ACTIVA';
-        document.getElementById('unverified-msg').style.display = status === 'unverified' ? 'block' : 'none';
-        document.getElementById('whatsapp-verify-btn').style.display = status === 'unverified' ? 'block' : 'none';
-
-        if(photoUrl) {
-            document.getElementById('user-icon-nav').style.display = 'none';
-            document.getElementById('user-photo-container').style.display = 'block';
-            document.getElementById('user-photo-nav').src = photoUrl;
-            document.getElementById('profile-img-large').src = photoUrl;
-        }
-
-        // Si el usuario ya está activo, quitamos las restricciones de los botones
-        if(status !== 'unverified') {
-            const btns = document.querySelectorAll('.add-btn, .btn-primary, .btn-secondary');
-            btns.forEach(b => b.classList.remove('disabled'));
-        }
-    };
-
-    function logout() {
-        if(confirm("¿Estás seguro de que deseas cerrar sesión?")) {
-            location.reload();
-        }
-    }
-
+    function changeLanguage(lang) { alert("Idioma: " + lang); }
     function contactAdmin() {
         const name = document.getElementById('profile-name').innerText;
-        const message = `Hola Starbig Store, mi nombre es ${name}. He creado mi perfil en la app y deseo solicitar mi verificación para empezar a comprar.`;
-        const phone = "584129431568"; // Número de Starbig Store
-        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
-    }
-
-    let clicks = 0;
-    function handleLogoClick() {
-        clicks++;
-        if(clicks === 3 && window.AndroidApp) window.AndroidApp.goToAdmin();
-        setTimeout(() => clicks = 0, 1000);
-    }
-
-    const translations = {
-        es: {
-            register: "REGISTRO",
-            login: "INICIAR SESIÓN",
-            createProfile: "Crear Perfil <span>Fashion</span>",
-            joinForCredit: "Únete para solicitar tu crédito inmediato.",
-            firstName: "Nombre(s)",
-            lastName: "Apellido(s)",
-            email: "Correo Electrónico",
-            whatsapp: "WhatsApp",
-            address: "Dirección Editorial",
-            photo: "Foto de Perfil (Avatar)",
-            idCard: "Documento de Identidad (Cédula/DNI)",
-            password: "Contraseña",
-            requestVerification: "SOLICITAR VERIFICACIÓN",
-            welcomeBack: "Bienvenido <span>de Nuevo</span>",
-            enter: "ENTRAR",
-            accountStatus: "ESTADO DE CUENTA:",
-            verifying: "VERIFICANDO",
-            active: "CUENTA ACTIVA",
-            unverifiedMsg: "* Debes esperar aprobación para comprar o pedir crédito.",
-            whatsappBtn: "PEDIR VERIFICACIÓN POR WHATSAPP",
-            logout: "Cerrar Sesión",
-            searchPlaceholder: "BUSCAR COLECCIÓN...",
-            tag: "Nueva Temporada 2026",
-            heroTitle: "Estilo & Poder <br><span>Sin Límites</span>",
-            heroSub: "Adquiere lo último en perfumes y tecnología con nuestro sistema de crédito exclusivo.",
-            viewCatalog: "VER CATÁLOGO",
-            requestCredit: "SOLICITAR CRÉDITO",
-            exploreCollections: "Explorar <span>Colecciones</span>",
-            perfumes: "Perfumes",
-            tech: "Tecnología",
-            clothing: "Ropa",
-            footwear: "Calzado",
-            hygiene: "Higiene",
-            beauty: "Belleza",
-            mostWanted: "Lo Más <span>Deseado</span>",
-            creditAvailable: "Crédito Disponible",
-            reserve: "RESERVAR",
-            confirmLogout: "¿Estás seguro de que deseas cerrar sesión?",
-            unverifiedAlert: "⚠️ USUARIO NO VERIFICADO: Tu cuenta está en revisión. Te avisaremos por WhatsApp al aprobarla.",
-            emailAlert: "❌ Error: El correo debe contener '@' y terminar en '.com'",
-            sentAlert: "✅ Solicitud Enviada: Subiendo imágenes y procesando tu perfil. Te contactaremos por WhatsApp."
-        },
-        en: {
-            register: "REGISTER",
-            login: "LOGIN",
-            createProfile: "Create <span>Fashion</span> Profile",
-            joinForCredit: "Join us to request your immediate credit.",
-            firstName: "First Name(s)",
-            lastName: "Last Name(s)",
-            email: "Email Address",
-            whatsapp: "WhatsApp",
-            address: "Editorial Address",
-            photo: "Profile Photo (Avatar)",
-            idCard: "Identity Document (ID Card)",
-            password: "Password",
-            requestVerification: "REQUEST VERIFICATION",
-            welcomeBack: "Welcome <span>Back</span>",
-            enter: "ENTER",
-            accountStatus: "ACCOUNT STATUS:",
-            verifying: "VERIFYING",
-            active: "ACTIVE ACCOUNT",
-            unverifiedMsg: "* You must wait for approval to shop or request credit.",
-            whatsappBtn: "REQUEST WHATSAPP VERIFICATION",
-            logout: "Logout",
-            searchPlaceholder: "SEARCH COLLECTION...",
-            tag: "New Season 2026",
-            heroTitle: "Style & Power <br><span>No Limits</span>",
-            heroSub: "Get the latest in perfumes and technology with our exclusive credit system.",
-            viewCatalog: "VIEW CATALOG",
-            requestCredit: "REQUEST CREDIT",
-            exploreCollections: "Explore <span>Collections</span>",
-            perfumes: "Perfumes",
-            tech: "Technology",
-            clothing: "Clothing",
-            footwear: "Footwear",
-            hygiene: "Hygiene",
-            beauty: "Beauty",
-            mostWanted: "Most <span>Wanted</span>",
-            creditAvailable: "Credit Available",
-            reserve: "RESERVE",
-            confirmLogout: "Are you sure you want to logout?",
-            unverifiedAlert: "⚠️ UNVERIFIED USER: Your account is under review. We will notify you via WhatsApp upon approval.",
-            emailAlert: "❌ Error: The email must contain '@' and end in '.com'",
-            sentAlert: "✅ Request Sent: Uploading images and processing your profile. We will contact you via WhatsApp."
-        }
-    };
-
-    function changeLanguage(lang) {
-        const t = translations[lang];
-        document.getElementById('tab-reg').innerText = t.register;
-        document.getElementById('tab-log').innerText = t.login;
-        document.querySelector('#register-container .auth-title').innerHTML = t.createProfile;
-        document.querySelector('#register-container .auth-subtitle').innerText = t.joinForCredit;
-
-        const regForm = document.getElementById('register-form');
-        regForm.querySelectorAll('label')[0].innerText = t.firstName;
-        regForm.querySelectorAll('label')[1].innerText = t.lastName;
-        regForm.querySelectorAll('label')[2].innerText = t.email;
-        regForm.querySelectorAll('label')[3].innerText = t.whatsapp;
-        regForm.querySelectorAll('label')[4].innerText = t.address;
-        regForm.querySelectorAll('label')[5].innerText = t.photo;
-        regForm.querySelectorAll('label')[6].innerText = t.idCard;
-        regForm.querySelectorAll('label')[7].innerText = t.password;
-        regForm.querySelector('button').innerText = t.requestVerification;
-
-        document.querySelector('#login-container .auth-title').innerHTML = t.welcomeBack;
-        const logForm = document.getElementById('login-form');
-        logForm.querySelectorAll('label')[0].innerText = t.email;
-        logForm.querySelectorAll('label')[1].innerText = t.password;
-        logForm.querySelector('button').innerText = t.enter;
-
-        document.querySelector('#profile-container .status-box span').innerText = t.accountStatus;
-        document.getElementById('unverified-msg').innerText = t.unverifiedMsg;
-        document.getElementById('whatsapp-verify-btn').innerHTML = `<i data-lucide="message-circle" style="vertical-align: middle; margin-right: 8px;"></i>${t.whatsappBtn}`;
-        document.querySelector('#profile-container button:last-child').innerText = t.logout;
-
-        document.querySelector('.hero-search input').placeholder = t.searchPlaceholder;
-        document.querySelector('.hero .tag').innerText = t.tag;
-        document.querySelector('.hero h1').innerHTML = t.heroTitle;
-        document.querySelector('.hero p').innerText = t.heroSub;
-        document.querySelectorAll('.hero-btns button')[0].innerText = t.viewCatalog;
-        document.querySelectorAll('.hero-btns button')[1].innerText = t.requestCredit;
-
-        document.querySelector('.categories .section-title').innerHTML = t.exploreCollections;
-        const catCards = document.querySelectorAll('.cat-card');
-        catCards[0].innerHTML = `<i data-lucide="sparkles"></i> ${t.perfumes}`;
-        catCards[1].innerHTML = `<i data-lucide="smartphone"></i> ${t.tech}`;
-        catCards[2].innerHTML = `<i data-lucide="shirt"></i> ${t.clothing}`;
-        catCards[3].innerHTML = `<i data-lucide="footprints"></i> ${t.footwear}`;
-        catCards[4].innerHTML = `<i data-lucide="droplets"></i> ${t.hygiene}`;
-        catCards[5].innerHTML = `<i data-lucide="heart"></i> ${t.beauty}`;
-
-        document.querySelector('h2.section-title:last-of-type').innerHTML = t.mostWanted;
-        document.querySelectorAll('.product-card .badge').forEach(b => b.innerText = t.creditAvailable);
-        document.querySelectorAll('.add-btn').forEach(b => b.innerText = t.reserve);
-
-        lucide.createIcons();
+        window.open(`https://wa.me/584129431568?text=Hola, soy ${name}. Solicito verificación.`);
     }
 </script>
 </body>

@@ -5,25 +5,38 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.starbigstore.data.Product
 import com.example.starbigstore.ui.components.ProductCard
+import com.google.firebase.firestore.FirebaseFirestore
 
 @Composable
 fun HomeScreen(modifier: Modifier = Modifier) {
-    val sampleProducts = listOf(
-        Product(1, "Camiseta Star", 25.0, "Camiseta de algodón"),
-        Product(2, "Pantalón Big", 45.0, "Pantalón denim"),
-        Product(3, "Gorra Store", 15.0, "Gorra ajustable"),
-        Product(4, "Zapatillas Runner", 85.0, "Para correr"),
-        Product(5, "Chaqueta Pro", 120.0, "Chaqueta técnica"),
-        Product(6, "Reloj Digital", 55.0, "Resistente al agua")
-    )
+    var products by remember { mutableStateOf(listOf<Product>()) }
+    val db = FirebaseFirestore.getInstance()
 
-    // Eliminamos el padding extra del Column para que el grid use el espacio de Scaffold
+    LaunchedEffect(Unit) {
+        db.collection("productos").addSnapshotListener { snapshot, _ ->
+            if (snapshot != null) {
+                products = snapshot.documents.map { doc ->
+                    Product(
+                        id = doc.id,
+                        name = doc.getString("name") ?: "",
+                        priceUsd = doc.getDouble("priceUsd") ?: 0.0,
+                        description = doc.getString("description") ?: "",
+                        category = doc.getString("category") ?: "",
+                        collection = doc.getString("collection") ?: "",
+                        imageUrl = doc.getString("imageUrl") ?: "",
+                        stock = doc.getLong("stock")?.toInt() ?: 0
+                    )
+                }
+            }
+        }
+    }
+
     Column(modifier = modifier.fillMaxSize()) {
         Text(
             text = "Catálogo Premium",
@@ -39,7 +52,7 @@ fun HomeScreen(modifier: Modifier = Modifier) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            items(sampleProducts) { product ->
+            items(products) { product ->
                 ProductCard(product = product)
             }
         }
