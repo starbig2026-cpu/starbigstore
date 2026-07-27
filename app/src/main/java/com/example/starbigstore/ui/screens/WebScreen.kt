@@ -4,13 +4,11 @@ import android.content.Context
 import android.net.Uri
 import android.webkit.*
 import android.widget.Toast
-import androidx.biometric.BiometricManager
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.storage.FirebaseStorage
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -32,14 +30,12 @@ class WebAppInterface(
     fun registerUser(firstName: String, lastName: String, email: String, phone: String, address: String, photoBase64: String, idCardBase64: String) {
         val db = FirebaseFirestore.getInstance()
 
-        // Toast de depuración inicial
         CoroutineScope(Dispatchers.Main).launch {
             Toast.makeText(mContext, "🚀 Procesando registro...", Toast.LENGTH_SHORT).show()
         }
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // 1. Guardar primero en Firestore (sin URLs de imagen aún)
                 val userMap = hashMapOf<String, Any>(
                     "firstName" to firstName,
                     "lastName" to lastName,
@@ -56,17 +52,11 @@ class WebAppInterface(
                 db.collection("registros_clientes")
                     .add(userMap)
                     .addOnSuccessListener { docRef ->
-                        CoroutineScope(Dispatchers.Main).launch {
-                            Toast.makeText(mContext, "✅ Datos base guardados en Firebase", Toast.LENGTH_SHORT).show()
-                        }
-
-                        // 2. Sincronizar con Google Sheets para subir fotos a Drive
                         CoroutineScope(Dispatchers.IO).launch {
                             try {
                                 val client = OkHttpClient.Builder()
                                     .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
                                     .followRedirects(true)
-                                    .followSslRedirects(true)
                                     .build()
 
                                 val payload = org.json.JSONObject().apply {
@@ -79,7 +69,7 @@ class WebAppInterface(
                                     put("status", "unverified")
                                     put("photoBase64", photoBase64)
                                     put("idCardBase64", idCardBase64)
-                                    put("date", java.text.SimpleDateFormat("dd/MM/yyyy HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date()))
+                                    put("date", java.text.SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(Date()))
                                 }
                                 
                                 val body = payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
@@ -87,76 +77,22 @@ class WebAppInterface(
                                 
                                 client.newCall(request).execute().use { response ->
                                     val responseStr = response.body?.string() ?: ""
-                                    android.util.Log.d("WebScreen", "Sync Result: $responseStr")
-                                    
                                     if (response.isSuccessful) {
-                                        try {
-                                            val resJson = org.json.JSONObject(responseStr)
-                                            val status = resJson.optString("status", "")
-                                            val photoUrl = resJson.optString("photoUrl", "")
-                                            val idCardUrl = resJson.optString("idCardUrl", "")
-                                            
-                                            if (status == "ok") {
-                                                if (photoUrl.isNotEmpty() || idCardUrl.isNotEmpty()) {
-                                                    docRef.update("photoUrl", photoUrl, "idCardUrl", idCardUrl)
-                                                    CoroutineScope(Dispatchers.Main).launch {
-                                                        Toast.makeText(mContext, "✅ Registro Sincronizado", Toast.LENGTH_SHORT).show()
-                                                    }
-                                                } else {
-                                                    CoroutineScope(Dispatchers.Main).launch {
-                                                        Toast.makeText(mContext, "⚠️ Google no guardó las fotos", Toast.LENGTH_LONG).show()
-                                                    }
-                                                }
-                                            } else {
-                                                val msg = resJson.optString("msg", "Error desconocido")
-                                                CoroutineScope(Dispatchers.Main).launch {
-                                                    Toast.makeText(mContext, "❌ Google Error: $msg", Toast.LENGTH_LONG).show()
-                                                }
+                                        val resJson = org.json.JSONObject(responseStr)
+                                        val photoUrl = resJson.optString("photoUrl", "")
+                                        val idCardUrl = resJson.optString("idCardUrl", "")
+                                        
+                                        if (photoUrl.isNotEmpty()) {
+                                            docRef.update("photoUrl", photoUrl, "idCardUrl", idCardUrl)
+                                            CoroutineScope(Dispatchers.Main).launch {
+                                                Toast.makeText(mContext, "✅ Registro Sincronizado", Toast.LENGTH_SHORT).show()
                                             }
-                                        } catch (e: Exception) {
-                                            android.util.Log.e("WebScreen", "JSON Error: $responseStr", e)
                                         }
-                                    } else {
-                                        android.util.Log.e("WebScreen", "HTTP Error: ${response.code}")
                                     }
                                 }
-                            } catch (e: Exception) {
-                                android.util.Log.e("WebScreen", "Sync Error", e)
-                            }
+                            } catch (e: Exception) { e.printStackTrace() }
                         }
                     }
-                    .addOnFailureListener { e ->
-                        android.util.Log.e("WebScreen", "Firestore Error: ${e.message}")
-                        CoroutineScope(Dispatchers.Main).launch {
-                            Toast.makeText(mContext, "❌ Error Firestore: ${e.message}", Toast.LENGTH_LONG).show()
-                        }
-                    }
-            } catch (e: Exception) {
-                android.util.Log.e("WebScreen", "Error", e)
-            }
-        }
-    }
-
-    private fun syncToGoogleSheets(user: Map<String, Any>) {
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val client = OkHttpClient()
-                // Enviamos nombre y apellido por separado para la planilla
-                val json = """
-                {
-                    "firstName": "${user["firstName"]}",
-                    "lastName": "${user["lastName"]}",
-                    "email": "${user["email"]}",
-                    "phone": "${user["phone"]}",
-                    "address": "${user["address"]}",
-                    "status": "unverified",
-                    "photoUrl": "${user["photoUrl"]}",
-                    "idCardUrl": "${user["idCardUrl"]}"
-                }
-                """.trimIndent()
-                val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
-                val request = Request.Builder().url(googleSheetsUrl).post(body).build()
-                client.newCall(request).execute()
             } catch (e: Exception) { e.printStackTrace() }
         }
     }
@@ -165,7 +101,6 @@ class WebAppInterface(
     fun loginUser(email: String, pass: String) {
         FirebaseAuth.getInstance().signInWithEmailAndPassword(email, pass)
             .addOnSuccessListener { fetchUserData(email) }
-            .addOnFailureListener { Toast.makeText(mContext, "Credenciales incorrectas", Toast.LENGTH_SHORT).show() }
     }
 
     private fun fetchUserData(email: String) {
@@ -181,13 +116,10 @@ class WebAppInterface(
     }
 
     @JavascriptInterface
-    fun isBiometricAvailable() = BiometricManager.from(mContext).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS
-
+    fun goToAdmin() { onAdminRequest() }
+    
     @JavascriptInterface
     fun requestBiometric() { onBiometricRequest() }
-
-    @JavascriptInterface
-    fun goToAdmin() { onAdminRequest() }
 }
 
 @Composable
