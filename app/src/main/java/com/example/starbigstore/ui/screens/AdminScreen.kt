@@ -3,6 +3,7 @@ package com.example.starbigstore.ui.screens
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,6 +22,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.example.starbigstore.R
 import com.google.firebase.firestore.FirebaseFirestore
@@ -168,6 +172,7 @@ fun AdminListContent() {
     var selectedTab by remember { mutableIntStateOf(2) }
     var registrations by remember { mutableStateOf(listOf<CustomerRegistration>()) }
     var isLoading by remember { mutableStateOf(true) }
+    var expandedImageUrl by remember { mutableStateOf<String?>(null) }
     val db = FirebaseFirestore.getInstance()
 
     LaunchedEffect(Unit) {
@@ -262,10 +267,43 @@ fun AdminListContent() {
                                 CustomerAdminCard(
                                     reg = reg,
                                     onApprove = { approveCustomer(reg, db, GOOGLE_SHEETS_URL) },
-                                    onReject = { deleteCustomer(reg, db, GOOGLE_SHEETS_URL) }
+                                    onReject = { deleteCustomer(reg, db, GOOGLE_SHEETS_URL) },
+                                    onImageClick = { url -> expandedImageUrl = url }
                                 )
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        // Overlay para ampliar imagen
+        if (expandedImageUrl != null) {
+            Dialog(
+                onDismissRequest = { expandedImageUrl = null },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.9f))
+                        .clickable { expandedImageUrl = null },
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = expandedImageUrl,
+                        contentDescription = "Vista ampliada",
+                        modifier = Modifier
+                            .fillMaxWidth(0.95f)
+                            .fillMaxHeight(0.8f),
+                        contentScale = ContentScale.Fit
+                    )
+                    
+                    IconButton(
+                        onClick = { expandedImageUrl = null },
+                        modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Cerrar", tint = Color.White, modifier = Modifier.size(32.dp))
                     }
                 }
             }
@@ -492,7 +530,7 @@ private fun deleteCustomer(reg: CustomerRegistration, db: FirebaseFirestore, goo
 }
 
 @Composable
-fun CustomerAdminCard(reg: CustomerRegistration, onApprove: () -> Unit, onReject: () -> Unit) {
+fun CustomerAdminCard(reg: CustomerRegistration, onApprove: () -> Unit, onReject: () -> Unit, onImageClick: (String) -> Unit) {
     val isActive = reg.status == "active"
     
     Card(
@@ -507,6 +545,7 @@ fun CustomerAdminCard(reg: CustomerRegistration, onApprove: () -> Unit, onReject
                     modifier = Modifier
                         .size(90.dp)
                         .background(Color(0xFF1A1A20))
+                        .clickable { if(reg.photoUrl.isNotBlank()) onImageClick(reg.photoUrl) }
                 ) {
                     AsyncImage(
                         model = reg.photoUrl.ifBlank { "https://cdn-icons-png.flaticon.com/512/149/149071.png" },
@@ -560,6 +599,7 @@ fun CustomerAdminCard(reg: CustomerRegistration, onApprove: () -> Unit, onReject
                     .fillMaxWidth()
                     .height(220.dp)
                     .background(Color(0xFF0A0A0C))
+                    .clickable { if(reg.idCardUrl.isNotBlank()) onImageClick(reg.idCardUrl) }
             ) {
                 AsyncImage(
                     model = reg.idCardUrl.ifBlank { "https://via.placeholder.com/800x400/0A0A0C/C5A059?text=ESPERANDO+DOCUMENTO" },
