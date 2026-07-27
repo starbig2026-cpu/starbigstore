@@ -1,7 +1,9 @@
 package com.example.starbigstore.ui.screens
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,6 +17,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -31,6 +35,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 data class CustomerRegistration(
@@ -55,19 +60,104 @@ fun AdminScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         containerColor = Color(0xFF0D0D11),
         topBar = {
             CenterAlignedTopAppBar(
-                title = { }, // Quitamos el título para que el logo suba más
+                title = { },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = Color.White)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent) // Transparente para ganar espacio
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         }
     ) { padding ->
         Box(modifier = modifier.fillMaxSize().padding(padding)) {
             if (!isAuthorized) {
-                // ... (resto de la pantalla de bloqueo igual)
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth(0.85f)
+                            .padding(bottom = 100.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.logo_admin),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(240.dp)
+                                .padding(bottom = 32.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                        
+                        Text(
+                            "ACCESO EXCLUSIVO",
+                            color = Color(0xFFC5A059),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 4.sp
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Text(
+                            "ADMINISTRACIÓN",
+                            color = Color.White,
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = (-1).sp
+                        )
+                        
+                        Spacer(modifier = Modifier.height(48.dp))
+                        
+                        OutlinedTextField(
+                            value = pinInput,
+                            onValueChange = { pinInput = it },
+                            placeholder = { 
+                                Text(
+                                    "INTRODUZCA PIN DE SEGURIDAD", 
+                                    color = Color.White.copy(alpha = 0.3f),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.sp,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                ) 
+                            },
+                            visualTransformation = PasswordVisualTransformation(),
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                color = Color.White,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Light,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                letterSpacing = 8.sp
+                            ),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFFC5A059),
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
+                                cursorColor = Color(0xFFC5A059)
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(0.dp)
+                        )
+                        
+                        Spacer(modifier = Modifier.height(32.dp))
+                        
+                        Button(
+                            onClick = { if (pinInput == correctPin) isAuthorized = true },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059)),
+                            shape = RoundedCornerShape(0.dp)
+                        ) {
+                            Text(
+                                "AUTENTICAR", 
+                                color = Color.Black, 
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 2.sp
+                            )
+                        }
+                    }
+                }
             } else {
                 AdminListContent()
             }
@@ -77,6 +167,7 @@ fun AdminScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
 
 @Composable
 fun AdminListContent() {
+    var selectedTab by remember { mutableIntStateOf(2) }
     var registrations by remember { mutableStateOf(listOf<CustomerRegistration>()) }
     var isLoading by remember { mutableStateOf(true) }
     val db = FirebaseFirestore.getInstance()
@@ -104,104 +195,384 @@ fun AdminListContent() {
             }
     }
 
-    if (isLoading) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = Color(0xFFC5A059))
-        }
-    } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(), 
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 16.dp), // Eliminamos padding superior
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+    Column(modifier = Modifier.fillMaxSize().background(Color(0xFF08080A))) {
+        // Encabezado Premium
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 40.dp, start = 24.dp, end = 24.dp, bottom = 20.dp)
         ) {
-            // Cabecera Formal con Logo
-            item {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(top = 0.dp, bottom = 20.dp), // Ajustado al tope
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.logo_admin),
-                        contentDescription = null,
-                        modifier = Modifier.size(320.dp).offset(y = (-30).dp), // Subimos el logo con un offset negativo
-                        contentScale = ContentScale.Fit
-                    )
-                    Text(
-                        "REGISTRO OFICIAL DE CLIENTES",
-                        modifier = Modifier.offset(y = (-50).dp), // Subimos el texto para que acompañe al logo
-                        color = Color(0xFFC5A059),
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 2.sp,
-                        fontSize = 14.sp
-                    )
-                    Divider(modifier = Modifier.padding(top = 0.dp).offset(y = (-40).dp), color = Color(0xFFC5A059).copy(alpha = 0.3f))
-                }
-            }
-
-            items(registrations) { reg ->
-                CustomerAdminCard(reg, 
-                    onApprove = { db.collection("registros_clientes").document(reg.id).update("status", "active") },
-                    onReject = { deleteCustomer(reg) }
+            Column(modifier = Modifier.align(Alignment.CenterStart)) {
+                Text(
+                    "CENTRAL DE INTELIGENCIA",
+                    color = Color.White.copy(alpha = 0.4f),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 3.sp
                 )
+                Text(
+                    "STARBIG CONTROL",
+                    color = Color.White,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 28.sp,
+                    letterSpacing = (-1).sp
+                )
+            }
+            Image(
+                painter = painterResource(id = R.drawable.logo_admin),
+                contentDescription = null,
+                modifier = Modifier.size(80.dp).align(Alignment.TopEnd),
+                contentScale = ContentScale.Fit
+            )
+        }
+
+        // Gráfica de Tráfico en Tiempo Real
+        TrafficMonitorSection()
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Botonera de Navegación Profesional
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            AdminNavButton("BASE DE DATOS", Icons.Default.Storage, selectedTab == 0, Modifier.weight(1f)) { selectedTab = 0 }
+            AdminNavButton("INVENTARIO", Icons.Default.Inventory, selectedTab == 1, Modifier.weight(1f)) { selectedTab = 1 }
+            AdminNavButton("SOLICITUDES", Icons.Default.Group, selectedTab == 2, Modifier.weight(1.2f)) { selectedTab = 2 }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        HorizontalDivider(color = Color(0xFFC5A059).copy(alpha = 0.15f), thickness = 0.5.dp)
+
+        Box(modifier = Modifier.weight(1f)) {
+            when (selectedTab) {
+                0 -> InfoSection("Base de datos de operaciones")
+                1 -> InfoSection("Control de inventario boutique")
+                2 -> {
+                    if (isLoading) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = Color(0xFFC5A059), strokeWidth = 2.dp)
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = 24.dp, start = 24.dp, end = 24.dp),
+                            verticalArrangement = Arrangement.spacedBy(20.dp)
+                        ) {
+                            items(registrations) { reg ->
+                                CustomerAdminCard(
+                                    reg = reg,
+                                    onApprove = { approveCustomer(reg, db, googleSheetsUrl) },
+                                    onReject = { deleteCustomer(reg, db, googleSheetsUrl) }
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-fun CustomerAdminCard(reg: CustomerRegistration, onApprove: () -> Unit, onReject: () -> Unit) {
+fun TrafficMonitorSection() {
+    var onlineData by remember { mutableStateOf(List(20) { (5..45).random() }) }
+    var offlineData by remember { mutableStateOf(List(20) { (1..15).random() }) }
+    
+    LaunchedEffect(Unit) {
+        while(true) {
+            delay(2000)
+            onlineData = onlineData.drop(1) + (5..50).random()
+            offlineData = offlineData.drop(1) + (1..20).random()
+        }
+    }
+
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
-        border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(if(reg.status == "active") Color.Green.copy(0.3f) else Color(0xFFC5A059).copy(alpha = 0.3f)))
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)),
+        shape = RoundedCornerShape(0.dp),
+        border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFFC5A059).copy(alpha = 0.3f))
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AsyncImage(
-                    model = reg.photoUrl.ifEmpty { "https://cdn-icons-png.flaticon.com/512/149/149071.png" },
-                    contentDescription = null,
-                    modifier = Modifier.size(50.dp).clip(RoundedCornerShape(25.dp)).background(Color.Gray),
-                    contentScale = ContentScale.Crop
-                )
-                Spacer(modifier = Modifier.width(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Column {
-                    Text(reg.name, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 18.sp)
-                    Text(reg.email, color = Color.Gray, fontSize = 12.sp)
+                    Text("MONITOREO DE RED", color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    Text("ESTADO GLOBAL", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black)
                 }
-                Spacer(modifier = Modifier.weight(1f))
-                Badge(containerColor = if(reg.status == "active") Color.Green else Color.Yellow) {
-                    Text(reg.status.uppercase(), modifier = Modifier.padding(4.dp), color = Color.Black, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier.size(6.dp).background(Color.Green, RoundedCornerShape(3.dp)))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("ONLINE", color = Color.White.copy(0.4f), fontSize = 8.sp)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Box(modifier = Modifier.size(6.dp).background(Color.Red, RoundedCornerShape(3.dp)))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("OFFLINE", color = Color.White.copy(0.4f), fontSize = 8.sp)
                 }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("📍 DIRECCIÓN: ${reg.address}", color = Color.LightGray, fontSize = 13.sp)
-            Text("📱 WHATSAPP: ${reg.phone}", color = Color.LightGray, fontSize = 13.sp)
-
-            Spacer(modifier = Modifier.height(16.dp))
-            AsyncImage(
-                model = reg.idCardUrl.ifEmpty { "https://via.placeholder.com/400x200/181822/C5A059?text=Sin+Foto+ID" },
-                contentDescription = null,
-                modifier = Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(12.dp)).background(Color.DarkGray),
-                contentScale = ContentScale.Crop
-            )
-
+            
             Spacer(modifier = Modifier.height(20.dp))
+            
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(100.dp)
+            ) {
+                val width = size.width
+                val height = size.height
+                val stepX = width / (onlineData.size - 1)
+                val maxCount = 50f // Escala del 1 al 50
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(
-                    onClick = onReject,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(alpha = 0.2f)),
-                    modifier = Modifier.weight(1f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.Red)
-                ) { Text("RECHAZAR", color = Color.Red, fontSize = 12.sp) }
+                // Función para dibujar una línea de pulso
+                fun drawPulseLine(data: List<Int>, color: Color) {
+                    for (i in 0 until data.size - 1) {
+                        val startX = i * stepX
+                        val startY = height - (data[i] / maxCount * height)
+                        val endX = (i + 1) * stepX
+                        val endY = height - (data[i + 1] / maxCount * height)
+                        
+                        drawLine(
+                            color = color,
+                            start = androidx.compose.ui.geometry.Offset(startX, startY),
+                            end = androidx.compose.ui.geometry.Offset(endX, endY),
+                            strokeWidth = 2.dp.toPx(),
+                            cap = androidx.compose.ui.graphics.StrokeCap.Round
+                        )
+                        drawLine(
+                            color = color.copy(alpha = 0.2f),
+                            start = androidx.compose.ui.geometry.Offset(startX, startY),
+                            end = androidx.compose.ui.geometry.Offset(endX, endY),
+                            strokeWidth = 6.dp.toPx(),
+                            cap = androidx.compose.ui.graphics.StrokeCap.Round
+                        )
+                    }
+                }
 
-                Button(
-                    onClick = onApprove,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Green),
-                    modifier = Modifier.weight(1f)
-                ) { Text("APROBAR", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 12.sp) }
+                // Dibujamos ambas líneas
+                drawPulseLine(offlineData, Color.Red)
+                drawPulseLine(onlineData, Color.Green)
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                TrafficStat("ACTIVOS", "${onlineData.last()}")
+                TrafficStat("OFFLINE", "${offlineData.last()}")
+                TrafficStat("LATENCIA", "38ms")
+                TrafficStat("MÁXIMO", "50")
             }
         }
+    }
+}
+
+@Composable
+fun TrafficStat(label: String, value: String) {
+    Column {
+        Text(label, color = Color.White.copy(alpha = 0.4f), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+        Text(value, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+fun AdminNavButton(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector, isSelected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(48.dp),
+        shape = RoundedCornerShape(0.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (isSelected) Color(0xFFC5A059) else Color(0xFF1A1A20),
+            contentColor = if (isSelected) Color.Black else Color.White
+        ),
+        contentPadding = PaddingValues(horizontal = 8.dp)
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(icon, null, modifier = Modifier.size(16.dp))
+            Text(text, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+        }
+    }
+}
+
+@Composable
+fun InfoSection(text: String) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(
+            text = text.uppercase(),
+            color = Color.White.copy(alpha = 0.2f),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp
+        )
+    }
+}
+
+private fun approveCustomer(reg: CustomerRegistration, db: FirebaseFirestore, googleSheetsUrl: String) {
+    db.collection("registros_clientes").document(reg.id).update("status", "active")
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val client = OkHttpClient()
+            val json = "{\"action\":\"updateStatus\",\"email\":\"${reg.email.trim()}\",\"status\":\"active\"}"
+            val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
+            val request = Request.Builder().url(googleSheetsUrl).post(body).build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) println("Google Sheets error: ${response.code}")
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+}
+
+private fun deleteCustomer(reg: CustomerRegistration, db: FirebaseFirestore, googleSheetsUrl: String) {
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val client = OkHttpClient()
+            val json = "{\"action\":\"delete\",\"email\":\"${reg.email.trim()}\"}"
+            val body = json.toRequestBody("application/json; charset=utf-8".toMediaType())
+            val request = Request.Builder().url(googleSheetsUrl).post(body).build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) println("Google Sheets error: ${response.code}")
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+    db.collection("registros_clientes").document(reg.id).delete()
+}
+
+@Composable
+fun CustomerAdminCard(reg: CustomerRegistration, onApprove: () -> Unit, onReject: () -> Unit) {
+    val isActive = reg.status == "active"
+    
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)),
+        shape = RoundedCornerShape(0.dp),
+        border = androidx.compose.foundation.BorderStroke(0.5.dp, if(isActive) Color.Green.copy(0.4f) else Color(0xFFC5A059).copy(alpha = 0.2f))
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                Box(
+                    modifier = Modifier
+                        .size(90.dp)
+                        .background(Color(0xFF1A1A20))
+                ) {
+                    AsyncImage(
+                        model = reg.photoUrl.ifBlank { "https://cdn-icons-png.flaticon.com/512/149/149071.png" },
+                        contentDescription = "Foto de perfil",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+                
+                Spacer(modifier = Modifier.width(20.dp))
+                
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        reg.name.uppercase(),
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        letterSpacing = 0.5.sp
+                    )
+                    Text(
+                        reg.email.lowercase(),
+                        color = Color(0xFFC5A059),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    StatusBadge(reg.status)
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                InfoRow(Icons.Default.Place, reg.address)
+                InfoRow(Icons.Default.Phone, reg.phone)
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            Text(
+                "DOCUMENTO DE IDENTIDAD",
+                color = Color.White.copy(alpha = 0.4f),
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 2.sp,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .background(Color(0xFF0A0A0C))
+            ) {
+                AsyncImage(
+                    model = reg.idCardUrl.ifBlank { "https://via.placeholder.com/800x400/0A0A0C/C5A059?text=ESPERANDO+DOCUMENTO" },
+                    contentDescription = "Documento ID",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                OutlinedButton(
+                    onClick = onReject,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    shape = RoundedCornerShape(0.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.Red.copy(alpha = 0.5f))
+                ) {
+                    Text("RECHAZAR", fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                }
+                
+                Button(
+                    onClick = onApprove,
+                    modifier = Modifier.weight(1f).height(48.dp),
+                    shape = RoundedCornerShape(0.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059))
+                ) {
+                    Text("APROBAR", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StatusBadge(status: String) {
+    val isActive = status == "active"
+    Box(
+        modifier = Modifier
+            .background(if (isActive) Color.Green.copy(0.1f) else Color(0xFFC5A059).copy(0.1f))
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+    ) {
+        Text(
+            status.uppercase(),
+            color = if (isActive) Color.Green else Color(0xFFC5A059),
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.5.sp
+        )
+    }
+}
+
+@Composable
+fun InfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = Color.White.copy(alpha = 0.3f), modifier = Modifier.size(14.dp))
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(text.uppercase(), color = Color.White.copy(alpha = 0.6f), fontSize = 10.sp, letterSpacing = 0.5.sp)
     }
 }

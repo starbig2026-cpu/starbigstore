@@ -14,6 +14,10 @@
 <header class="navbar">
     <div class="logo" onclick="handleLogoClick()">STARBIG<span>STORE</span></div>
     <div class="nav-icons">
+        <select id="language-selector" onchange="changeLanguage(this.value)" style="background: transparent; color: #c5a059; border: 1px solid #c5a059; border-radius: 4px; padding: 2px 5px; margin-right: 10px; font-size: 12px; cursor: pointer;">
+            <option value="es">ES</option>
+            <option value="en">EN</option>
+        </select>
         <button class="icon-btn" onclick="openAuth()">
             <div id="user-photo-container" style="display: none; width: 32px; height: 32px; border-radius: 50%; overflow: hidden; border: 1px solid #c5a059;">
                 <img id="user-photo-nav" src="" style="width: 100%; height: 100%; object-fit: cover;" alt="Perfil">
@@ -171,13 +175,50 @@
         }
     }
 
-    document.getElementById('register-form').onsubmit = (e) => {
+    async function getBase64(file) {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = (e) => {
+                const img = new Image();
+                img.src = e.target.result;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const MAX_WIDTH = 800;
+                    const MAX_HEIGHT = 800;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > MAX_WIDTH) {
+                            height *= MAX_WIDTH / width;
+                            width = MAX_WIDTH;
+                        }
+                    } else {
+                        if (height > MAX_HEIGHT) {
+                            width *= MAX_HEIGHT / height;
+                            height = MAX_HEIGHT;
+                        }
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext("2d");
+                    ctx.drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL("image/jpeg", 0.7)); // Comprimir al 70%
+                };
+            };
+        });
+    }
+
+    document.getElementById('register-form').onsubmit = async (e) => {
         e.preventDefault();
         const email = document.getElementById('reg-email').value;
         const name = document.getElementById('reg-name').value;
         const lastname = document.getElementById('reg-lastname').value;
         const phone = document.getElementById('reg-phone').value;
         const address = document.getElementById('reg-address').value;
+        const photoFile = document.getElementById('reg-photo').files[0];
+        const idCardFile = document.getElementById('reg-id-card').files[0];
 
         // Validación estricta de Email
         if(!email.includes('@') || !email.toLowerCase().endsWith('.com')) {
@@ -185,13 +226,22 @@
             return;
         }
 
-        if(window.AndroidApp) {
-            window.AndroidApp.registerUser(name, lastname, email, phone, address);
-        }
+        let photoBase64 = "";
+        let idCardBase64 = "";
 
-        alert("✅ Solicitud Enviada: Tu perfil está en fase de verificación. Te contactaremos por WhatsApp.");
-        closeAuth();
-        e.target.reset();
+        try {
+            if (photoFile) photoBase64 = await getBase64(photoFile);
+            if (idCardFile) idCardBase64 = await getBase64(idCardFile);
+
+            if(window.AndroidApp) {
+                window.AndroidApp.registerUser(name, lastname, email, phone, address, photoBase64, idCardBase64);
+                alert("✅ Solicitud Enviada: Subiendo imágenes y procesando tu perfil. Te contactaremos por WhatsApp.");
+                closeAuth();
+                e.target.reset();
+            }
+        } catch (err) {
+            alert("Error al procesar imágenes: " + err);
+        }
     };
 
     document.getElementById('login-form').onsubmit = (e) => {
@@ -256,6 +306,147 @@
         clicks++;
         if(clicks === 3 && window.AndroidApp) window.AndroidApp.goToAdmin();
         setTimeout(() => clicks = 0, 1000);
+    }
+
+    const translations = {
+        es: {
+            register: "REGISTRO",
+            login: "INICIAR SESIÓN",
+            createProfile: "Crear Perfil <span>Fashion</span>",
+            joinForCredit: "Únete para solicitar tu crédito inmediato.",
+            firstName: "Nombre(s)",
+            lastName: "Apellido(s)",
+            email: "Correo Electrónico",
+            whatsapp: "WhatsApp",
+            address: "Dirección Editorial",
+            photo: "Foto de Perfil (Avatar)",
+            idCard: "Documento de Identidad (Cédula/DNI)",
+            password: "Contraseña",
+            requestVerification: "SOLICITAR VERIFICACIÓN",
+            welcomeBack: "Bienvenido <span>de Nuevo</span>",
+            enter: "ENTRAR",
+            accountStatus: "ESTADO DE CUENTA:",
+            verifying: "VERIFICANDO",
+            active: "CUENTA ACTIVA",
+            unverifiedMsg: "* Debes esperar aprobación para comprar o pedir crédito.",
+            whatsappBtn: "PEDIR VERIFICACIÓN POR WHATSAPP",
+            logout: "Cerrar Sesión",
+            searchPlaceholder: "BUSCAR COLECCIÓN...",
+            tag: "Nueva Temporada 2026",
+            heroTitle: "Estilo & Poder <br><span>Sin Límites</span>",
+            heroSub: "Adquiere lo último en perfumes y tecnología con nuestro sistema de crédito exclusivo.",
+            viewCatalog: "VER CATÁLOGO",
+            requestCredit: "SOLICITAR CRÉDITO",
+            exploreCollections: "Explorar <span>Colecciones</span>",
+            perfumes: "Perfumes",
+            tech: "Tecnología",
+            clothing: "Ropa",
+            footwear: "Calzado",
+            hygiene: "Higiene",
+            beauty: "Belleza",
+            mostWanted: "Lo Más <span>Deseado</span>",
+            creditAvailable: "Crédito Disponible",
+            reserve: "RESERVAR",
+            confirmLogout: "¿Estás seguro de que deseas cerrar sesión?",
+            unverifiedAlert: "⚠️ USUARIO NO VERIFICADO: Tu cuenta está en revisión. Te avisaremos por WhatsApp al aprobarla.",
+            emailAlert: "❌ Error: El correo debe contener '@' y terminar en '.com'",
+            sentAlert: "✅ Solicitud Enviada: Subiendo imágenes y procesando tu perfil. Te contactaremos por WhatsApp."
+        },
+        en: {
+            register: "REGISTER",
+            login: "LOGIN",
+            createProfile: "Create <span>Fashion</span> Profile",
+            joinForCredit: "Join us to request your immediate credit.",
+            firstName: "First Name(s)",
+            lastName: "Last Name(s)",
+            email: "Email Address",
+            whatsapp: "WhatsApp",
+            address: "Editorial Address",
+            photo: "Profile Photo (Avatar)",
+            idCard: "Identity Document (ID Card)",
+            password: "Password",
+            requestVerification: "REQUEST VERIFICATION",
+            welcomeBack: "Welcome <span>Back</span>",
+            enter: "ENTER",
+            accountStatus: "ACCOUNT STATUS:",
+            verifying: "VERIFYING",
+            active: "ACTIVE ACCOUNT",
+            unverifiedMsg: "* You must wait for approval to shop or request credit.",
+            whatsappBtn: "REQUEST WHATSAPP VERIFICATION",
+            logout: "Logout",
+            searchPlaceholder: "SEARCH COLLECTION...",
+            tag: "New Season 2026",
+            heroTitle: "Style & Power <br><span>No Limits</span>",
+            heroSub: "Get the latest in perfumes and technology with our exclusive credit system.",
+            viewCatalog: "VIEW CATALOG",
+            requestCredit: "REQUEST CREDIT",
+            exploreCollections: "Explore <span>Collections</span>",
+            perfumes: "Perfumes",
+            tech: "Technology",
+            clothing: "Clothing",
+            footwear: "Footwear",
+            hygiene: "Hygiene",
+            beauty: "Beauty",
+            mostWanted: "Most <span>Wanted</span>",
+            creditAvailable: "Credit Available",
+            reserve: "RESERVE",
+            confirmLogout: "Are you sure you want to logout?",
+            unverifiedAlert: "⚠️ UNVERIFIED USER: Your account is under review. We will notify you via WhatsApp upon approval.",
+            emailAlert: "❌ Error: The email must contain '@' and end in '.com'",
+            sentAlert: "✅ Request Sent: Uploading images and processing your profile. We will contact you via WhatsApp."
+        }
+    };
+
+    function changeLanguage(lang) {
+        const t = translations[lang];
+        document.getElementById('tab-reg').innerText = t.register;
+        document.getElementById('tab-log').innerText = t.login;
+        document.querySelector('#register-container .auth-title').innerHTML = t.createProfile;
+        document.querySelector('#register-container .auth-subtitle').innerText = t.joinForCredit;
+
+        const regForm = document.getElementById('register-form');
+        regForm.querySelectorAll('label')[0].innerText = t.firstName;
+        regForm.querySelectorAll('label')[1].innerText = t.lastName;
+        regForm.querySelectorAll('label')[2].innerText = t.email;
+        regForm.querySelectorAll('label')[3].innerText = t.whatsapp;
+        regForm.querySelectorAll('label')[4].innerText = t.address;
+        regForm.querySelectorAll('label')[5].innerText = t.photo;
+        regForm.querySelectorAll('label')[6].innerText = t.idCard;
+        regForm.querySelectorAll('label')[7].innerText = t.password;
+        regForm.querySelector('button').innerText = t.requestVerification;
+
+        document.querySelector('#login-container .auth-title').innerHTML = t.welcomeBack;
+        const logForm = document.getElementById('login-form');
+        logForm.querySelectorAll('label')[0].innerText = t.email;
+        logForm.querySelectorAll('label')[1].innerText = t.password;
+        logForm.querySelector('button').innerText = t.enter;
+
+        document.querySelector('#profile-container .status-box span').innerText = t.accountStatus;
+        document.getElementById('unverified-msg').innerText = t.unverifiedMsg;
+        document.getElementById('whatsapp-verify-btn').innerHTML = `<i data-lucide="message-circle" style="vertical-align: middle; margin-right: 8px;"></i>${t.whatsappBtn}`;
+        document.querySelector('#profile-container button:last-child').innerText = t.logout;
+
+        document.querySelector('.hero-search input').placeholder = t.searchPlaceholder;
+        document.querySelector('.hero .tag').innerText = t.tag;
+        document.querySelector('.hero h1').innerHTML = t.heroTitle;
+        document.querySelector('.hero p').innerText = t.heroSub;
+        document.querySelectorAll('.hero-btns button')[0].innerText = t.viewCatalog;
+        document.querySelectorAll('.hero-btns button')[1].innerText = t.requestCredit;
+
+        document.querySelector('.categories .section-title').innerHTML = t.exploreCollections;
+        const catCards = document.querySelectorAll('.cat-card');
+        catCards[0].innerHTML = `<i data-lucide="sparkles"></i> ${t.perfumes}`;
+        catCards[1].innerHTML = `<i data-lucide="smartphone"></i> ${t.tech}`;
+        catCards[2].innerHTML = `<i data-lucide="shirt"></i> ${t.clothing}`;
+        catCards[3].innerHTML = `<i data-lucide="footprints"></i> ${t.footwear}`;
+        catCards[4].innerHTML = `<i data-lucide="droplets"></i> ${t.hygiene}`;
+        catCards[5].innerHTML = `<i data-lucide="heart"></i> ${t.beauty}`;
+
+        document.querySelector('h2.section-title:last-of-type').innerHTML = t.mostWanted;
+        document.querySelectorAll('.product-card .badge').forEach(b => b.innerText = t.creditAvailable);
+        document.querySelectorAll('.add-btn').forEach(b => b.innerText = t.reserve);
+
+        lucide.createIcons();
     }
 </script>
 </body>

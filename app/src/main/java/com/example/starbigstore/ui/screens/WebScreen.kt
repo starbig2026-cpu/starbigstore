@@ -29,29 +29,97 @@ class WebAppInterface(
     private val googleSheetsUrl = "https://script.google.com/macros/s/AKfycbzvorSsMtjvqzw6l6FUKwkCBgWjl3rOyhle7AjaGalXfnet6jtDAsjdtxehUxxqwSmPtg/exec"
 
     @JavascriptInterface
-    fun registerUser(firstName: String, lastName: String, email: String, phone: String, address: String) {
-        // En un entorno real, las fotos se subirían primero. 
-        // Por ahora registramos los datos y marcamos como 'unverified'
+    fun registerUser(firstName: String, lastName: String, email: String, phone: String, address: String, photoBase64: String, idCardBase64: String) {
         val db = FirebaseFirestore.getInstance()
-        val user = hashMapOf<String, Any>(
-            "firstName" to firstName,
-            "lastName" to lastName,
-            "name" to "$firstName $lastName",
-            "email" to email,
-            "phone" to phone,
-            "address" to address,
-            "status" to "unverified",
-            "photoUrl" to "", 
-            "idCardUrl" to "",
-            "timestamp" to System.currentTimeMillis()
-        )
 
-        db.collection("registros_clientes")
-            .add(user)
-            .addOnSuccessListener {
-                syncToGoogleSheets(user)
-                Toast.makeText(mContext, "Solicitud enviada. Verificaremos tu perfil.", Toast.LENGTH_LONG).show()
+        // Toast de depuración inicial
+        CoroutineScope(Dispatchers.Main).launch {
+            Toast.makeText(mContext, "🚀 Procesando registro...", Toast.LENGTH_SHORT).show()
+        }
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // 1. Guardar primero en Firestore (sin URLs de imagen aún)
+                val userMap = hashMapOf<String, Any>(
+                    "firstName" to firstName,
+                    "lastName" to lastName,
+                    "name" to "$firstName $lastName",
+                    "email" to email,
+                    "phone" to phone,
+                    "address" to address,
+                    "status" to "unverified",
+                    "photoUrl" to "", 
+                    "idCardUrl" to "",
+                    "timestamp" to System.currentTimeMillis()
+                )
+
+                db.collection("registros_clientes")
+                    .add(userMap)
+                    .addOnSuccessListener { docRef ->
+                        CoroutineScope(Dispatchers.Main).launch {
+                            Toast.makeText(mContext, "✅ Datos base guardados en Firebase", Toast.LENGTH_SHORT).show()
+                        }
+
+                        // 2. Sincronizar con Google Sheets para subir fotos a Drive
+                        CoroutineScope(Dispatchers.IO).launch {
+                            try {
+                                val client = OkHttpClient.Builder()
+                                    .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                                    .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                                    .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                                    .followRedirects(true)
+                                    .followSslRedirects(true)
+                                    .build()
+
+                                val payload = org.json.JSONObject().apply {
+                                    put("firstName", firstName)
+                                    put("lastName", lastName)
+                                    put("email", email)
+                                    put("phone", phone)
+                                    put("address", address)
+                                    put("photoBase64", photoBase64)
+                                    put("idCardBase64", idCardBase64)
+                                }
+                                
+                                val body = payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+                                val request = Request.Builder()
+                                    .url(googleSheetsUrl)
+                                    .post(body)
+                                    .build()
+                                
+                                client.newCall(request).execute().use { response ->
+                                    val responseStr = response.body?.string() ?: ""
+                                    android.util.Log.d("WebScreen", "Response: $responseStr")
+                                    
+                                    if (response.isSuccessful) {
+                                        val resJson = org.json.JSONObject(responseStr)
+                                        val photoUrl = resJson.optString("photoUrl", "")
+                                        val idCardUrl = resJson.optString("idCardUrl", "")
+                                        
+                                        // 3. Actualizar Firestore con las URLs de Drive
+                                        if (photoUrl.isNotEmpty() || idCardUrl.isNotEmpty()) {
+                                            docRef.update("photoUrl", photoUrl, "idCardUrl", idCardUrl)
+                                            CoroutineScope(Dispatchers.Main).launch {
+                                                Toast.makeText(mContext, "📸 Fotos vinculadas desde Drive", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("WebScreen", "Sync Error", e)
+                            }
+                        }
+                    }
+                    .addOnFailureListener { e ->
+                        android.util.Log.e("WebScreen", "Firestore Error: ${e.message}")
+                        CoroutineScope(Dispatchers.Main).launch {
+                            Toast.makeText(mContext, "❌ Error Firestore: ${e.message}", Toast.LENGTH_LONG).show()
+                        }
+                    }
+            } catch (e: Exception) {
+                android.util.Log.e("WebScreen", "Error", e)
             }
+        }
     }
 
     private fun syncToGoogleSheets(user: Map<String, Any>) {
