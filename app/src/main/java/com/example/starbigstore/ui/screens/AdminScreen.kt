@@ -196,7 +196,7 @@ fun AdminListContent() {
         if (expandedImageUrl != null) {
             Dialog(onDismissRequest = { expandedImageUrl = null }) {
                 Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(0.9f)).clickable { expandedImageUrl = null }, contentAlignment = Alignment.Center) {
-                    AsyncImage(model = expandedImageUrl, contentDescription = null, modifier = Modifier.fillMaxWidth(0.95f), contentScale = ContentScale.Fit)
+                    AsyncImage(model = fixDriveUrl(expandedImageUrl), contentDescription = null, modifier = Modifier.fillMaxWidth(0.95f), contentScale = ContentScale.Fit)
                 }
             }
         }
@@ -339,7 +339,7 @@ fun CustomerAdminCard(reg: CustomerRegistration, onApprove: () -> Unit, onReject
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(0.dp), border = BorderStroke(0.5.dp, if(isActive) Color.Green.copy(0.4f) else Color(0xFFC5A059).copy(0.2f))) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row {
-                Box(modifier = Modifier.size(80.dp).background(Color(0xFF1A1A20)).clickable { onImageClick(reg.photoUrl) }) { AsyncImage(model = reg.photoUrl, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+                Box(modifier = Modifier.size(80.dp).background(Color(0xFF1A1A20)).clickable { onImageClick(reg.photoUrl) }) { AsyncImage(model = fixDriveUrl(reg.photoUrl), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
                     Text(reg.name.uppercase(), fontWeight = FontWeight.Black, color = Color.White, fontSize = 16.sp)
@@ -352,7 +352,7 @@ fun CustomerAdminCard(reg: CustomerRegistration, onApprove: () -> Unit, onReject
             InfoRow(Icons.Default.Place, reg.address)
             InfoRow(Icons.Default.Phone, reg.phone)
             Spacer(modifier = Modifier.height(16.dp))
-            Box(modifier = Modifier.fillMaxWidth().height(150.dp).background(Color.Black).clickable { onImageClick(reg.idCardUrl) }) { AsyncImage(model = reg.idCardUrl, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
+            Box(modifier = Modifier.fillMaxWidth().height(150.dp).background(Color.Black).clickable { onImageClick(reg.idCardUrl) }) { AsyncImage(model = fixDriveUrl(reg.idCardUrl), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
             Spacer(modifier = Modifier.height(20.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(onClick = onReject, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red), border = BorderStroke(1.dp, Color.Red), shape = RoundedCornerShape(0.dp)) { Text("ELIMINAR") }
@@ -390,7 +390,7 @@ fun InventorySection(products: List<Product>, bcv: Double, onAdd: () -> Unit, on
 fun ProductAdminItem(p: Product, bcv: Double, onDelete: (Product) -> Unit) {
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(0.dp)) {
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            AsyncImage(model = p.imageUrl, contentDescription = null, modifier = Modifier.size(50.dp).background(Color.Black), contentScale = ContentScale.Crop)
+            AsyncImage(model = fixDriveUrl(p.imageUrl), contentDescription = null, modifier = Modifier.size(50.dp).background(Color.Black), contentScale = ContentScale.Crop)
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(p.name.uppercase(), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
@@ -485,3 +485,15 @@ fun BcvRateDialog(curr: Double, onD: () -> Unit, onC: (Double) -> Unit) {
 }
 
 fun Double.format(digits: Int) = "%.${digits}f".format(this)
+
+fun fixDriveUrl(url: String?): String {
+    if (url.isNullOrBlank() || url.contains("subiendo")) return "https://via.placeholder.com/200?text=STARBIG"
+    val id = if (url.contains("id=")) {
+        url.split("id=").getOrNull(1)?.split("&")?.getOrNull(0)
+    } else if (url.contains("file/d/")) {
+        url.split("file/d/").getOrNull(1)?.split("/")?.getOrNull(0)
+    } else {
+        null
+    }
+    return id?.let { "https://lh3.googleusercontent.com/d/$it" } ?: url
+}

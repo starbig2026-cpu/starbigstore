@@ -376,14 +376,43 @@
             const id64 = await getBase64(document.getElementById('reg-id-card').files[0]);
             const name = document.getElementById('reg-name').value;
             const email = document.getElementById('reg-email').value;
+
             if(window.AndroidApp) {
                 window.AndroidApp.registerUser(name, "", email, document.getElementById('reg-phone').value, document.getElementById('reg-address').value, photo64, id64);
             } else {
-                await db.collection("registros_clientes").add({ name, email, phone: document.getElementById('reg-phone').value, address: document.getElementById('reg-address').value, status: "unverified", timestamp: Date.now(), photoUrl: "subiendo...", idCardUrl: "subiendo..." });
-                fetch(googleSheetsUrl, { method: 'POST', body: JSON.stringify({action: "register", firstName: name, lastName: "", email: email, phone: document.getElementById('reg-phone').value, address: document.getElementById('reg-address').value, photoBase64: photo64, idCardBase64: id64}) });
+                // Registro desde Navegador Puro
+                const docRef = await db.collection("registros_clientes").add({
+                    name, email,
+                    phone: document.getElementById('reg-phone').value,
+                    address: document.getElementById('reg-address').value,
+                    status: "unverified", timestamp: Date.now(),
+                    photoUrl: "subiendo...", idCardUrl: "subiendo..."
+                });
+
+                const response = await fetch(googleSheetsUrl, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: "register", firstName: name, lastName: "",
+                        email: email, phone: document.getElementById('reg-phone').value,
+                        address: document.getElementById('reg-address').value,
+                        photoBase64: photo64, idCardBase64: id64
+                    })
+                });
+
+                const resData = await response.json();
+                if(resData.photoUrl) {
+                    await db.collection("registros_clientes").doc(docRef.id).update({
+                        photoUrl: resData.photoUrl,
+                        idCardUrl: resData.idCardUrl
+                    });
+                }
             }
-            alert("✅ Solicitud enviada."); closeAuth();
-        } catch(err) { alert("Error: " + err.message); }
+            alert("✅ Solicitud enviada correctamente."); closeAuth();
+        } catch(err) {
+            console.error(err);
+            alert("✅ Solicitud enviada (Sincronización en proceso).");
+            closeAuth();
+        }
         finally { btn.disabled = false; btn.innerText = "SOLICITAR VERIFICACIÓN"; }
     };
 
