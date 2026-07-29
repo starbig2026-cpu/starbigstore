@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.starbigstore.R
 import com.example.starbigstore.data.Product
 import com.google.firebase.firestore.FirebaseFirestore
@@ -246,7 +247,16 @@ fun AdminListContent() {
         if (expandedImageUrl != null) {
             Dialog(onDismissRequest = { expandedImageUrl = null }) {
                 Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(0.9f)).clickable { expandedImageUrl = null }, contentAlignment = Alignment.Center) {
-                    AsyncImage(model = fixDriveUrl(expandedImageUrl), contentDescription = null, modifier = Modifier.fillMaxWidth(0.95f), contentScale = ContentScale.Fit)
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(fixDriveUrl(expandedImageUrl))
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxWidth(0.95f),
+                        contentScale = ContentScale.Fit,
+                        error = painterResource(R.drawable.logo_admin)
+                    )
                 }
             }
         }
@@ -455,7 +465,11 @@ private fun deleteCustomer(reg: CustomerRegistration, db: FirebaseFirestore) {
     db.collection("registros_clientes").document(reg.id).delete()
     CoroutineScope(Dispatchers.IO).launch {
         try {
-            val json = org.json.JSONObject().apply { put("action", "delete"); put("email", reg.email.trim()) }
+            val json = org.json.JSONObject().apply { 
+                put("action", "delete")
+                put("email", reg.email.trim())
+                put("deleteFromAuth", true)
+            }
             OkHttpClient().newCall(Request.Builder().url(GOOGLE_SHEETS_URL).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
         } catch (_: Exception) {}
     }
@@ -485,7 +499,19 @@ fun CustomerAdminCard(reg: CustomerRegistration, onApprove: () -> Unit, onReject
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(0.dp), border = BorderStroke(0.5.dp, if(isActive) Color.Green.copy(0.4f) else Color(0xFFC5A059).copy(0.2f))) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row {
-                Box(modifier = Modifier.size(80.dp).background(Color(0xFF1A1A20)).clickable { onImageClick(reg.photoUrl) }) { AsyncImage(model = fixDriveUrl(reg.photoUrl), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+                Box(modifier = Modifier.size(80.dp).background(Color(0xFF1A1A20)).clickable { onImageClick(reg.photoUrl) }) { 
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(fixDriveUrl(reg.photoUrl))
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null, 
+                        modifier = Modifier.fillMaxSize(), 
+                        contentScale = ContentScale.Crop,
+                        error = painterResource(R.drawable.logo_admin),
+                        placeholder = painterResource(R.drawable.logo_admin)
+                    ) 
+                }
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
                     Text(reg.name.uppercase(), fontWeight = FontWeight.Black, color = Color.White, fontSize = 16.sp)
@@ -498,7 +524,18 @@ fun CustomerAdminCard(reg: CustomerRegistration, onApprove: () -> Unit, onReject
             InfoRow(Icons.Default.Place, reg.address)
             InfoRow(Icons.Default.Phone, reg.phone)
             Spacer(modifier = Modifier.height(16.dp))
-            Box(modifier = Modifier.fillMaxWidth().height(150.dp).background(Color.Black).clickable { onImageClick(reg.idCardUrl) }) { AsyncImage(model = fixDriveUrl(reg.idCardUrl), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
+            Box(modifier = Modifier.fillMaxWidth().height(150.dp).background(Color.Black).clickable { onImageClick(reg.idCardUrl) }) { 
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(fixDriveUrl(reg.idCardUrl))
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null, 
+                    modifier = Modifier.fillMaxSize(), 
+                    contentScale = ContentScale.Fit,
+                    error = painterResource(R.drawable.logo_admin)
+                ) 
+            }
             Spacer(modifier = Modifier.height(20.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(onClick = onReject, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red), border = BorderStroke(1.dp, Color.Red), shape = RoundedCornerShape(0.dp)) { Text("ELIMINAR") }
@@ -562,11 +599,15 @@ fun ProductAdminItem(p: Product, bcv: Double, onDelete: (Product) -> Unit, onEdi
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(0.dp)) {
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             AsyncImage(
-                model = fixDriveUrl(p.imageUrl),
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(fixDriveUrl(p.imageUrl))
+                    .crossfade(true)
+                    .build(),
                 contentDescription = null,
                 modifier = Modifier.size(50.dp).background(Color.Black),
                 contentScale = ContentScale.Crop,
-                error = painterResource(R.drawable.logo_admin) // Placeholder en caso de error
+                error = painterResource(R.drawable.logo_admin),
+                placeholder = painterResource(R.drawable.logo_admin)
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -607,7 +648,15 @@ fun AddProductDialog(editingProduct: Product? = null, onDismiss: () -> Unit, onC
             Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
                 Box(modifier = Modifier.fillMaxWidth().height(120.dp).background(Color.Black).clickable { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, contentAlignment = Alignment.Center) {
                     if(uri != null) AsyncImage(model = uri, contentDescription = null, modifier = Modifier.fillMaxSize())
-                    else if(editingProduct?.imageUrl?.isNotEmpty() == true) AsyncImage(model = fixDriveUrl(editingProduct.imageUrl), contentDescription = null, modifier = Modifier.fillMaxSize())
+                    else if(editingProduct?.imageUrl?.isNotEmpty() == true) AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(fixDriveUrl(editingProduct.imageUrl))
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null, 
+                        modifier = Modifier.fillMaxSize(),
+                        error = painterResource(R.drawable.logo_admin)
+                    )
                     else Icon(Icons.Default.AddPhotoAlternate, null, tint = Color(0xFFC5A059))
                 }
                 AdminTextField(name, { name = it }, "Nombre")
@@ -666,7 +715,7 @@ fun Double.format(digits: Int) = "%.${digits}f".format(this)
 fun fixDriveUrl(url: String?): String {
     if (url.isNullOrBlank() || url.contains("subiendo")) return "https://via.placeholder.com/200?text=STARBIG"
     if (url.contains("firebasestorage.googleapis.com") || url.contains("appspot.com")) return url
-    
+
     val id = when {
         url.contains("id=") -> url.split("id=").getOrNull(1)?.split("&")?.getOrNull(0)
         url.contains("file/d/") -> url.split("file/d/").getOrNull(1)?.split("/")?.getOrNull(0)
@@ -674,5 +723,5 @@ fun fixDriveUrl(url: String?): String {
         else -> null
     }
 
-    return id?.let { "https://lh3.googleusercontent.com/d/$it" } ?: url
+    return id?.let { "https://drive.google.com/thumbnail?id=$it&sz=w1000" } ?: url
 }

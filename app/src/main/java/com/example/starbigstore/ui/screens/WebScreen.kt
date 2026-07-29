@@ -99,7 +99,13 @@ class WebAppInterface(
 
             } catch (e: Exception) {
                 webView.post {
-                    webView.evaluateJavascript("showNotification('ERROR: ${e.localizedMessage?.uppercase()}', 'error')", null)
+                    val errorMsg = e.localizedMessage ?: ""
+                    val finalMsg = when {
+                        errorMsg.contains("already in use", ignoreCase = true) -> "ESTE CORREO YA ESTÁ REGISTRADO. INICIA SESIÓN."
+                        errorMsg.contains("network", ignoreCase = true) -> "ERROR DE CONEXIÓN. REINTENTA."
+                        else -> "ERROR: ${errorMsg.uppercase()}"
+                    }
+                    webView.evaluateJavascript("showNotification('$finalMsg', 'error')", null)
                 }
             }
         }
@@ -111,7 +117,15 @@ class WebAppInterface(
             .addOnSuccessListener { fetchUserData(email.trim()) }
             .addOnFailureListener { e ->
                 webView.post {
-                    webView.evaluateJavascript("showNotification('ERROR: ${e.localizedMessage?.uppercase()}', 'error')", null)
+                    val errorMsg = e.localizedMessage ?: ""
+                    val finalMsg = when {
+                        errorMsg.contains("invalid-login-credentials", ignoreCase = true) -> "CORREO O CONTRASEÑA INCORRECTOS"
+                        errorMsg.contains("invalid-email", ignoreCase = true) -> "FORMATO DE CORREO INVÁLIDO"
+                        errorMsg.contains("user-not-found", ignoreCase = true) -> "USUARIO NO REGISTRADO"
+                        errorMsg.contains("wrong-password", ignoreCase = true) -> "CONTRASEÑA INCORRECTA"
+                        else -> "ERROR: ${errorMsg.uppercase()}"
+                    }
+                    webView.evaluateJavascript("showNotification('$finalMsg', 'error')", null)
                 }
             }
     }
@@ -122,8 +136,13 @@ class WebAppInterface(
                 if (!docs.isEmpty) {
                     val u = docs.documents[0]
                     val points = u.getLong("points") ?: 0
+                    val status = u.getString("status") ?: "unverified"
                     webView.post { 
-                        webView.evaluateJavascript("window.updateUserProfile('${u.getString("name")}', '$email', '${u.getString("photoUrl")}', '${u.getString("status")}', $points)", null) 
+                        webView.evaluateJavascript("window.updateUserProfile('${u.getString("name")}', '$email', '${u.getString("photoUrl")}', '$status', $points)", null) 
+                    }
+                } else {
+                    webView.post {
+                        webView.evaluateJavascript("showNotification('PERFIL NO ENCONTRADO EN BASE DE DATOS', 'error')", null)
                     }
                 }
             }
@@ -134,6 +153,11 @@ class WebAppInterface(
     
     @JavascriptInterface
     fun requestBiometric() { onBiometricRequest() }
+
+    @JavascriptInterface
+    fun logoutUser() {
+        FirebaseAuth.getInstance().signOut()
+    }
 
     @JavascriptInterface
     fun updateUserPhoto(photoBase64: String) {
@@ -186,9 +210,6 @@ fun WebScreen(
                 webViewClient = object : WebViewClient() {
                     override fun onPageFinished(view: WebView?, url: String?) {
                         super.onPageFinished(view, url)
-                        FirebaseAuth.getInstance().currentUser?.email?.let { email ->
-                            webInterface.fetchUserData(email)
-                        }
                     }
                 }
 

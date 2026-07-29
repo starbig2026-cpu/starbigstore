@@ -46,6 +46,9 @@
                 <div class="input-group"><label for="login-pass">Contraseña</label><input type="password" id="login-pass" required></div>
                 <button type="submit" class="btn-primary full-width">ENTRAR</button>
             </form>
+            <p style="text-align: center; margin-top: 15px;">
+                <span onclick="changePassword()" style="color: #888; cursor: pointer; font-size: 0.8rem; text-decoration: underline;">¿OLVIDASTE TU CONTRASEÑA?</span>
+            </p>
             <p style="text-align: center; margin-top: 20px; color: #888; font-size: 0.9rem; letter-spacing: 1px;">
                 ¿NO TIENES CUENTA? <span onclick="switchAuth('register')" style="color: #c5a059; cursor: pointer; font-weight: 800;">REGISTRARSE</span>
             </p>
@@ -335,7 +338,8 @@
             id = url;
         }
 
-        return id ? `https://lh3.googleusercontent.com/d/${id}` : url;
+        // Formato Thumbnail: Es el más compatible para visualización directa
+        return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w1000` : url;
     }
 
     function getImageUrl(p) {
@@ -372,7 +376,7 @@
                 <div class="product-card">
                     <div class="badge">${p.allowCredit ? 'Crédito' : (p.collection || 'Premium')}</div>
                     <div class="product-img">
-                        <img src="${imgUrl}" alt="${p.name}" style="width:100%; height:100%; object-fit:cover; border-radius:15px;" onerror="this.src='https://via.placeholder.com/200?text=STARBIG'">
+                        <img src="${imgUrl}" alt="${p.name}" style="width:100%; height:100%; object-fit:cover; border-radius:15px;" onerror="this.src='https://via.placeholder.com/200?text=STARBIG'" referrerpolicy="no-referrer">
                     </div>
                     <div class="product-info">
                         <h3>${p.name}</h3>
@@ -614,10 +618,25 @@
             await db.collection("registros_clientes").doc(docId).update({status: 'active'});
             fetch(googleSheetsUrl, { method:'POST', body: JSON.stringify({action:"updateStatus", email: email, status: "active"}) });
             showNotification("✅ Usuario Activado");
-        } else if(confirm("¿Seguro que desea eliminar este usuario?")) {
-            await db.collection("registros_clientes").doc(docId).delete();
-            fetch(googleSheetsUrl, { method:'POST', body: JSON.stringify({action:"delete", email: email}) });
-            showNotification("✅ Usuario Eliminado", "error");
+        } else if(confirm("¿Seguro que desea eliminar este usuario de TODAS las bases de datos (Firebase, Excel, Auth)?")) {
+            try {
+                // 1. Borrar de Firestore
+                await db.collection("registros_clientes").doc(docId).delete();
+
+                // 2. Notificar al backend (Excel y Auth)
+                fetch(googleSheetsUrl, {
+                    method:'POST',
+                    body: JSON.stringify({
+                        action: "delete",
+                        email: email,
+                        deleteFromAuth: true // Instrucción para tu script de Google
+                    })
+                });
+
+                showNotification("✅ Usuario Eliminado por completo", "error");
+            } catch(e) {
+                showNotification("Error al eliminar", "error");
+            }
         }
     }
 
@@ -730,7 +749,13 @@
                         setTimeout(closeAuth, 1000);
                     }
                 });
-            }).catch(err => showNotification("Error al iniciar sesión: " + err.message, "error"));
+            }).catch(err => {
+                let msg = err.message;
+                if(msg.includes("invalid-login-credentials") || msg.includes("wrong-password") || msg.includes("user-not-found")) {
+                    msg = "Correo o contraseña incorrectos";
+                }
+                showNotification("Error: " + msg, "error");
+            });
         }
     };
 
@@ -784,13 +809,17 @@
     }
 
     function changePassword() {
-        const email = document.getElementById('login-email').value || auth.currentUser?.email;
-        if(email) {
+        const email = document.getElementById('login-email').value;
+        if(email && email.includes('@')) {
             auth.sendPasswordResetEmail(email).then(() => {
-                showNotification("Link de recuperación enviado a " + email);
-            }).catch(err => showNotification("Error: " + err.message, "error"));
+                showNotification("Link de recuperación enviado a: " + email, "success");
+            }).catch(err => {
+                let msg = err.message;
+                if(msg.includes("user-not-found")) msg = "El correo no está registrado";
+                showNotification("Error: " + msg, "error");
+            });
         } else {
-            showNotification("Inicie sesión para cambiar contraseña", "error");
+            showNotification("Escriba su correo electrónico para recuperar la contraseña", "error");
         }
     }
 
@@ -991,6 +1020,7 @@
         window.open(`https://wa.me/584129431568?text=Hola, soy ${name}. Solicito verificación.`);
     }
     function logout() {
+        if(window.AndroidApp) window.AndroidApp.logoutUser();
         if(auth) auth.signOut().finally(() => location.reload());
         else location.reload();
     }
