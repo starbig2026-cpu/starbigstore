@@ -284,7 +284,7 @@
             document.getElementById('ap-coll').value = prod.collection;
             document.getElementById('ap-desc').value = prod.description || "";
             document.getElementById('ap-allow-credit').checked = prod.allowCredit || false;
-            document.getElementById('ap-preview').innerHTML = `<img src="${fixDriveUrl(prod.imageUrl)}" style="width:100%; height:100%; object-fit:contain;">`;
+            document.getElementById('ap-preview').innerHTML = `<img src="${fixDriveUrl(getImageUrl(prod))}" style="width:100%; height:100%; object-fit:contain;">`;
             updateWebPricePreview(prod.priceUsd);
         } else {
             // Reset
@@ -305,7 +305,7 @@
     }
 
     function fixDriveUrl(url) {
-        if (!url || typeof url !== 'string' || url.includes('subiendo')) return "https://via.placeholder.com/200?text=STARBIG";
+        if (!url || typeof url !== 'string' || url.toLowerCase().includes('subiendo')) return "https://via.placeholder.com/200?text=STARBIG";
         if (url.includes('firebasestorage.googleapis.com') || url.includes('appspot.com')) return url;
 
         let id = "";
@@ -313,10 +313,21 @@
             id = url.split("id=")[1].split("&")[0];
         } else if (url.includes("file/d/")) {
             id = url.split("file/d/")[1].split("/")[0];
+        } else if (url.length > 20 && !url.includes("/") && !url.includes(".")) {
+            id = url;
         }
 
-        // Si tenemos un ID, usamos el servidor de imágenes de Google (más rápido y sin bloqueos)
         return id ? `https://lh3.googleusercontent.com/d/${id}` : url;
+    }
+
+    function getImageUrl(p) {
+        const fields = [p.imageUrl, p.imagen, p.image, p.foto, p.url, p.imagenUrl];
+        for (let f of fields) {
+            if (f && typeof f === 'string' && f.length > 5 && !f.toLowerCase().includes('subiendo')) {
+                return f;
+            }
+        }
+        return p.imageUrl || p.imagen || "";
     }
 
     function listenToTasa() {
@@ -338,7 +349,7 @@
         grid.innerHTML = "";
         list.forEach(p => {
             const bss = (p.priceUsd * tasaBcv).toFixed(2);
-            const imgUrl = fixDriveUrl(p.imageUrl || p.imagen); // Intentar ambos por si acaso
+            const imgUrl = fixDriveUrl(getImageUrl(p));
             grid.innerHTML += `
                 <div class="product-card">
                     <div class="badge">${p.allowCredit ? 'Crédito' : (p.collection || 'Premium')}</div>
@@ -366,9 +377,9 @@
     }
 
     function checkAccess() {
-        if(userStatus === "unverified") alert("⚠️ Cuenta en revisión.");
+        if(userStatus === "unverified") showNotification("⚠️ Cuenta en revisión.", "error");
         else if(userStatus === "guest") openAuth();
-        else alert("Abriendo Catálogo de Créditos...");
+        else showNotification("Abriendo Catálogo de Créditos...");
     }
 
     // ADMIN WEB LOGIC
@@ -432,7 +443,7 @@
 
                 const card = document.createElement('div');
                 card.style = "background:#121216; padding:10px; border:0.5px solid #ffffff11; display:flex; align-items:center; gap:15px; margin-bottom:10px;";
-                const imgUrl = fixDriveUrl(p.imageUrl || p.imagen);
+                const imgUrl = fixDriveUrl(getImageUrl(p));
                 card.innerHTML = `
                         <img src="${imgUrl}" style="width:50px; height:50px; object-fit:cover;" onerror="this.src='https://via.placeholder.com/200?text=STARBIG'" referrerpolicy="no-referrer">
                         <div style="flex:1;">
@@ -461,12 +472,12 @@
                 method: 'POST',
                 body: JSON.stringify({
                     action: "deleteProduct",
-                    sheetName: p.category.toUpperCase(),
+                    sheetName: p.category.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase(),
                     nombre: p.name
                 })
             });
-            alert("✅ Solicitud de eliminación enviada.");
-        } catch(e) { console.error(e); alert("Error al eliminar."); }
+            showNotification("✅ Solicitud de eliminación enviada.");
+        } catch(e) { console.error(e); showNotification("Error al eliminar.", "error"); }
     }
 
     function previewWebImage(input) {
@@ -507,65 +518,62 @@
         btn.disabled = true; btn.innerText = "PROCESANDO...";
 
         try {
-            let url = "";
             let photo64 = file ? await getBase64(file) : null;
+            let currentUrl = currentEditingProductId ? (allProducts.find(x => x.id === currentEditingProductId)?.imageUrl || "") : "";
 
-            // 1. SUBIDA A STORAGE (OPCIONAL/BACKGROUND)
-            if(file) {
-                try {
-                    const storageRef = firebase.storage().ref().child(`productos/${Date.now()}_${file.name}`);
-                    const uploadTask = storageRef.put(file);
-                    // No esperamos el resultado final aquí para no bloquear
-                    uploadTask.then(snapshot => snapshot.ref.getDownloadURL()).then(dUrl => {
-                        if(docId) db.collection("productos").doc(docId).update({imageUrl: dUrl});
-                    }).catch(e => console.log("Storage error ignored"));
-                } catch(storageErr) { console.error("Error Storage:", storageErr); }
-            }
-
-            // 2. GUARDAR EN FIREBASE (INSTANTÁNEO)
+            // 1. GUARDAR EN FIREBASE (INSTANTÁNEO)
             const productData = {
                 name, priceUsd: price, stock, category: cat,
                 collection: coll, description: desc,
-                allowCredit: credit, imageUrl: url || "subiendo...",
+                allowCredit: credit, imageUrl: currentUrl || "subiendo...",
                 timestamp: Date.now()
             };
 
             let docId;
             if(currentEditingProductId) {
                 docId = currentEditingProductId;
-                await db.collection("productos").doc(docId).set(productData);
+                await db.collection("productos").doc(docId).update(productData);
             } else {
                 const res = await db.collection("productos").add(productData);
                 docId = res.id;
             }
 
-            // 3. SINCRONIZAR CON SHEETS (ENVÍO DE FOTO A DRIVE)
+            // 2. SUBIDA A STORAGE (Segundo plano)
+            if(file) {
+                const storageRef = firebase.storage().ref().child(`productos/${Date.now()}_${file.name}`);
+                storageRef.put(file).then(snapshot => snapshot.ref.getDownloadURL()).then(dUrl => {
+                    db.collection("productos").doc(docId).update({imageUrl: dUrl});
+                }).catch(e => console.error("Storage error:", e));
+            }
+
+            // 3. SINCRONIZAR CON SHEETS Y GOOGLE DRIVE
             const sheetsPayload = {
                 action: "addProduct",
-                sheetName: cat.toUpperCase(),
+                sheetName: cat.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase(),
                 photoBase64: photo64,
                 data: {
                     fecha: new Date().toLocaleString(),
-                    nombre: name,
-                    precio: price,
-                    stock: stock,
-                    coleccion: coll,
-                    descripcion: desc,
+                    nombre: name, precio: price, stock: stock,
+                    coleccion: coll, descripcion: desc,
                     credito: credit ? "SÍ" : "NO",
-                    imagen: url
+                    imagen: ""
                 }
             };
 
-            // Fetch sin await para que no se quede "PROCESANDO" si Sheets tarda
+            // Intentamos obtener el link de Drive para que sea permanente
             fetch(googleSheetsUrl, {
                 method: 'POST',
-                mode: 'no-cors',
                 body: JSON.stringify(sheetsPayload)
-            }).then(() => {
-                console.log("Sync Sheets Sent");
-            }).catch(e => console.log("Sync Sheets Error ignored"));
+            })
+            .then(res => res.json())
+            .then(resData => {
+                if(resData.imageUrl) {
+                    db.collection("productos").doc(docId).update({imageUrl: resData.imageUrl});
+                }
+            })
+            .catch(e => console.log("Sheets Sync Error:", e));
 
-            alert("✅ Guardado en proceso.");
+            showNotification("✅ Guardado en proceso.");
             document.getElementById('add-prod-overlay').style.display = 'none';
 
             // Limpieza
@@ -577,7 +585,7 @@
 
         } catch(err) {
             console.error("Error General:", err);
-            alert("Hubo un problema al guardar: " + err.message);
+            showNotification("Error al guardar: " + err.message, "error");
         } finally {
             btn.disabled = false; btn.innerText = "GUARDAR PRODUCTO";
         }
@@ -587,9 +595,11 @@
         if(action === 'active') {
             await db.collection("registros_clientes").doc(docId).update({status: 'active'});
             fetch(googleSheetsUrl, { method:'POST', body: JSON.stringify({action:"updateStatus", email: email, status: "active"}) });
-        } else if(confirm("¿Eliminar?")) {
+            showNotification("✅ Usuario Activado");
+        } else if(confirm("¿Seguro que desea eliminar este usuario?")) {
             await db.collection("registros_clientes").doc(docId).delete();
             fetch(googleSheetsUrl, { method:'POST', body: JSON.stringify({action:"delete", email: email}) });
+            showNotification("✅ Usuario Eliminado", "error");
         }
     }
 
@@ -642,9 +652,51 @@
         document.getElementById('tab-log').classList.toggle('active', tab === 'login');
     }
 
+    async function showNotification(message, type = 'success') {
+        let container = document.getElementById('notification-container');
+        if(!container) {
+            container = document.createElement('div');
+            container.id = 'notification-container';
+            container.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 10px; pointer-events: none;';
+            document.body.appendChild(container);
+        }
+
+        const toast = document.createElement('div');
+        const color = type === 'success' ? '#c5a059' : '#ff4d4d';
+        toast.style.cssText = `
+            background: rgba(13, 13, 17, 0.95);
+            color: #fff;
+            padding: 16px 24px;
+            border-left: 4px solid ${color};
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            min-width: 280px;
+            transform: translateX(120%);
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            backdrop-filter: blur(10px);
+            border-radius: 4px;
+            pointer-events: auto;
+        `;
+        toast.innerHTML = `<div style="display:flex; align-items:center; gap:12px;">
+            <div style="width:8px; height:8px; border-radius:50%; background:${color};"></div>
+            <span>${message.toUpperCase()}</span>
+        </div>`;
+
+        container.appendChild(toast);
+        setTimeout(() => toast.style.transform = 'translateX(0)', 100);
+
+        setTimeout(() => {
+            toast.style.transform = 'translateX(120%)';
+            setTimeout(() => toast.remove(), 500);
+        }, 4000);
+    }
+
     document.getElementById('register-form').onsubmit = async (e) => {
         e.preventDefault();
         const btn = e.target.querySelector('button');
+        const originalText = btn.innerText;
         btn.disabled = true; btn.innerText = "PROCESANDO...";
         try {
             const photo64 = await getBase64(document.getElementById('reg-photo').files[0]);
@@ -664,7 +716,16 @@
             if(window.AndroidApp) {
                 window.AndroidApp.registerUser(name, lastname, email, fullPhone, fullAddress, photo64, id64);
             } else {
-                // Registro desde Navegador Puro
+                // Registro desde Navegador Puro - Verificar duplicados
+                const emailCheck = await db.collection("registros_clientes").where("email", "==", email).get();
+                const phoneCheck = await db.collection("registros_clientes").where("phone", "==", fullPhone).get();
+
+                if(!emailCheck.empty || !phoneCheck.empty) {
+                    showNotification("Error: Correo o teléfono ya registrados", "error");
+                    btn.disabled = false; btn.innerText = originalText;
+                    return;
+                }
+
                 const docRef = await db.collection("registros_clientes").add({
                     name: `${name} ${lastname}`,
                     firstName: name,
@@ -696,20 +757,27 @@
                         idCardUrl: resData.idCardUrl
                     });
                 }
+                showNotification("Solicitud enviada correctamente.");
+                closeAuth();
             }
-            alert("✅ Solicitud enviada correctamente."); closeAuth();
         } catch(err) {
             console.error(err);
-            alert("✅ Solicitud enviada (Sincronización en proceso).");
+            showNotification("Solicitud enviada (Procesando sincronización)");
             closeAuth();
         }
-        finally { btn.disabled = false; btn.innerText = "SOLICITAR VERIFICACIÓN"; }
+        finally { btn.disabled = false; btn.innerText = originalText; }
     };
 
     async function getBase64(file) {
         return new Promise((resolve) => {
             if(!file) { resolve(""); return; }
-            const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = () => resolve(reader.result);
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => {
+                let result = reader.result;
+                if (result.includes(',')) result = result.split(',')[1];
+                resolve(result);
+            };
         });
     }
 
@@ -809,7 +877,7 @@
         }
     }
 
-    function changeLanguage(lang) { alert("Idioma: " + lang); }
+    function changeLanguage(lang) { showNotification("Idioma cambiado: " + lang.toUpperCase()); }
     function contactAdmin() {
         const name = document.getElementById('profile-name').innerText;
         window.open(`https://wa.me/584129431568?text=Hola, soy ${name}. Solicito verificación.`);

@@ -127,6 +127,19 @@ fun AdminListContent() {
     var showRateDialog by remember { mutableStateOf(false) }
     val db = FirebaseFirestore.getInstance()
     val context = LocalContext.current
+    
+    // Notificación moderna para Compose
+    var snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    val showModernToast: (String, Boolean) -> Unit = { msg, isError ->
+        scope.launch {
+            snackbarHostState.showSnackbar(
+                message = msg,
+                duration = SnackbarDuration.Short
+            )
+        }
+    }
 
     val syncBcv = {
         CoroutineScope(Dispatchers.IO).launch {
@@ -139,9 +152,7 @@ fun AdminListContent() {
                     val json = org.json.JSONObject(body)
                     val rate = json.getDouble("promedio")
                     db.collection("config").document("tasa_bcv").set(mapOf("valor" to rate))
-                    CoroutineScope(Dispatchers.Main).launch {
-                        Toast.makeText(context, "✅ Tasa BCV actualizada: $rate", Toast.LENGTH_SHORT).show()
-                    }
+                    showModernToast("✅ TASA BCV ACTUALIZADA: $rate", false)
                 }
             } catch (e: Exception) {
                 android.util.Log.e("AdminBCV", "Error: ${e.message}")
@@ -159,6 +170,11 @@ fun AdminListContent() {
 
         db.collection("productos").addSnapshotListener { snapshot, _ ->
             if (snapshot != null) products = snapshot.documents.map { doc ->
+                val imageUrl = listOf("imageUrl", "imagen", "image", "foto", "url", "imagenUrl")
+                    .mapNotNull { doc.getString(it) }
+                    .firstOrNull { it.isNotEmpty() && !it.contains("subiendo", ignoreCase = true) }
+                    ?: doc.getString("imageUrl") ?: ""
+                
                 Product(
                     id = doc.id,
                     name = doc.getString("name") ?: "",
@@ -166,7 +182,7 @@ fun AdminListContent() {
                     description = doc.getString("description") ?: "",
                     category = doc.getString("category") ?: "",
                     collection = doc.getString("collection") ?: "",
-                    imageUrl = doc.getString("imageUrl") ?: doc.getString("imagen") ?: "",
+                    imageUrl = imageUrl,
                     stock = doc.getLong("stock")?.toInt() ?: 0,
                     allowCredit = doc.getBoolean("allowCredit") ?: false
                 )
@@ -282,9 +298,13 @@ fun AdminListContent() {
                         // Sincronizar en segundo plano y obtener link de Drive
                         CoroutineScope(Dispatchers.IO).launch {
                             try {
+                                val normalizedCategory = java.text.Normalizer.normalize(finalProd.category, java.text.Normalizer.Form.NFD)
+                                    .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
+                                    .uppercase()
+
                                 val json = org.json.JSONObject().apply {
                                     put("action", "addProduct")
-                                    put("sheetName", finalProd.category.uppercase())
+                                    put("sheetName", normalizedCategory)
                                     put("photoBase64", base64)
                                     put("data", org.json.JSONObject().apply {
                                         put("fecha", java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date()))
@@ -312,12 +332,12 @@ fun AdminListContent() {
                             isLoading = false
                             showAddProductDialog = false
                             productToEdit = null
-                            Toast.makeText(context, "✅ Guardado con éxito", Toast.LENGTH_SHORT).show()
+                            showModernToast("✅ GUARDADO CON ÉXITO", false)
                         }
                     } catch (_: Exception) {
                         CoroutineScope(Dispatchers.Main).launch { 
                             isLoading = false
-                            Toast.makeText(context, "❌ Error", Toast.LENGTH_SHORT).show()
+                            showModernToast("❌ ERROR AL GUARDAR", true)
                         }
                     }
                 }
@@ -326,6 +346,26 @@ fun AdminListContent() {
 
         if (showRateDialog) {
             BcvRateDialog(bcvRate, { showRateDialog = false }, { db.collection("config").document("tasa_bcv").set(mapOf("valor" to it)); showRateDialog = false })
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp)
+        ) { data ->
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A20)),
+                shape = RoundedCornerShape(4.dp),
+                border = BorderStroke(1.dp, Color(0xFFC5A059).copy(0.5f))
+            ) {
+                Text(
+                    text = data.visuals.message.uppercase(),
+                    color = Color.White,
+                    modifier = Modifier.padding(16.dp),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+            }
         }
     }
 }
@@ -425,9 +465,13 @@ private fun deleteProduct(p: Product, db: FirebaseFirestore) {
     db.collection("productos").document(p.id).delete()
     CoroutineScope(Dispatchers.IO).launch {
         try {
+            val normalizedCategory = java.text.Normalizer.normalize(p.category, java.text.Normalizer.Form.NFD)
+                .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
+                .uppercase()
+
             val json = org.json.JSONObject().apply {
                 put("action", "deleteProduct")
-                put("sheetName", p.category.uppercase())
+                put("sheetName", normalizedCategory)
                 put("nombre", p.name)
             }
             OkHttpClient().newCall(Request.Builder().url(GOOGLE_SHEETS_URL).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
@@ -626,6 +670,7 @@ fun fixDriveUrl(url: String?): String {
     val id = when {
         url.contains("id=") -> url.split("id=").getOrNull(1)?.split("&")?.getOrNull(0)
         url.contains("file/d/") -> url.split("file/d/").getOrNull(1)?.split("/")?.getOrNull(0)
+        url.length > 20 && !url.contains("/") && !url.contains(".") -> url
         else -> null
     }
 

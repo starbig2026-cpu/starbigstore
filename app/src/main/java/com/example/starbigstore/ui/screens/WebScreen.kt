@@ -3,7 +3,6 @@ package com.example.starbigstore.ui.screens
 import android.content.Context
 import android.net.Uri
 import android.webkit.*
-import android.widget.Toast
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
@@ -16,6 +15,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.util.*
 
 @Suppress("unused")
@@ -31,12 +31,23 @@ class WebAppInterface(
     fun registerUser(firstName: String, lastName: String, email: String, phone: String, address: String, photoBase64: String, idCardBase64: String) {
         val db = FirebaseFirestore.getInstance()
 
-        CoroutineScope(Dispatchers.Main).launch {
-            Toast.makeText(mContext, "🚀 Procesando registro...", Toast.LENGTH_SHORT).show()
+        webView.post {
+            webView.evaluateJavascript("showNotification('🚀 PROCESANDO REGISTRO...', 'success')", null)
         }
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                // Verificar si ya existe un registro con el mismo correo o teléfono
+                val emailCheck = db.collection("registros_clientes").whereEqualTo("email", email.trim()).get().await()
+                val phoneCheck = db.collection("registros_clientes").whereEqualTo("phone", phone.trim()).get().await()
+
+                if (!emailCheck.isEmpty || !phoneCheck.isEmpty) {
+                    webView.post {
+                        webView.evaluateJavascript("showNotification('ERROR: EL CORREO O TELÉFONO YA EXISTEN', 'error')", null)
+                    }
+                    return@launch
+                }
+
                 val userMap = hashMapOf<String, Any>(
                     "firstName" to firstName,
                     "lastName" to lastName,
@@ -85,8 +96,8 @@ class WebAppInterface(
                                         
                                         if (photoUrl.isNotEmpty()) {
                                             docRef.update("photoUrl", photoUrl, "idCardUrl", idCardUrl)
-                                            CoroutineScope(Dispatchers.Main).launch {
-                                                Toast.makeText(mContext, "✅ Registro Sincronizado", Toast.LENGTH_SHORT).show()
+                                            webView.post {
+                                                webView.evaluateJavascript("showNotification('✅ REGISTRO SINCRONIZADO', 'success'); closeAuth();", null)
                                             }
                                         }
                                     }
