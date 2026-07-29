@@ -131,6 +131,26 @@ body::before {
 .status-box span { font-size: 0.7rem; color: #888; letter-spacing: 1px; display: block; margin-bottom: 5px; }
 .status-box strong { color: #c5a059; font-size: 1.2rem; font-weight: 900; }
 
+.profile-menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 25px; }
+.menu-item-btn {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(197, 160, 89, 0.2);
+    color: #fff;
+    padding: 15px 10px;
+    border-radius: 12px;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: 0.3s;
+}
+.menu-item-btn i { width: 18px; color: #c5a059; }
+.menu-item-btn:hover { background: rgba(197, 160, 89, 0.1); border-color: #c5a059; transform: translateY(-3px); }
+
 @media (max-width: 600px) {
   .hero h1 { font-size: 2.4rem; }
   .hero { padding-top: 4rem; }

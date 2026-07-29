@@ -98,8 +98,16 @@
             <div class="profile-avatar"><img id="profile-img-large" src="" alt="Perfil" referrerpolicy="no-referrer"></div>
             <h2 id="profile-name">Cargando...</h2>
             <div class="status-box"><span>ESTADO DE CUENTA:</span> <strong id="profile-status">VERIFICANDO</strong></div>
-            <button id="whatsapp-verify-btn" onclick="contactAdmin()" class="btn-primary full-width" style="background:#25D366; margin-top:15px; display:none;">WHATSAPP VERIFICACIÓN</button>
-            <button onclick="logout()" class="btn-secondary full-width" style="margin-top:10px;">Cerrar Sesión</button>
+
+            <div class="profile-menu-grid">
+                <button onclick="editProfile()" class="menu-item-btn"><i data-lucide="user-cog"></i> EDITAR PERFIL</button>
+                <button onclick="changePhoto()" class="menu-item-btn"><i data-lucide="camera"></i> CAMBIAR FOTO</button>
+                <button onclick="changePassword()" class="menu-item-btn"><i data-lucide="lock"></i> SEGURIDAD</button>
+                <button onclick="viewPoints()" class="menu-item-btn"><i data-lucide="award"></i> PUNTOS: <span id="user-points">0</span></button>
+            </div>
+
+            <button id="whatsapp-verify-btn" onclick="contactAdmin()" class="btn-primary full-width" style="background:#25D366; margin-top:25px; display:none;">WHATSAPP VERIFICACIÓN</button>
+            <button onclick="logout()" class="btn-secondary full-width" style="margin-top:15px;">CERRAR SESIÓN</button>
         </div>
     </div>
 </div>
@@ -275,7 +283,10 @@
     listenToTasa();
     startTrafficMonitor();
 
-    function openAuth() { document.getElementById("auth-modal").style.display = "block"; }
+    function openAuth() {
+        document.getElementById("auth-modal").style.display = "block";
+        lucide.createIcons();
+    }
     function closeAuth() { document.getElementById("auth-modal").style.display = "none"; }
     function closeAdmin() { document.getElementById("admin-overlay").style.display = "none"; }
 
@@ -704,6 +715,9 @@
         e.preventDefault();
         const email = document.getElementById('login-email').value;
         const pass = document.getElementById('login-pass').value;
+
+        showNotification("Autenticando...");
+
         if(window.AndroidApp) {
             window.AndroidApp.loginUser(email, pass);
         } else {
@@ -711,17 +725,20 @@
                 db.collection("registros_clientes").where("email", "==", email).get().then(docs => {
                     if(!docs.empty) {
                         const u = docs.docs[0].data();
-                        window.updateUserProfile(u.name, email, u.photoUrl, u.status);
+                        window.updateUserProfile(u.name, email, u.photoUrl, u.status, u.points || 0);
+                        showNotification("Bienvenido, " + u.name);
+                        setTimeout(closeAuth, 1000);
                     }
                 });
             }).catch(err => showNotification("Error al iniciar sesión: " + err.message, "error"));
         }
     };
 
-    window.updateUserProfile = function(name, email, photoUrl, status) {
+    window.updateUserProfile = function(name, email, photoUrl, status, points = 0) {
         userStatus = status;
         document.getElementById('profile-name').innerText = name;
         document.getElementById('profile-status').innerText = status.toUpperCase();
+        document.getElementById('user-points').innerText = points;
 
         const img = fixDriveUrl(photoUrl);
         document.getElementById('profile-img-large').src = img;
@@ -738,7 +755,49 @@
 
         // Ocultar pestañas si ya está logueado
         document.getElementById('auth-tabs-container').style.display = 'none';
+
+        closeAuth();
+        lucide.createIcons();
     };
+
+    function editProfile() {
+        showNotification("EDICIÓN DE PERFIL: Contacte a soporte para cambios de datos maestros.");
+    }
+
+    async function changePhoto() {
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'image/*';
+        fileInput.onchange = async (e) => {
+            const file = e.target.files[0];
+            if(file) {
+                const base64 = await getBase64(file);
+                if(window.AndroidApp) {
+                    window.AndroidApp.updateUserPhoto(base64);
+                } else {
+                    showNotification("Actualizando foto...");
+                    // Lógica para web pura si fuera necesario
+                }
+            }
+        };
+        fileInput.click();
+    }
+
+    function changePassword() {
+        const email = document.getElementById('login-email').value || auth.currentUser?.email;
+        if(email) {
+            auth.sendPasswordResetEmail(email).then(() => {
+                showNotification("Link de recuperación enviado a " + email);
+            }).catch(err => showNotification("Error: " + err.message, "error"));
+        } else {
+            showNotification("Inicie sesión para cambiar contraseña", "error");
+        }
+    }
+
+    function viewPoints() {
+        const pts = document.getElementById('user-points').innerText;
+        showNotification("ESTRELLAS STARBIG: " + pts + " acumuladas", "success");
+    }
 
     document.getElementById('register-form').onsubmit = async (e) => {
         e.preventDefault();
@@ -760,10 +819,12 @@
             const sector = document.getElementById('reg-sector').value;
             const fullAddress = `${sector ? sector + ', ' : ''}${parish ? parish + ', ' : ''}${mun ? mun + ', ' : ''}${state ? state + ', ' : ''}${country}`;
 
+            const pass = document.getElementById('reg-pass').value;
+
             if(window.AndroidApp) {
-                window.AndroidApp.registerUser(name, lastname, email, fullPhone, fullAddress, photo64, id64);
+                window.AndroidApp.registerUser(name, lastname, email, fullPhone, fullAddress, photo64, id64, pass);
             } else {
-                // Registro desde Navegador Puro - Verificar duplicados
+                // Registro desde Navegador Puro
                 const emailCheck = await db.collection("registros_clientes").where("email", "==", email).get();
                 const phoneCheck = await db.collection("registros_clientes").where("phone", "==", fullPhone).get();
 
