@@ -128,6 +128,27 @@ fun AdminListContent() {
     val db = FirebaseFirestore.getInstance()
     val context = LocalContext.current
 
+    val syncBcv = {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val client = OkHttpClient()
+                val request = Request.Builder().url("https://ve.dolarapi.com/v1/dolares/oficial").build()
+                val response = client.newCall(request).execute()
+                val body = response.body?.string()
+                if (body != null) {
+                    val json = org.json.JSONObject(body)
+                    val rate = json.getDouble("promedio")
+                    db.collection("config").document("tasa_bcv").set(mapOf("valor" to rate))
+                    CoroutineScope(Dispatchers.Main).launch {
+                        Toast.makeText(context, "✅ Tasa BCV actualizada: $rate", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AdminBCV", "Error: ${e.message}")
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         db.collection("registros_clientes").orderBy("timestamp", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, _ ->
@@ -155,6 +176,8 @@ fun AdminListContent() {
         db.collection("config").document("tasa_bcv").addSnapshotListener { snapshot, _ ->
             if (snapshot != null && snapshot.exists()) bcvRate = snapshot.getDouble("valor") ?: 36.5
         }
+
+        syncBcv()
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -186,7 +209,7 @@ fun AdminListContent() {
                             items(actives) { reg -> CustomerAdminCard(reg, {}, { deleteCustomer(reg, db) }, { expandedImageUrl = it }) }
                         }
                     }
-                    1 -> InventorySection(products, bcvRate, { showAddProductDialog = true }, { showRateDialog = true }, { deleteProduct(it, db) }, { productToEdit = it })
+                    1 -> InventorySection(products, bcvRate, { showAddProductDialog = true }, { showRateDialog = true }, { syncBcv() }, { deleteProduct(it, db) }, { productToEdit = it })
                     2 -> {
                         val pendings = registrations.filter { it.status == "unverified" }
                         if (pendings.isEmpty()) InfoSection("No hay solicitudes")
@@ -442,15 +465,21 @@ fun CustomerAdminCard(reg: CustomerRegistration, onApprove: () -> Unit, onReject
 }
 
 @Composable
-fun InventorySection(products: List<Product>, bcv: Double, onAdd: () -> Unit, onRate: () -> Unit, onDelete: (Product) -> Unit, onEdit: (Product) -> Unit) {
+fun InventorySection(products: List<Product>, bcv: Double, onAdd: () -> Unit, onRate: () -> Unit, onSync: () -> Unit, onDelete: (Product) -> Unit, onEdit: (Product) -> Unit) {
     var selectedCategory by remember { mutableStateOf("Todos") }
     val categories = listOf("Todos") + products.map { it.category }.distinct().sorted()
 
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Column {
-                Text("TASA BCV", color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                Text("$bcv BSS", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column {
+                    Text("TASA BCV", color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text("$bcv BSS", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                IconButton(onClick = onSync, modifier = Modifier.size(24.dp)) {
+                    Icon(Icons.Default.Sync, contentDescription = null, tint = Color(0xFFC5A059), modifier = Modifier.size(18.dp))
+                }
             }
             Button(onClick = onRate, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1A1A20)), shape = RoundedCornerShape(0.dp)) { Text("TASA", color = Color(0xFFC5A059)) }
         }
