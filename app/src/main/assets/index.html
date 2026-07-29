@@ -35,11 +35,23 @@
     <div class="modal-content">
         <span class="close-modal" onclick="closeAuth()">&times;</span>
         <div id="auth-tabs-container" class="auth-tabs">
-            <div id="tab-reg" class="tab-btn active" onclick="switchAuth('register')">REGISTRO</div>
-            <div id="tab-log" class="tab-btn" onclick="switchAuth('login')">LOGIN</div>
+            <div id="tab-log" class="tab-btn active" onclick="switchAuth('login')">LOGIN</div>
+            <div id="tab-reg" class="tab-btn" onclick="switchAuth('register')">REGISTRO</div>
         </div>
 
-        <div id="register-container" class="auth-container">
+        <div id="login-container" class="auth-container">
+            <h2 class="auth-title">Bienvenido <span>de Nuevo</span></h2>
+            <form id="login-form">
+                <div class="input-group"><label for="login-email">Email</label><input type="email" id="login-email" required></div>
+                <div class="input-group"><label for="login-pass">Contraseña</label><input type="password" id="login-pass" required></div>
+                <button type="submit" class="btn-primary full-width">ENTRAR</button>
+            </form>
+            <p style="text-align: center; margin-top: 20px; color: #888; font-size: 0.9rem; letter-spacing: 1px;">
+                ¿NO TIENES CUENTA? <span onclick="switchAuth('register')" style="color: #c5a059; cursor: pointer; font-weight: 800;">REGISTRARSE</span>
+            </p>
+        </div>
+
+        <div id="register-container" class="auth-container" style="display:none;">
             <h2 class="auth-title">Crear Perfil <span>Fashion</span></h2>
             <form id="register-form">
                 <div class="input-group"><label for="reg-name">Nombre</label><input type="text" id="reg-name" required></div>
@@ -76,23 +88,18 @@
                 <div class="input-group"><label for="reg-pass">Contraseña</label><input type="password" id="reg-pass" required></div>
                 <button type="submit" class="btn-primary full-width">SOLICITAR VERIFICACIÓN</button>
             </form>
+            <p style="text-align: center; margin-top: 20px; color: #888; font-size: 0.9rem; letter-spacing: 1px;">
+                ¿YA TIENES CUENTA? <span onclick="switchAuth('login')" style="color: #c5a059; cursor: pointer; font-weight: 800;">INICIAR SESIÓN</span>
+            </p>
         </div>
 
-        <div id="login-container" class="auth-container" style="display:none;">
-            <h2 class="auth-title">Bienvenido <span>de Nuevo</span></h2>
-            <form id="login-form">
-                <div class="input-group"><label for="login-email">Email</label><input type="email" id="login-email" required></div>
-                <div class="input-group"><label for="login-pass">Contraseña</label><input type="password" id="login-pass" required></div>
-                <button type="submit" class="btn-primary full-width">ENTRAR</button>
-            </form>
-        </div>
 
         <div id="profile-container" class="auth-container" style="display:none; text-align:center;">
             <div class="profile-avatar"><img id="profile-img-large" src="" alt="Perfil" referrerpolicy="no-referrer"></div>
             <h2 id="profile-name">Cargando...</h2>
             <div class="status-box"><span>ESTADO DE CUENTA:</span> <strong id="profile-status">VERIFICANDO</strong></div>
             <button id="whatsapp-verify-btn" onclick="contactAdmin()" class="btn-primary full-width" style="background:#25D366; margin-top:15px; display:none;">WHATSAPP VERIFICACIÓN</button>
-            <button onclick="location.reload()" class="btn-secondary full-width" style="margin-top:10px;">Cerrar Sesión</button>
+            <button onclick="logout()" class="btn-secondary full-width" style="margin-top:10px;">Cerrar Sesión</button>
         </div>
     </div>
 </div>
@@ -693,6 +700,46 @@
         }, 4000);
     }
 
+    document.getElementById('login-form').onsubmit = (e) => {
+        e.preventDefault();
+        const email = document.getElementById('login-email').value;
+        const pass = document.getElementById('login-pass').value;
+        if(window.AndroidApp) {
+            window.AndroidApp.loginUser(email, pass);
+        } else {
+            auth.signInWithEmailAndPassword(email, pass).then(cred => {
+                db.collection("registros_clientes").where("email", "==", email).get().then(docs => {
+                    if(!docs.empty) {
+                        const u = docs.docs[0].data();
+                        window.updateUserProfile(u.name, email, u.photoUrl, u.status);
+                    }
+                });
+            }).catch(err => showNotification("Error al iniciar sesión: " + err.message, "error"));
+        }
+    };
+
+    window.updateUserProfile = function(name, email, photoUrl, status) {
+        userStatus = status;
+        document.getElementById('profile-name').innerText = name;
+        document.getElementById('profile-status').innerText = status.toUpperCase();
+
+        const img = fixDriveUrl(photoUrl);
+        document.getElementById('profile-img-large').src = img;
+        document.getElementById('user-photo-nav').src = img;
+
+        document.getElementById('user-icon-nav').style.display = 'none';
+        document.getElementById('user-photo-container').style.display = 'block';
+
+        document.getElementById('login-container').style.display = 'none';
+        document.getElementById('register-container').style.display = 'none';
+        document.getElementById('profile-container').style.display = 'block';
+
+        document.getElementById('whatsapp-verify-btn').style.display = status === 'unverified' ? 'block' : 'none';
+
+        // Ocultar pestañas si ya está logueado
+        document.getElementById('auth-tabs-container').style.display = 'none';
+    };
+
     document.getElementById('register-form').onsubmit = async (e) => {
         e.preventDefault();
         const btn = e.target.querySelector('button');
@@ -881,6 +928,10 @@
     function contactAdmin() {
         const name = document.getElementById('profile-name').innerText;
         window.open(`https://wa.me/584129431568?text=Hola, soy ${name}. Solicito verificación.`);
+    }
+    function logout() {
+        if(auth) auth.signOut().finally(() => location.reload());
+        else location.reload();
     }
 </script>
 </body>
