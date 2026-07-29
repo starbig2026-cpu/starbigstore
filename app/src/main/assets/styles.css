@@ -138,3 +138,30 @@ body::before {
   .product-card { padding: 1rem; }
   .product-img { height: 160px; }
 }
+
+/* ADMIN WEB SPECIFIC BUTTONS */
+.cat-filter-btn {
+  background: #1a1a20;
+  color: #fff;
+  border: 1px solid rgba(197, 160, 89, 0.2);
+  padding: 8px 16px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: 0.3s;
+  white-space: nowrap;
+  border-radius: 0;
+  text-transform: uppercase;
+}
+
+.cat-filter-btn.active {
+  background: #c5a059;
+  color: #000;
+  border-color: #c5a059;
+}
+
+#admin-cat-filters::-webkit-scrollbar { height: 4px; }
+#admin-cat-filters::-webkit-scrollbar-track { background: #08080a; }
+#admin-cat-filters::-webkit-scrollbar-thumb { background: #c5a05933; }
+#admin-cat-filters::-webkit-scrollbar-thumb:hover { background: #c5a059; }

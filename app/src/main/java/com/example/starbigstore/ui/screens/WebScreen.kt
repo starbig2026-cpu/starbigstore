@@ -147,6 +147,10 @@ fun WebScreen(
                     javaScriptEnabled = true
                     domStorageEnabled = true
                     allowFileAccess = true
+                    allowContentAccess = true
+                    allowFileAccessFromFileURLs = true
+                    allowUniversalAccessFromFileURLs = true
+                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 }
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 addJavascriptInterface(WebAppInterface(context, this, onAdminRequest, onBiometricRequest), "AndroidApp")

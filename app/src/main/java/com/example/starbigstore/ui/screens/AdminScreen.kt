@@ -123,6 +123,7 @@ fun AdminListContent() {
     var isLoading by remember { mutableStateOf(false) }
     var expandedImageUrl by remember { mutableStateOf<String?>(null) }
     var showAddProductDialog by remember { mutableStateOf(false) }
+    var productToEdit by remember { mutableStateOf<Product?>(null) }
     var showRateDialog by remember { mutableStateOf(false) }
     val db = FirebaseFirestore.getInstance()
     val context = LocalContext.current
@@ -137,7 +138,17 @@ fun AdminListContent() {
 
         db.collection("productos").addSnapshotListener { snapshot, _ ->
             if (snapshot != null) products = snapshot.documents.map { doc ->
-                Product(id = doc.id, name = doc.getString("name") ?: "", priceUsd = doc.getDouble("priceUsd") ?: 0.0, description = doc.getString("description") ?: "", category = doc.getString("category") ?: "", collection = doc.getString("collection") ?: "", imageUrl = doc.getString("imageUrl") ?: "", stock = doc.getLong("stock")?.toInt() ?: 0, allowCredit = doc.getBoolean("allowCredit") ?: false)
+                Product(
+                    id = doc.id,
+                    name = doc.getString("name") ?: "",
+                    priceUsd = doc.getDouble("priceUsd") ?: 0.0,
+                    description = doc.getString("description") ?: "",
+                    category = doc.getString("category") ?: "",
+                    collection = doc.getString("collection") ?: "",
+                    imageUrl = doc.getString("imageUrl") ?: doc.getString("imagen") ?: "",
+                    stock = doc.getLong("stock")?.toInt() ?: 0,
+                    allowCredit = doc.getBoolean("allowCredit") ?: false
+                )
             }
         }
 
@@ -148,7 +159,7 @@ fun AdminListContent() {
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(Color(0xFF08080A))) {
-            Box(modifier = Modifier.fillMaxWidth().padding(top = 40.dp, start = 24.dp, end = 24.dp, bottom = 20.dp)) {
+            Box(modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 20.dp)) {
                 Column(modifier = Modifier.align(Alignment.CenterStart)) {
                     Text("CENTRAL DE INTELIGENCIA", color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
                     Text("STARBIG CONTROL", color = Color.White, fontWeight = FontWeight.Black, fontSize = 28.sp)
@@ -175,7 +186,7 @@ fun AdminListContent() {
                             items(actives) { reg -> CustomerAdminCard(reg, {}, { deleteCustomer(reg, db, GOOGLE_SHEETS_URL) }, { expandedImageUrl = it }) }
                         }
                     }
-                    1 -> InventorySection(products, bcvRate, { showAddProductDialog = true }, { showRateDialog = true }, { db.collection("productos").document(it.id).delete() })
+                    1 -> InventorySection(products, bcvRate, { showAddProductDialog = true }, { showRateDialog = true }, { deleteProduct(it, db, GOOGLE_SHEETS_URL) }, { productToEdit = it })
                     2 -> {
                         val pendings = registrations.filter { it.status == "unverified" }
                         if (pendings.isEmpty()) InfoSection("No hay solicitudes")
@@ -201,35 +212,89 @@ fun AdminListContent() {
             }
         }
 
-        if (showAddProductDialog) {
-            AddProductDialog(bcvRate, { showAddProductDialog = false }, { newProd, uri ->
+        if (showAddProductDialog || productToEdit != null) {
+            AddProductDialog(bcvRate, productToEdit, { showAddProductDialog = false; productToEdit = null }, { newProd, uri ->
                 isLoading = true
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        var url = ""
+                        var url = newProd.imageUrl
                         if (uri != null) {
                             val storage = FirebaseStorage.getInstance()
                             val ref = storage.reference.child("productos/${UUID.randomUUID()}.jpg")
-                            
-                            // Subida manual asegurada
-                            val uploadTask = ref.putFile(uri).await()
-                            if (uploadTask.metadata != null) {
-                                url = ref.downloadUrl.await().toString()
+                            try {
+                                ref.putFile(uri).await()
+                                // Reintento corto para asegurar que el objeto se propague en Google Cloud
+                                var downloadUri: Uri? = null
+                                for (i in 1..3) {
+                                    try {
+                                        downloadUri = ref.downloadUrl.await()
+                                        if (downloadUri != null) break
+                                    } catch (e: Exception) {
+                                        delay(1000)
+                                    }
+                                }
+                                url = downloadUri?.toString() ?: ""
+                            } catch (e: Exception) {
+                                android.util.Log.e("Admin", "Error subiendo imagen", e)
                             }
                         }
                         
-                        db.collection("productos").add(newProd.copy(imageUrl = url)).await()
+                        val finalProd = newProd.copy(imageUrl = url)
+                        val docId = if (productToEdit != null) {
+                            db.collection("productos").document(productToEdit!!.id).set(finalProd).await()
+                            productToEdit!!.id
+                        } else {
+                            db.collection("productos").add(finalProd).await().id
+                        }
                         
+                        // Convertir a Base64 para Google Drive (Sheets)
+                        val base64 = uri?.let { u ->
+                            try {
+                                context.contentResolver.openInputStream(u)?.use { it.readBytes() }?.let { 
+                                    android.util.Base64.encodeToString(it, android.util.Base64.NO_WRAP)
+                                }
+                            } catch (e: Exception) { null }
+                        }
+
+                        // Sincronizar en segundo plano y obtener link de Drive
+                        CoroutineScope(Dispatchers.IO).launch {
+                            try {
+                                val json = org.json.JSONObject().apply {
+                                    put("action", "addProduct")
+                                    put("sheetName", finalProd.category.uppercase())
+                                    put("photoBase64", base64)
+                                    put("data", org.json.JSONObject().apply {
+                                        put("fecha", java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date()))
+                                        put("nombre", finalProd.name); put("precio", finalProd.priceUsd); put("stock", finalProd.stock)
+                                        put("coleccion", finalProd.collection); put("descripcion", finalProd.description)
+                                        put("credito", if(finalProd.allowCredit) "SÍ" else "NO"); put("imagen", url)
+                                    })
+                                }
+                                val response = OkHttpClient().newCall(Request.Builder().url(GOOGLE_SHEETS_URL).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
+                                val respBody = response.body?.string()
+                                if (respBody != null) {
+                                    val resJson = org.json.JSONObject(respBody)
+                                    val driveUrl = resJson.optString("imageUrl")
+                                    if (driveUrl.isNotEmpty()) {
+                                        // Actualizamos Firebase con el link de Drive que sí funciona
+                                        db.collection("productos").document(docId).update("imageUrl", driveUrl)
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("AdminSync", "Error sincronizando link de Drive", e)
+                            }
+                        }
+
                         CoroutineScope(Dispatchers.Main).launch { 
                             isLoading = false
                             showAddProductDialog = false
+                            productToEdit = null
                             Toast.makeText(context, "✅ Guardado con éxito", Toast.LENGTH_SHORT).show()
                         }
                     } catch (e: Exception) {
                         CoroutineScope(Dispatchers.Main).launch { 
                             isLoading = false
-                            Toast.makeText(context, "❌ Error: ${e.message}", Toast.LENGTH_LONG).show()
-                            android.util.Log.e("Admin", "Save Error", e)
+                            Toast.makeText(context, "❌ Error", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
@@ -333,6 +398,20 @@ private fun deleteCustomer(reg: CustomerRegistration, db: FirebaseFirestore, url
     }
 }
 
+private fun deleteProduct(p: Product, db: FirebaseFirestore, url: String) {
+    db.collection("productos").document(p.id).delete()
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val json = org.json.JSONObject().apply {
+                put("action", "deleteProduct")
+                put("sheetName", p.category.uppercase())
+                put("nombre", p.name)
+            }
+            OkHttpClient().newCall(Request.Builder().url(url).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
+        } catch (e: Exception) {}
+    }
+}
+
 @Composable
 fun CustomerAdminCard(reg: CustomerRegistration, onApprove: () -> Unit, onReject: () -> Unit, onImageClick: (String) -> Unit) {
     val isActive = reg.status == "active"
@@ -363,7 +442,10 @@ fun CustomerAdminCard(reg: CustomerRegistration, onApprove: () -> Unit, onReject
 }
 
 @Composable
-fun InventorySection(products: List<Product>, bcv: Double, onAdd: () -> Unit, onRate: () -> Unit, onDelete: (Product) -> Unit) {
+fun InventorySection(products: List<Product>, bcv: Double, onAdd: () -> Unit, onRate: () -> Unit, onDelete: (Product) -> Unit, onEdit: (Product) -> Unit) {
+    var selectedCategory by remember { mutableStateOf("Todos") }
+    val categories = listOf("Todos") + products.map { it.category }.distinct().sorted()
+
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column {
@@ -373,24 +455,46 @@ fun InventorySection(products: List<Product>, bcv: Double, onAdd: () -> Unit, on
             Button(onClick = onRate, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1A1A20)), shape = RoundedCornerShape(0.dp)) { Text("TASA", color = Color(0xFFC5A059)) }
         }
         Spacer(modifier = Modifier.height(20.dp))
+        
+        ScrollableTabRow(
+            selectedTabIndex = categories.indexOf(selectedCategory),
+            containerColor = Color.Transparent,
+            contentColor = Color(0xFFC5A059),
+            edgePadding = 0.dp,
+            divider = {}
+        ) {
+            categories.forEach { cat ->
+                Tab(
+                    selected = selectedCategory == cat,
+                    onClick = { selectedCategory = cat },
+                    text = { Text(cat.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if(selectedCategory == cat) Color(0xFFC5A059) else Color.White.copy(0.4f)) }
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(20.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("STOCK", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black)
+            Text("PRODUCTOS", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black)
             IconButton(onClick = onAdd) { Icon(Icons.Default.Add, null, tint = Color(0xFFC5A059)) }
         }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            products.groupBy { it.category }.forEach { (cat, list) ->
-                item { Text(cat.uppercase(), color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp)) }
-                items(list) { ProductAdminItem(it, bcv, onDelete) }
-            }
+        LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            val filtered = if(selectedCategory == "Todos") products else products.filter { it.category == selectedCategory }
+            items(filtered) { ProductAdminItem(it, bcv, onDelete, onEdit) }
         }
     }
 }
 
 @Composable
-fun ProductAdminItem(p: Product, bcv: Double, onDelete: (Product) -> Unit) {
+fun ProductAdminItem(p: Product, bcv: Double, onDelete: (Product) -> Unit, onEdit: (Product) -> Unit) {
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(0.dp)) {
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            AsyncImage(model = fixDriveUrl(p.imageUrl), contentDescription = null, modifier = Modifier.size(50.dp).background(Color.Black), contentScale = ContentScale.Crop)
+            AsyncImage(
+                model = fixDriveUrl(p.imageUrl),
+                contentDescription = null,
+                modifier = Modifier.size(50.dp).background(Color.Black),
+                contentScale = ContentScale.Crop,
+                error = painterResource(R.drawable.logo_admin) // Placeholder en caso de error
+            )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(p.name.uppercase(), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
@@ -399,8 +503,9 @@ fun ProductAdminItem(p: Product, bcv: Double, onDelete: (Product) -> Unit) {
                     Spacer(modifier = Modifier.width(10.dp))
                     Text("${(p.priceUsd * bcv).format(2)} BSS", color = Color.White.copy(0.6f), fontSize = 11.sp)
                 }
-                if(p.allowCredit) Text("CRÉDITO: ${(p.priceUsd * bcv * 1.1).format(2)} BSS", color = Color.Yellow.copy(0.8f), fontSize = 9.sp)
+                Text("STOCK: ${p.stock}", color = Color.White.copy(0.5f), fontSize = 9.sp)
             }
+            IconButton(onClick = { onEdit(p) }) { Icon(Icons.Default.Edit, null, tint = Color.White.copy(0.6f), modifier = Modifier.size(18.dp)) }
             IconButton(onClick = { onDelete(p) }) { Icon(Icons.Default.Delete, null, tint = Color.Red.copy(0.6f), modifier = Modifier.size(18.dp)) }
         }
     }
@@ -408,13 +513,14 @@ fun ProductAdminItem(p: Product, bcv: Double, onDelete: (Product) -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddProductDialog(bcv: Double, onDismiss: () -> Unit, onConfirm: (Product, Uri?) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var priceText by remember { mutableStateOf("") }
-    var stock by remember { mutableStateOf("") }
-    var allowCredit by remember { mutableStateOf(false) }
-    var selectedCat by remember { mutableStateOf("Perfumes") }
-    var selectedColl by remember { mutableStateOf("Nueva Temporada") }
+fun AddProductDialog(bcv: Double, editingProduct: Product? = null, onDismiss: () -> Unit, onConfirm: (Product, Uri?) -> Unit) {
+    var name by remember { mutableStateOf(editingProduct?.name ?: "") }
+    var priceText by remember { mutableStateOf(editingProduct?.priceUsd?.toString() ?: "") }
+    var stock by remember { mutableStateOf(editingProduct?.stock?.toString() ?: "") }
+    var description by remember { mutableStateOf(editingProduct?.description ?: "") }
+    var allowCredit by remember { mutableStateOf(editingProduct?.allowCredit ?: false) }
+    var selectedCat by remember { mutableStateOf(editingProduct?.category ?: "Perfumes") }
+    var selectedColl by remember { mutableStateOf(editingProduct?.collection ?: "Nueva Temporada") }
     var catExp by remember { mutableStateOf(false) }
     var collExp by remember { mutableStateOf(false) }
     var uri by remember { mutableStateOf<Uri?>(null) }
@@ -423,19 +529,18 @@ fun AddProductDialog(bcv: Double, onDismiss: () -> Unit, onConfirm: (Product, Ur
     val pUsd = priceText.toDoubleOrNull() ?: 0.0
 
     AlertDialog(onDismissRequest = onDismiss, containerColor = Color(0xFF121216), shape = RoundedCornerShape(0.dp),
-        title = { Text("NUEVO PRODUCTO", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black) },
+        title = { Text(if(editingProduct == null) "NUEVO PRODUCTO" else "EDITAR PRODUCTO", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
                 Box(modifier = Modifier.fillMaxWidth().height(120.dp).background(Color.Black).clickable { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, contentAlignment = Alignment.Center) {
                     if(uri != null) AsyncImage(model = uri, contentDescription = null, modifier = Modifier.fillMaxSize())
+                    else if(editingProduct?.imageUrl?.isNotEmpty() == true) AsyncImage(model = fixDriveUrl(editingProduct.imageUrl), contentDescription = null, modifier = Modifier.fillMaxSize())
                     else Icon(Icons.Default.AddPhotoAlternate, null, tint = Color(0xFFC5A059))
                 }
                 AdminTextField(name, { name = it }, "Nombre")
                 AdminTextField(priceText, { priceText = it }, "Precio USD")
-                if(pUsd > 0) {
-                    Text("Contado: ${(pUsd * bcv).format(2)} BSS", color = Color.Green.copy(0.7f), fontSize = 10.sp)
-                    Text("Crédito (+10%): ${(pUsd * bcv * 1.1).format(2)} BSS", color = Color.Yellow.copy(0.7f), fontSize = 10.sp)
-                }
+                AdminTextField(stock, { stock = it }, "Stock")
+                AdminTextField(description, { description = it }, "Descripción")
                 Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(allowCredit, { allowCredit = it }, colors = CheckboxDefaults.colors(checkedColor = Color(0xFFC5A059))); Text("CRÉDITO DISPONIBLE", color = Color.White, fontSize = 11.sp) }
                 
                 ExposedDropdownMenuBox(catExp, { catExp = it }) {
@@ -450,10 +555,9 @@ fun AddProductDialog(bcv: Double, onDismiss: () -> Unit, onConfirm: (Product, Ur
                         listOf("Nueva Temporada", "Edición Limitada", "Best Sellers").forEach { DropdownMenuItem(text = { Text(it) }, onClick = { selectedColl = it; collExp = false }) }
                     }
                 }
-                AdminTextField(stock, { stock = it }, "Stock")
             }
         },
-        confirmButton = { Button(onClick = { onConfirm(Product(name = name, priceUsd = pUsd, category = selectedCat, collection = selectedColl, stock = stock.toIntOrNull() ?: 0, allowCredit = allowCredit), uri) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059))) { Text("GUARDAR", color = Color.Black) } }
+        confirmButton = { Button(onClick = { onConfirm(Product(id = editingProduct?.id ?: "", name = name, priceUsd = pUsd, description = description, category = selectedCat, collection = selectedColl, stock = stock.toIntOrNull() ?: 0, allowCredit = allowCredit, imageUrl = editingProduct?.imageUrl ?: ""), uri) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059))) { Text("GUARDAR", color = Color.Black) } }
     )
 }
 
@@ -488,12 +592,13 @@ fun Double.format(digits: Int) = "%.${digits}f".format(this)
 
 fun fixDriveUrl(url: String?): String {
     if (url.isNullOrBlank() || url.contains("subiendo")) return "https://via.placeholder.com/200?text=STARBIG"
-    val id = if (url.contains("id=")) {
-        url.split("id=").getOrNull(1)?.split("&")?.getOrNull(0)
-    } else if (url.contains("file/d/")) {
-        url.split("file/d/").getOrNull(1)?.split("/")?.getOrNull(0)
-    } else {
-        null
+    if (url.contains("firebasestorage.googleapis.com") || url.contains("appspot.com")) return url
+    
+    val id = when {
+        url.contains("id=") -> url.split("id=").getOrNull(1)?.split("&")?.getOrNull(0)
+        url.contains("file/d/") -> url.split("file/d/").getOrNull(1)?.split("/")?.getOrNull(0)
+        else -> null
     }
+
     return id?.let { "https://lh3.googleusercontent.com/d/$it" } ?: url
 }

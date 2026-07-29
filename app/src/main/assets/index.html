@@ -9,6 +9,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-storage-compat.js"></script>
 </head>
 <body>
 
@@ -161,10 +162,21 @@
             <div id="users-list-active" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;"></div>
         </div>
         <div id="admin-content-inventory" class="admin-panel-section" style="display:none;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
-                <h3 style="color:white;">STOCK PRODUCTOS</h3>
-                <button onclick="openAddProductModal()" style="background:#C5A059; border:none; padding:8px 15px; border-radius:5px; font-weight:bold; cursor:pointer;">+ AÑADIR</button>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="color:white; letter-spacing: 2px; font-weight: 900; font-size: 14px;">INVENTARIO DISPONIBLE</h3>
+                <button onclick="openAddProductModal()" style="background:#C5A059; border:none; padding:10px 20px; border-radius:0; font-weight:900; cursor:pointer; font-size: 10px; letter-spacing: 1px;">+ NUEVO PRODUCTO</button>
             </div>
+
+            <!-- FILTROS DE CATEGORÍA -->
+            <div id="admin-cat-filters" style="display:flex; gap:2px; overflow-x:auto; padding-bottom:10px; margin-bottom:20px;">
+                <button onclick="filterAdminInventory('Todos')" class="cat-filter-btn active">TODOS</button>
+                <button onclick="filterAdminInventory('Perfumes')" class="cat-filter-btn">PERFUMES</button>
+                <button onclick="filterAdminInventory('Tecnología')" class="cat-filter-btn">TECNOLOGÍA</button>
+                <button onclick="filterAdminInventory('Ropa')" class="cat-filter-btn">ROPA</button>
+                <button onclick="filterAdminInventory('Calzado')" class="cat-filter-btn">CALZADO</button>
+                <button onclick="filterAdminInventory('Belleza')" class="cat-filter-btn">BELLEZA</button>
+            </div>
+
             <div id="admin-inventory-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px;"></div>
         </div>
     </div>
@@ -172,23 +184,62 @@
 
 <!-- MODAL AÑADIR PRODUCTO (ADMIN WEB) -->
 <div id="add-prod-overlay" class="modal" style="background:rgba(0,0,0,0.8); z-index:6000;">
-    <div class="modal-content" style="background:#121216; border:1px solid #C5A059;">
-        <h2 style="color:white; margin-bottom:20px;">NUEVO PRODUCTO</h2>
+    <div class="modal-content" style="background:#121216; border:1px solid #C5A059; max-width: 500px;">
+        <h2 style="color:white; margin-bottom:20px; font-weight: 900;">NUEVO PRODUCTO</h2>
+
+        <div id="ap-preview" style="width:100%; height:150px; background:#000; margin-bottom:15px; display:flex; justify-content:center; align-items:center; border:1px dashed #C5A059; overflow:hidden; cursor:pointer;" onclick="document.getElementById('ap-img').click()">
+            <span style="color:#C5A059; font-size:12px;">+ AÑADIR FOTO</span>
+        </div>
+
         <div class="input-group">
             <label for="ap-name" style="display:none;">Nombre</label>
-            <input type="text" id="ap-name" placeholder="Nombre" style="width:100%; padding:10px; border-bottom:1px solid #C5A059; margin-bottom:15px; background:transparent; color:white; border-left:none; border-top:none; border-right:none;">
+            <input type="text" id="ap-name" placeholder="NOMBRE DEL PRODUCTO" style="width:100%; padding:10px; border-bottom:1px solid #C5A05933; margin-bottom:15px; background:transparent; color:white; border-left:none; border-top:none; border-right:none; font-size:12px;">
         </div>
-        <div class="input-group">
-            <label for="ap-price" style="display:none;">Precio</label>
-            <input type="number" id="ap-price" placeholder="Precio USD" style="width:100%; padding:10px; border-bottom:1px solid #C5A059; margin-bottom:15px; background:transparent; color:white; border-left:none; border-top:none; border-right:none;">
+
+        <div style="display:flex; gap:10px; margin-bottom:15px;">
+            <div style="flex:1;">
+                <label for="ap-price" style="display:none;">Precio</label>
+                <input type="number" id="ap-price" oninput="updateWebPricePreview(this.value)" placeholder="PRECIO USD" style="width:100%; padding:10px; border-bottom:1px solid #C5A05933; background:transparent; color:white; border-left:none; border-top:none; border-right:none; font-size:12px;">
+            </div>
+            <div style="flex:1;">
+                <label for="ap-stock" style="display:none;">Stock</label>
+                <input type="number" id="ap-stock" placeholder="STOCK CANTIDAD" style="width:100%; padding:10px; border-bottom:1px solid #C5A05933; background:transparent; color:white; border-left:none; border-top:none; border-right:none; font-size:12px;">
+            </div>
         </div>
-        <label for="ap-cat" style="display:none;">Categoría</label>
-        <select id="ap-cat" style="width:100%; padding:10px; background:#08080a; color:white; border:1px solid #C5A059; margin-bottom:15px;">
-            <option>Perfumes</option><option>Tecnología</option><option>Ropa</option><option>Calzado</option>
-        </select>
-        <label for="ap-img" style="color:white; display:block; margin-bottom:5px;">Imagen Producto</label>
-        <input type="file" id="ap-img" style="margin-bottom:20px; color:white;">
-        <button onclick="saveProductWeb()" class="btn-primary full-width">GUARDAR</button>
+
+        <div id="ap-price-preview" style="margin-bottom:15px; font-size:10px; color:#aaa; display:none;">
+            <div>Contado: <span id="ap-preview-bss" style="color:green;"></span> BSS</div>
+            <div>Crédito: <span id="ap-preview-cred" style="color:yellow;"></span> BSS</div>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-bottom:15px;">
+            <div style="flex:1;">
+                <label for="ap-cat" style="color:#C5A059; font-size:10px; font-weight:bold; display:block; margin-bottom:5px;">CATEGORÍA</label>
+                <select id="ap-cat" style="width:100%; padding:10px; background:#08080a; color:white; border:1px solid #C5A05933; font-size:11px;">
+                    <option>Perfumes</option><option>Tecnología</option><option>Ropa</option><option>Calzado</option><option>Belleza</option>
+                </select>
+            </div>
+            <div style="flex:1;">
+                <label for="ap-coll" style="color:#C5A059; font-size:10px; font-weight:bold; display:block; margin-bottom:5px;">COLECCIÓN</label>
+                <select id="ap-coll" style="width:100%; padding:10px; background:#08080a; color:white; border:1px solid #C5A05933; font-size:11px;">
+                    <option>Nueva Temporada</option><option>Edición Limitada</option><option>Best Sellers</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="input-group" style="margin-bottom:15px;">
+            <label for="ap-desc" style="display:none;">Descripción</label>
+            <textarea id="ap-desc" placeholder="DESCRIPCIÓN DEL PRODUCTO" style="width:100%; height:60px; background:transparent; color:white; border:1px solid #C5A05933; padding:10px; font-size:11px; resize:none;"></textarea>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:20px;">
+            <input type="checkbox" id="ap-allow-credit" style="accent-color:#C5A059;">
+            <label for="ap-allow-credit" style="color:white; font-size:11px;">DISPONIBLE PARA CRÉDITO</label>
+        </div>
+
+        <input type="file" id="ap-img" onchange="previewWebImage(this)" style="display:none;" accept="image/*">
+
+        <button id="ap-save-btn" onclick="saveProductWeb()" class="btn-primary full-width">GUARDAR PRODUCTO</button>
         <button onclick="document.getElementById('add-prod-overlay').style.display='none'" class="btn-secondary full-width" style="margin-top:10px;">CANCELAR</button>
     </div>
 </div>
@@ -210,6 +261,9 @@
     let onlineHistory = Array(20).fill(1);
     let offlineHistory = Array(20).fill(0);
 
+    let currentEditingProductId = null;
+    let currentAdminCategory = "Todos";
+
     lucide.createIcons();
     listenToTasa();
     startTrafficMonitor();
@@ -217,11 +271,51 @@
     function openAuth() { document.getElementById("auth-modal").style.display = "block"; }
     function closeAuth() { document.getElementById("auth-modal").style.display = "none"; }
     function closeAdmin() { document.getElementById("admin-overlay").style.display = "none"; }
-    function openAddProductModal() { document.getElementById('add-prod-overlay').style.display='block'; }
+
+    function openAddProductModal(prod = null) {
+        currentEditingProductId = prod ? prod.id : null;
+        document.getElementById('add-prod-overlay').style.display='block';
+
+        if(prod) {
+            document.getElementById('ap-name').value = prod.name;
+            document.getElementById('ap-price').value = prod.priceUsd;
+            document.getElementById('ap-stock').value = prod.stock || 0;
+            document.getElementById('ap-cat').value = prod.category;
+            document.getElementById('ap-coll').value = prod.collection;
+            document.getElementById('ap-desc').value = prod.description || "";
+            document.getElementById('ap-allow-credit').checked = prod.allowCredit || false;
+            document.getElementById('ap-preview').innerHTML = `<img src="${fixDriveUrl(prod.imageUrl)}" style="width:100%; height:100%; object-fit:contain;">`;
+            updateWebPricePreview(prod.priceUsd);
+        } else {
+            // Reset
+            document.getElementById('ap-name').value = "";
+            document.getElementById('ap-price').value = "";
+            document.getElementById('ap-stock').value = "0";
+            document.getElementById('ap-desc').value = "";
+            document.getElementById('ap-preview').innerHTML = '<span style="color:#C5A059; font-size:12px;">+ AÑADIR FOTO</span>';
+        }
+    }
+
+    function filterAdminInventory(cat) {
+        currentAdminCategory = cat;
+        document.querySelectorAll('.cat-filter-btn').forEach(b => {
+            b.classList.toggle('active', b.innerText === cat.toUpperCase());
+        });
+        loadAdminInventory();
+    }
 
     function fixDriveUrl(url) {
         if (!url || typeof url !== 'string' || url.includes('subiendo')) return "https://via.placeholder.com/200?text=STARBIG";
-        let id = url.includes("id=") ? url.split("id=")[1].split("&")[0] : (url.includes("file/d/") ? url.split("file/d/")[1].split("/")[0] : "");
+        if (url.includes('firebasestorage.googleapis.com') || url.includes('appspot.com')) return url;
+
+        let id = "";
+        if (url.includes("id=")) {
+            id = url.split("id=")[1].split("&")[0];
+        } else if (url.includes("file/d/")) {
+            id = url.split("file/d/")[1].split("/")[0];
+        }
+
+        // Si tenemos un ID, usamos el servidor de imágenes de Google (más rápido y sin bloqueos)
         return id ? `https://lh3.googleusercontent.com/d/${id}` : url;
     }
 
@@ -244,10 +338,13 @@
         grid.innerHTML = "";
         list.forEach(p => {
             const bss = (p.priceUsd * tasaBcv).toFixed(2);
+            const imgUrl = fixDriveUrl(p.imageUrl || p.imagen); // Intentar ambos por si acaso
             grid.innerHTML += `
                 <div class="product-card">
                     <div class="badge">${p.allowCredit ? 'Crédito' : (p.collection || 'Premium')}</div>
-                    <div class="product-img" style="background-image: url('${fixDriveUrl(p.imageUrl)}'); background-size: cover; background-position: center;" referrerpolicy="no-referrer"></div>
+                    <div class="product-img">
+                        <img src="${imgUrl}" alt="${p.name}" style="width:100%; height:100%; object-fit:cover; border-radius:15px;" onerror="this.src='https://via.placeholder.com/200?text=STARBIG'">
+                    </div>
                     <div class="product-info">
                         <h3>${p.name}</h3>
                         <p class="product-price">$${p.priceUsd} <span style="font-size:10px; color:#aaa;">(${bss} BSS)</span></p>
@@ -331,15 +428,159 @@
             const list = document.getElementById('admin-inventory-list'); list.innerHTML = "";
             snap.forEach(doc => {
                 const p = doc.data();
-                list.innerHTML += `
-                    <div style="background:#121216; padding:10px; border:0.5px solid #ffffff11; display:flex; align-items:center; gap:15px; margin-bottom:10px;">
-                        <img src="${fixDriveUrl(p.imageUrl)}" style="width:50px; height:50px; object-fit:cover;" referrerpolicy="no-referrer">
-                        <div style="flex:1;"><div style="color:white; font-size:12px; font-weight:bold;">${p.name.toUpperCase()}</div><div style="color:#C5A059; font-size:11px;">$${p.priceUsd} | Stock: ${p.stock}</div></div>
-                        <button onclick="db.collection('productos').doc('${doc.id}').delete()" style="background:none; border:none; color:#ff4444; cursor:pointer;"><i data-lucide="trash-2"></i></button>
-                    </div>`;
+                if(currentAdminCategory !== "Todos" && p.category !== currentAdminCategory) return;
+
+                const card = document.createElement('div');
+                card.style = "background:#121216; padding:10px; border:0.5px solid #ffffff11; display:flex; align-items:center; gap:15px; margin-bottom:10px;";
+                const imgUrl = fixDriveUrl(p.imageUrl || p.imagen);
+                card.innerHTML = `
+                        <img src="${imgUrl}" style="width:50px; height:50px; object-fit:cover;" onerror="this.src='https://via.placeholder.com/200?text=STARBIG'" referrerpolicy="no-referrer">
+                        <div style="flex:1;">
+                            <div style="color:white; font-size:12px; font-weight:bold;">${p.name.toUpperCase()}</div>
+                            <div style="color:#C5A059; font-size:11px;">$${p.priceUsd} | Stock: ${p.stock || 0}</div>
+                        </div>
+                        <div style="display:flex; gap:10px;">
+                            <button class="edit-btn-web" style="background:none; border:none; color:#C5A059; cursor:pointer;"><i data-lucide="edit-3"></i></button>
+                            <button class="delete-btn-web" style="background:none; border:none; color:#ff4444; cursor:pointer;"><i data-lucide="trash-2"></i></button>
+                        </div>`;
+
+                card.querySelector('.edit-btn-web').onclick = () => openAddProductModal({...p, id: doc.id});
+                card.querySelector('.delete-btn-web').onclick = () => deleteProductWeb(p, doc.id);
+
+                list.appendChild(card);
             });
             lucide.createIcons();
         });
+    }
+
+    async function deleteProductWeb(p, docId) {
+        if(!confirm(`¿Eliminar ${p.name.toUpperCase()} de Firebase y Excel?`)) return;
+        try {
+            await db.collection('productos').doc(docId).delete();
+            fetch(googleSheetsUrl, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: "deleteProduct",
+                    sheetName: p.category.toUpperCase(),
+                    nombre: p.name
+                })
+            });
+            alert("✅ Solicitud de eliminación enviada.");
+        } catch(e) { console.error(e); alert("Error al eliminar."); }
+    }
+
+    function previewWebImage(input) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('ap-preview').innerHTML = `<img src="${e.target.result}" style="width:100%; height:100%; object-fit:contain;">`;
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    function updateWebPricePreview(val) {
+        const p = parseFloat(val);
+        const preview = document.getElementById('ap-price-preview');
+        if(p > 0) {
+            preview.style.display = 'block';
+            document.getElementById('ap-preview-bss').innerText = (p * tasaBcv).toFixed(2);
+            document.getElementById('ap-preview-cred').innerText = (p * tasaBcv * 1.1).toFixed(2);
+        } else {
+            preview.style.display = 'none';
+        }
+    }
+
+    async function saveProductWeb() {
+        const btn = document.getElementById('ap-save-btn');
+        const name = document.getElementById('ap-name').value;
+        const price = parseFloat(document.getElementById('ap-price').value);
+        const stock = parseInt(document.getElementById('ap-stock').value) || 0;
+        const cat = document.getElementById('ap-cat').value;
+        const coll = document.getElementById('ap-coll').value;
+        const desc = document.getElementById('ap-desc').value;
+        const credit = document.getElementById('ap-allow-credit').checked;
+        const file = document.getElementById('ap-img').files[0];
+
+        if(!name || isNaN(price)) { alert("Nombre y Precio son obligatorios"); return; }
+
+        btn.disabled = true; btn.innerText = "PROCESANDO...";
+
+        try {
+            let url = "";
+            let photo64 = file ? await getBase64(file) : null;
+
+            // 1. SUBIDA A STORAGE (OPCIONAL/BACKGROUND)
+            if(file) {
+                try {
+                    const storageRef = firebase.storage().ref().child(`productos/${Date.now()}_${file.name}`);
+                    const uploadTask = storageRef.put(file);
+                    // No esperamos el resultado final aquí para no bloquear
+                    uploadTask.then(snapshot => snapshot.ref.getDownloadURL()).then(dUrl => {
+                        if(docId) db.collection("productos").doc(docId).update({imageUrl: dUrl});
+                    }).catch(e => console.log("Storage error ignored"));
+                } catch(storageErr) { console.error("Error Storage:", storageErr); }
+            }
+
+            // 2. GUARDAR EN FIREBASE (INSTANTÁNEO)
+            const productData = {
+                name, priceUsd: price, stock, category: cat,
+                collection: coll, description: desc,
+                allowCredit: credit, imageUrl: url || "subiendo...",
+                timestamp: Date.now()
+            };
+
+            let docId;
+            if(currentEditingProductId) {
+                docId = currentEditingProductId;
+                await db.collection("productos").doc(docId).set(productData);
+            } else {
+                const res = await db.collection("productos").add(productData);
+                docId = res.id;
+            }
+
+            // 3. SINCRONIZAR CON SHEETS (ENVÍO DE FOTO A DRIVE)
+            const sheetsPayload = {
+                action: "addProduct",
+                sheetName: cat.toUpperCase(),
+                photoBase64: photo64,
+                data: {
+                    fecha: new Date().toLocaleString(),
+                    nombre: name,
+                    precio: price,
+                    stock: stock,
+                    coleccion: coll,
+                    descripcion: desc,
+                    credito: credit ? "SÍ" : "NO",
+                    imagen: url
+                }
+            };
+
+            // Fetch sin await para que no se quede "PROCESANDO" si Sheets tarda
+            fetch(googleSheetsUrl, {
+                method: 'POST',
+                mode: 'no-cors',
+                body: JSON.stringify(sheetsPayload)
+            }).then(() => {
+                console.log("Sync Sheets Sent");
+            }).catch(e => console.log("Sync Sheets Error ignored"));
+
+            alert("✅ Guardado en proceso.");
+            document.getElementById('add-prod-overlay').style.display = 'none';
+
+            // Limpieza
+            document.getElementById('ap-name').value = "";
+            document.getElementById('ap-price').value = "";
+            document.getElementById('ap-stock').value = "0";
+            document.getElementById('ap-desc').value = "";
+            document.getElementById('ap-preview').innerHTML = '<span style="color:#C5A059; font-size:12px;">+ AÑADIR FOTO</span>';
+
+        } catch(err) {
+            console.error("Error General:", err);
+            alert("Hubo un problema al guardar: " + err.message);
+        } finally {
+            btn.disabled = false; btn.innerText = "GUARDAR PRODUCTO";
+        }
     }
 
     async function adminAction(docId, action, email) {
@@ -438,9 +679,12 @@
                 const response = await fetch(googleSheetsUrl, {
                     method: 'POST',
                     body: JSON.stringify({
-                        action: "register", firstName: name, lastName: lastname,
+                        action: "register",
+                        sheetName: "USUARIOS",
+                        firstName: name, lastName: lastname,
                         email: email, phone: fullPhone,
                         address: fullAddress,
+                        status: "unverified",
                         photoBase64: photo64, idCardBase64: id64
                     })
                 });
