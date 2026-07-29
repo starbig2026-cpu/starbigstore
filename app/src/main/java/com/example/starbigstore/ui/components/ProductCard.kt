@@ -46,6 +46,7 @@ fun ProductCard(product: Product, onClick: () -> Unit = {}) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(fixDriveUrl(product.imageUrl))
+                        .setHeader("User-Agent", "Mozilla/5.0")
                         .crossfade(true)
                         .build(),
                     contentDescription = product.name,
@@ -75,7 +76,6 @@ fun ProductCard(product: Product, onClick: () -> Unit = {}) {
 fun fixDriveUrl(url: String?): String {
     if (url.isNullOrBlank() || url.contains("subiendo")) return "https://via.placeholder.com/200?text=STARBIG"
     if (url.contains("firebasestorage.googleapis.com") || url.contains("appspot.com")) return url
-    if (url.contains("drive.google.com/uc") || url.contains("lh3.googleusercontent.com/d/")) return url
 
     val id = when {
         url.contains("id=") -> url.split("id=").getOrNull(1)?.split("&")?.getOrNull(0)
@@ -83,5 +83,5 @@ fun fixDriveUrl(url: String?): String {
         url.length > 20 && !url.contains("/") && !url.contains(".") -> url
         else -> null
     }
-    return id?.let { "https://drive.google.com/uc?export=view&id=$it" } ?: url
+    return id?.let { "https://drive.google.com/thumbnail?id=$it&sz=w1000" } ?: url
 }

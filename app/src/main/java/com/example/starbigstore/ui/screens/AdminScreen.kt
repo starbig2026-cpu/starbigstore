@@ -462,21 +462,32 @@ private fun approveCustomer(reg: CustomerRegistration, db: FirebaseFirestore) {
 }
 
 private fun deleteCustomer(reg: CustomerRegistration, db: FirebaseFirestore) {
+    // 1. Borrar de Firestore
     db.collection("registros_clientes").document(reg.id).delete()
+    
+    // 2. Sincronizar con Excel y Firebase Auth vía Apps Script
     CoroutineScope(Dispatchers.IO).launch {
         try {
             val json = org.json.JSONObject().apply { 
                 put("action", "delete")
                 put("email", reg.email.trim())
-                put("deleteFromAuth", true)
+                put("deleteFromAuth", true) 
             }
-            OkHttpClient().newCall(Request.Builder().url(GOOGLE_SHEETS_URL).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
+            val request = Request.Builder()
+                .url(GOOGLE_SHEETS_URL)
+                .post(json.toString().toRequestBody("application/json".toMediaType()))
+                .header("User-Agent", "Mozilla/5.0")
+                .build()
+            OkHttpClient().newCall(request).execute()
         } catch (_: Exception) {}
     }
 }
 
 private fun deleteProduct(p: Product, db: FirebaseFirestore) {
+    // 1. Borrar de Firestore
     db.collection("productos").document(p.id).delete()
+    
+    // 2. Sincronizar con Excel
     CoroutineScope(Dispatchers.IO).launch {
         try {
             val normalizedCategory = java.text.Normalizer.normalize(p.category, java.text.Normalizer.Form.NFD)
@@ -488,7 +499,12 @@ private fun deleteProduct(p: Product, db: FirebaseFirestore) {
                 put("sheetName", normalizedCategory)
                 put("nombre", p.name)
             }
-            OkHttpClient().newCall(Request.Builder().url(GOOGLE_SHEETS_URL).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
+            val request = Request.Builder()
+                .url(GOOGLE_SHEETS_URL)
+                .post(json.toString().toRequestBody("application/json".toMediaType()))
+                .header("User-Agent", "Mozilla/5.0")
+                .build()
+            OkHttpClient().newCall(request).execute()
         } catch (_: Exception) {}
     }
 }
@@ -503,6 +519,7 @@ fun CustomerAdminCard(reg: CustomerRegistration, onApprove: () -> Unit, onReject
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
                             .data(fixDriveUrl(reg.photoUrl))
+                            .setHeader("User-Agent", "Mozilla/5.0")
                             .crossfade(true)
                             .build(),
                         contentDescription = null, 
@@ -601,6 +618,7 @@ fun ProductAdminItem(p: Product, bcv: Double, onDelete: (Product) -> Unit, onEdi
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(fixDriveUrl(p.imageUrl))
+                    .setHeader("User-Agent", "Mozilla/5.0")
                     .crossfade(true)
                     .build(),
                 contentDescription = null,
