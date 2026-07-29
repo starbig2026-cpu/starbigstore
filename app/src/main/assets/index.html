@@ -15,14 +15,15 @@
 <header class="navbar">
     <div class="logo" onclick="handleLogoClick()">STARBIG<span>STORE</span></div>
     <div class="nav-icons">
+        <label for="language-selector" style="display:none;">Idioma</label>
         <select id="language-selector" onchange="changeLanguage(this.value)" style="background:transparent; color:#c5a059; border:1px solid #c5a059; font-size:12px; cursor:pointer;">
             <option value="es">ES</option>
             <option value="en">EN</option>
         </select>
-        <button class="icon-btn" onclick="openAuth()">
-            <div id="user-photo-container" style="display: none; width: 32px; height: 32px; border-radius: 50%; overflow: hidden; border: 1px solid #c5a059;">
+        <button class="icon-btn" onclick="openAuth()" aria-label="Usuario">
+            <span id="user-photo-container" style="display: none; width: 32px; height: 32px; border-radius: 50%; overflow: hidden; border: 1px solid #c5a059;">
                 <img id="user-photo-nav" src="" style="width: 100%; height: 100%; object-fit: cover;" alt="P" referrerpolicy="no-referrer">
-            </div>
+            </span>
             <i data-lucide="user" id="user-icon-nav"></i>
         </button>
     </div>
@@ -40,13 +41,13 @@
         <div id="register-container" class="auth-container">
             <h2 class="auth-title">Crear Perfil <span>Fashion</span></h2>
             <form id="register-form">
-                <div class="input-group"><label>Nombre</label><input type="text" id="reg-name" required></div>
-                <div class="input-group"><label>Apellido</label><input type="text" id="reg-lastname" required></div>
-                <div class="input-group"><label>Email</label><input type="email" id="reg-email" required></div>
+                <div class="input-group"><label for="reg-name">Nombre</label><input type="text" id="reg-name" required></div>
+                <div class="input-group"><label for="reg-lastname">Apellido</label><input type="text" id="reg-lastname" required></div>
+                <div class="input-group"><label for="reg-email">Email</label><input type="email" id="reg-email" required></div>
                 <div class="input-group">
-                    <label>WhatsApp</label>
+                    <label for="reg-phone">WhatsApp</label>
                     <div style="display: flex; gap: 5px;">
-                        <select id="reg-phone-code" style="width: 80px; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px;">
+                        <select id="reg-phone-code" aria-label="Código de País" style="width: 80px; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px;">
                             <option value="+58">+58</option>
                             <option value="+1">+1</option>
                             <option value="+57">+57</option>
@@ -57,21 +58,21 @@
                     </div>
                 </div>
                 <div class="input-group">
-                    <label>Ubicación</label>
+                    <label for="reg-country">Ubicación</label>
                     <select id="reg-country" onchange="updateStates(this.value)" style="width: 100%; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; margin-bottom: 5px;" required>
                         <option value="">Seleccione País</option>
                         <option value="Venezuela">Venezuela</option>
                         <option value="Colombia">Colombia</option>
                         <option value="USA">USA</option>
                     </select>
-                    <select id="reg-state" onchange="updateMunicipalities(this.value)" style="width: 100%; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; margin-bottom: 5px; display: none;"></select>
-                    <select id="reg-municipality" onchange="updateParishes(this.value)" style="width: 100%; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; margin-bottom: 5px; display: none;"></select>
-                    <select id="reg-parish" style="width: 100%; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; margin-bottom: 5px; display: none;"></select>
-                    <input type="text" id="reg-sector" placeholder="Sector / Punto de Referencia" style="width: 100%; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; display: none;">
+                    <select id="reg-state" aria-label="Estado" onchange="updateMunicipalities(this.value)" style="width: 100%; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; margin-bottom: 5px; display: none;"></select>
+                    <select id="reg-municipality" aria-label="Municipio" onchange="updateParishes(this.value)" style="width: 100%; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; margin-bottom: 5px; display: none;"></select>
+                    <select id="reg-parish" aria-label="Parroquia" style="width: 100%; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; margin-bottom: 5px; display: none;"></select>
+                    <input type="text" id="reg-sector" aria-label="Sector" placeholder="Sector / Punto de Referencia" style="width: 100%; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; display: none;">
                 </div>
-                <div class="input-group"><label>Foto Perfil</label><input type="file" id="reg-photo" accept="image/*" required></div>
-                <div class="input-group"><label>ID (Cédula)</label><input type="file" id="reg-id-card" accept="image/*" required></div>
-                <div class="input-group"><label>Contraseña</label><input type="password" id="reg-pass" required></div>
+                <div class="input-group"><label for="reg-photo">Foto Perfil</label><input type="file" id="reg-photo" accept="image/*" required></div>
+                <div class="input-group"><label for="reg-id-card">ID (Cédula)</label><input type="file" id="reg-id-card" accept="image/*" required></div>
+                <div class="input-group"><label for="reg-pass">Contraseña</label><input type="password" id="reg-pass" required></div>
                 <button type="submit" class="btn-primary full-width">SOLICITAR VERIFICACIÓN</button>
             </form>
         </div>
@@ -79,8 +80,8 @@
         <div id="login-container" class="auth-container" style="display:none;">
             <h2 class="auth-title">Bienvenido <span>de Nuevo</span></h2>
             <form id="login-form">
-                <div class="input-group"><label>Email</label><input type="email" id="login-email" required></div>
-                <div class="input-group"><label>Contraseña</label><input type="password" id="login-pass" required></div>
+                <div class="input-group"><label for="login-email">Email</label><input type="email" id="login-email" required></div>
+                <div class="input-group"><label for="login-pass">Contraseña</label><input type="password" id="login-pass" required></div>
                 <button type="submit" class="btn-primary full-width">ENTRAR</button>
             </form>
         </div>
@@ -98,6 +99,7 @@
 <section class="hero">
     <div class="search-bar hero-search">
         <i data-lucide="search" style="color:#666; width:18px;"></i>
+        <label for="main-search" style="display:none;">Buscar</label>
         <input type="text" id="main-search" placeholder="BUSCAR COLECCIÓN..." oninput="filterBySearch(this.value)">
     </div>
     <span class="tag">Nueva Temporada 2026</span>
@@ -172,11 +174,19 @@
 <div id="add-prod-overlay" class="modal" style="background:rgba(0,0,0,0.8); z-index:6000;">
     <div class="modal-content" style="background:#121216; border:1px solid #C5A059;">
         <h2 style="color:white; margin-bottom:20px;">NUEVO PRODUCTO</h2>
-        <input type="text" id="ap-name" class="input-group" placeholder="Nombre" style="width:100%; padding:10px; border-bottom:1px solid #C5A059; margin-bottom:15px; background:transparent; color:white; border-left:none; border-top:none; border-right:none;">
-        <input type="number" id="ap-price" class="input-group" placeholder="Precio USD" style="width:100%; padding:10px; border-bottom:1px solid #C5A059; margin-bottom:15px; background:transparent; color:white; border-left:none; border-top:none; border-right:none;">
+        <div class="input-group">
+            <label for="ap-name" style="display:none;">Nombre</label>
+            <input type="text" id="ap-name" placeholder="Nombre" style="width:100%; padding:10px; border-bottom:1px solid #C5A059; margin-bottom:15px; background:transparent; color:white; border-left:none; border-top:none; border-right:none;">
+        </div>
+        <div class="input-group">
+            <label for="ap-price" style="display:none;">Precio</label>
+            <input type="number" id="ap-price" placeholder="Precio USD" style="width:100%; padding:10px; border-bottom:1px solid #C5A059; margin-bottom:15px; background:transparent; color:white; border-left:none; border-top:none; border-right:none;">
+        </div>
+        <label for="ap-cat" style="display:none;">Categoría</label>
         <select id="ap-cat" style="width:100%; padding:10px; background:#08080a; color:white; border:1px solid #C5A059; margin-bottom:15px;">
             <option>Perfumes</option><option>Tecnología</option><option>Ropa</option><option>Calzado</option>
         </select>
+        <label for="ap-img" style="color:white; display:block; margin-bottom:5px;">Imagen Producto</label>
         <input type="file" id="ap-img" style="margin-bottom:20px; color:white;">
         <button onclick="saveProductWeb()" class="btn-primary full-width">GUARDAR</button>
         <button onclick="document.getElementById('add-prod-overlay').style.display='none'" class="btn-secondary full-width" style="margin-top:10px;">CANCELAR</button>
