@@ -183,15 +183,15 @@ fun AdminListContent() {
                         val actives = registrations.filter { it.status == "active" }
                         if (actives.isEmpty()) InfoSection("No hay usuarios activos")
                         else LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                            items(actives) { reg -> CustomerAdminCard(reg, {}, { deleteCustomer(reg, db, GOOGLE_SHEETS_URL) }, { expandedImageUrl = it }) }
+                            items(actives) { reg -> CustomerAdminCard(reg, {}, { deleteCustomer(reg, db) }, { expandedImageUrl = it }) }
                         }
                     }
-                    1 -> InventorySection(products, bcvRate, { showAddProductDialog = true }, { showRateDialog = true }, { deleteProduct(it, db, GOOGLE_SHEETS_URL) }, { productToEdit = it })
+                    1 -> InventorySection(products, bcvRate, { showAddProductDialog = true }, { showRateDialog = true }, { deleteProduct(it, db) }, { productToEdit = it })
                     2 -> {
                         val pendings = registrations.filter { it.status == "unverified" }
                         if (pendings.isEmpty()) InfoSection("No hay solicitudes")
                         else LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                            items(pendings) { reg -> CustomerAdminCard(reg, { approveCustomer(reg, db, GOOGLE_SHEETS_URL) }, { deleteCustomer(reg, db, GOOGLE_SHEETS_URL) }, { expandedImageUrl = it }) }
+                            items(pendings) { reg -> CustomerAdminCard(reg, { approveCustomer(reg, db) }, { deleteCustomer(reg, db) }, { expandedImageUrl = it }) }
                         }
                     }
                 }
@@ -213,7 +213,7 @@ fun AdminListContent() {
         }
 
         if (showAddProductDialog || productToEdit != null) {
-            AddProductDialog(bcvRate, productToEdit, { showAddProductDialog = false; productToEdit = null }, { newProd, uri ->
+            AddProductDialog(productToEdit, { showAddProductDialog = false; productToEdit = null }, { newProd, uri ->
                 isLoading = true
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
@@ -225,17 +225,17 @@ fun AdminListContent() {
                                 ref.putFile(uri).await()
                                 // Reintento corto para asegurar que el objeto se propague en Google Cloud
                                 var downloadUri: Uri? = null
-                                for (i in 1..3) {
+                                repeat(3) {
                                     try {
                                         downloadUri = ref.downloadUrl.await()
-                                        if (downloadUri != null) break
-                                    } catch (e: Exception) {
+                                        if (downloadUri != null) return@repeat
+                                    } catch (_: Exception) {
                                         delay(1000)
                                     }
                                 }
                                 url = downloadUri?.toString() ?: ""
-                            } catch (e: Exception) {
-                                android.util.Log.e("Admin", "Error subiendo imagen", e)
+                            } catch (_: Exception) {
+                                android.util.Log.e("Admin", "Error subiendo imagen")
                             }
                         }
                         
@@ -253,7 +253,7 @@ fun AdminListContent() {
                                 context.contentResolver.openInputStream(u)?.use { it.readBytes() }?.let { 
                                     android.util.Base64.encodeToString(it, android.util.Base64.NO_WRAP)
                                 }
-                            } catch (e: Exception) { null }
+                            } catch (_: Exception) { null }
                         }
 
                         // Sincronizar en segundo plano y obtener link de Drive
@@ -280,8 +280,8 @@ fun AdminListContent() {
                                         db.collection("productos").document(docId).update("imageUrl", driveUrl)
                                     }
                                 }
-                            } catch (e: Exception) {
-                                android.util.Log.e("AdminSync", "Error sincronizando link de Drive", e)
+                            } catch (_: Exception) {
+                                android.util.Log.e("AdminSync", "Error sincronizando link de Drive")
                             }
                         }
 
@@ -291,7 +291,7 @@ fun AdminListContent() {
                             productToEdit = null
                             Toast.makeText(context, "✅ Guardado con éxito", Toast.LENGTH_SHORT).show()
                         }
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         CoroutineScope(Dispatchers.Main).launch { 
                             isLoading = false
                             Toast.makeText(context, "❌ Error", Toast.LENGTH_SHORT).show()
@@ -378,27 +378,27 @@ fun InfoSection(text: String) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(text.uppercase(), color = Color.White.copy(0.2f), fontSize = 12.sp, fontWeight = FontWeight.Bold) }
 }
 
-private fun approveCustomer(reg: CustomerRegistration, db: FirebaseFirestore, url: String) {
+private fun approveCustomer(reg: CustomerRegistration, db: FirebaseFirestore) {
     db.collection("registros_clientes").document(reg.id).update("status", "active")
     CoroutineScope(Dispatchers.IO).launch {
         try {
             val json = org.json.JSONObject().apply { put("action", "updateStatus"); put("email", reg.email.trim()); put("status", "active") }
-            OkHttpClient().newCall(Request.Builder().url(url).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
-        } catch (e: Exception) {}
+            OkHttpClient().newCall(Request.Builder().url(GOOGLE_SHEETS_URL).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
+        } catch (_: Exception) {}
     }
 }
 
-private fun deleteCustomer(reg: CustomerRegistration, db: FirebaseFirestore, url: String) {
+private fun deleteCustomer(reg: CustomerRegistration, db: FirebaseFirestore) {
     db.collection("registros_clientes").document(reg.id).delete()
     CoroutineScope(Dispatchers.IO).launch {
         try {
             val json = org.json.JSONObject().apply { put("action", "delete"); put("email", reg.email.trim()) }
-            OkHttpClient().newCall(Request.Builder().url(url).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
-        } catch (e: Exception) {}
+            OkHttpClient().newCall(Request.Builder().url(GOOGLE_SHEETS_URL).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
+        } catch (_: Exception) {}
     }
 }
 
-private fun deleteProduct(p: Product, db: FirebaseFirestore, url: String) {
+private fun deleteProduct(p: Product, db: FirebaseFirestore) {
     db.collection("productos").document(p.id).delete()
     CoroutineScope(Dispatchers.IO).launch {
         try {
@@ -407,8 +407,8 @@ private fun deleteProduct(p: Product, db: FirebaseFirestore, url: String) {
                 put("sheetName", p.category.uppercase())
                 put("nombre", p.name)
             }
-            OkHttpClient().newCall(Request.Builder().url(url).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
-        } catch (e: Exception) {}
+            OkHttpClient().newCall(Request.Builder().url(GOOGLE_SHEETS_URL).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
+        } catch (_: Exception) {}
     }
 }
 
@@ -450,13 +450,13 @@ fun InventorySection(products: List<Product>, bcv: Double, onAdd: () -> Unit, on
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column {
                 Text("TASA BCV", color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                Text("${bcv} BSS", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
+                Text("$bcv BSS", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
             }
             Button(onClick = onRate, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1A1A20)), shape = RoundedCornerShape(0.dp)) { Text("TASA", color = Color(0xFFC5A059)) }
         }
         Spacer(modifier = Modifier.height(20.dp))
         
-        ScrollableTabRow(
+        SecondaryScrollableTabRow(
             selectedTabIndex = categories.indexOf(selectedCategory),
             containerColor = Color.Transparent,
             contentColor = Color(0xFFC5A059),
@@ -513,7 +513,7 @@ fun ProductAdminItem(p: Product, bcv: Double, onDelete: (Product) -> Unit, onEdi
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddProductDialog(bcv: Double, editingProduct: Product? = null, onDismiss: () -> Unit, onConfirm: (Product, Uri?) -> Unit) {
+fun AddProductDialog(editingProduct: Product? = null, onDismiss: () -> Unit, onConfirm: (Product, Uri?) -> Unit) {
     var name by remember { mutableStateOf(editingProduct?.name ?: "") }
     var priceText by remember { mutableStateOf(editingProduct?.priceUsd?.toString() ?: "") }
     var stock by remember { mutableStateOf(editingProduct?.stock?.toString() ?: "") }
@@ -544,13 +544,13 @@ fun AddProductDialog(bcv: Double, editingProduct: Product? = null, onDismiss: ()
                 Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(allowCredit, { allowCredit = it }, colors = CheckboxDefaults.colors(checkedColor = Color(0xFFC5A059))); Text("CRÉDITO DISPONIBLE", color = Color.White, fontSize = 11.sp) }
                 
                 ExposedDropdownMenuBox(catExp, { catExp = it }) {
-                    OutlinedTextField(selectedCat, {}, readOnly = true, label = {Text("Categoría")}, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(catExp) }, modifier = Modifier.menuAnchor().fillMaxWidth(), colors = dropdownColors())
+                    OutlinedTextField(selectedCat, {}, readOnly = true, label = {Text("Categoría")}, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(catExp) }, modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(), colors = dropdownColors())
                     ExposedDropdownMenu(catExp, { catExp = false }) {
                         listOf("Perfumes", "Tecnología", "Ropa", "Calzado", "Belleza").forEach { DropdownMenuItem(text = { Text(it) }, onClick = { selectedCat = it; catExp = false }) }
                     }
                 }
                 ExposedDropdownMenuBox(collExp, { collExp = it }) {
-                    OutlinedTextField(selectedColl, {}, readOnly = true, label = {Text("Colección")}, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(collExp) }, modifier = Modifier.menuAnchor().fillMaxWidth(), colors = dropdownColors())
+                    OutlinedTextField(selectedColl, {}, readOnly = true, label = {Text("Colección")}, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(collExp) }, modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(), colors = dropdownColors())
                     ExposedDropdownMenu(collExp, { collExp = false }) {
                         listOf("Nueva Temporada", "Edición Limitada", "Best Sellers").forEach { DropdownMenuItem(text = { Text(it) }, onClick = { selectedColl = it; collExp = false }) }
                     }

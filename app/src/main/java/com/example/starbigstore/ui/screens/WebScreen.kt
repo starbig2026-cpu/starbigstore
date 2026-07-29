@@ -148,8 +148,6 @@ fun WebScreen(
                     domStorageEnabled = true
                     allowFileAccess = true
                     allowContentAccess = true
-                    allowFileAccessFromFileURLs = true
-                    allowUniversalAccessFromFileURLs = true
                     mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 }
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
