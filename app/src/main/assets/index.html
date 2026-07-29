@@ -399,6 +399,7 @@
             const photo64 = await getBase64(document.getElementById('reg-photo').files[0]);
             const id64 = await getBase64(document.getElementById('reg-id-card').files[0]);
             const name = document.getElementById('reg-name').value;
+            const lastname = document.getElementById('reg-lastname').value;
             const email = document.getElementById('reg-email').value;
 
             const fullPhone = document.getElementById('reg-phone-code').value + document.getElementById('reg-phone').value;
@@ -410,11 +411,14 @@
             const fullAddress = `${sector ? sector + ', ' : ''}${parish ? parish + ', ' : ''}${mun ? mun + ', ' : ''}${state ? state + ', ' : ''}${country}`;
 
             if(window.AndroidApp) {
-                window.AndroidApp.registerUser(name, "", email, fullPhone, fullAddress, photo64, id64);
+                window.AndroidApp.registerUser(name, lastname, email, fullPhone, fullAddress, photo64, id64);
             } else {
                 // Registro desde Navegador Puro
                 const docRef = await db.collection("registros_clientes").add({
-                    name, email,
+                    name: `${name} ${lastname}`,
+                    firstName: name,
+                    lastName: lastname,
+                    email,
                     phone: fullPhone,
                     address: fullAddress,
                     status: "unverified", timestamp: Date.now(),
@@ -424,7 +428,7 @@
                 const response = await fetch(googleSheetsUrl, {
                     method: 'POST',
                     body: JSON.stringify({
-                        action: "register", firstName: name, lastName: "",
+                        action: "register", firstName: name, lastName: lastname,
                         email: email, phone: fullPhone,
                         address: fullAddress,
                         photoBase64: photo64, idCardBase64: id64
