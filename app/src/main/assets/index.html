@@ -43,8 +43,32 @@
                 <div class="input-group"><label>Nombre</label><input type="text" id="reg-name" required></div>
                 <div class="input-group"><label>Apellido</label><input type="text" id="reg-lastname" required></div>
                 <div class="input-group"><label>Email</label><input type="email" id="reg-email" required></div>
-                <div class="input-group"><label>WhatsApp</label><input type="tel" id="reg-phone" required></div>
-                <div class="input-group"><label>Dirección</label><input type="text" id="reg-address" required></div>
+                <div class="input-group">
+                    <label>WhatsApp</label>
+                    <div style="display: flex; gap: 5px;">
+                        <select id="reg-phone-code" style="width: 80px; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px;">
+                            <option value="+58">+58</option>
+                            <option value="+1">+1</option>
+                            <option value="+57">+57</option>
+                            <option value="+34">+34</option>
+                            <option value="+507">+507</option>
+                        </select>
+                        <input type="tel" id="reg-phone" placeholder="Número" oninput="this.value = this.value.replace(/[^0-9]/g, '')" required style="flex: 1;">
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label>Ubicación</label>
+                    <select id="reg-country" onchange="updateStates(this.value)" style="width: 100%; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; margin-bottom: 5px;" required>
+                        <option value="">Seleccione País</option>
+                        <option value="Venezuela">Venezuela</option>
+                        <option value="Colombia">Colombia</option>
+                        <option value="USA">USA</option>
+                    </select>
+                    <select id="reg-state" onchange="updateMunicipalities(this.value)" style="width: 100%; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; margin-bottom: 5px; display: none;"></select>
+                    <select id="reg-municipality" onchange="updateParishes(this.value)" style="width: 100%; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; margin-bottom: 5px; display: none;"></select>
+                    <select id="reg-parish" style="width: 100%; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; margin-bottom: 5px; display: none;"></select>
+                    <input type="text" id="reg-sector" placeholder="Sector / Punto de Referencia" style="width: 100%; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; display: none;">
+                </div>
                 <div class="input-group"><label>Foto Perfil</label><input type="file" id="reg-photo" accept="image/*" required></div>
                 <div class="input-group"><label>ID (Cédula)</label><input type="file" id="reg-id-card" accept="image/*" required></div>
                 <div class="input-group"><label>Contraseña</label><input type="password" id="reg-pass" required></div>
@@ -377,14 +401,22 @@
             const name = document.getElementById('reg-name').value;
             const email = document.getElementById('reg-email').value;
 
+            const fullPhone = document.getElementById('reg-phone-code').value + document.getElementById('reg-phone').value;
+            const country = document.getElementById('reg-country').value;
+            const state = document.getElementById('reg-state').value;
+            const mun = document.getElementById('reg-municipality').value;
+            const parish = document.getElementById('reg-parish').value;
+            const sector = document.getElementById('reg-sector').value;
+            const fullAddress = `${sector ? sector + ', ' : ''}${parish ? parish + ', ' : ''}${mun ? mun + ', ' : ''}${state ? state + ', ' : ''}${country}`;
+
             if(window.AndroidApp) {
-                window.AndroidApp.registerUser(name, "", email, document.getElementById('reg-phone').value, document.getElementById('reg-address').value, photo64, id64);
+                window.AndroidApp.registerUser(name, "", email, fullPhone, fullAddress, photo64, id64);
             } else {
                 // Registro desde Navegador Puro
                 const docRef = await db.collection("registros_clientes").add({
                     name, email,
-                    phone: document.getElementById('reg-phone').value,
-                    address: document.getElementById('reg-address').value,
+                    phone: fullPhone,
+                    address: fullAddress,
                     status: "unverified", timestamp: Date.now(),
                     photoUrl: "subiendo...", idCardUrl: "subiendo..."
                 });
@@ -393,8 +425,8 @@
                     method: 'POST',
                     body: JSON.stringify({
                         action: "register", firstName: name, lastName: "",
-                        email: email, phone: document.getElementById('reg-phone').value,
-                        address: document.getElementById('reg-address').value,
+                        email: email, phone: fullPhone,
+                        address: fullAddress,
                         photoBase64: photo64, idCardBase64: id64
                     })
                 });
@@ -421,6 +453,102 @@
             if(!file) { resolve(""); return; }
             const reader = new FileReader(); reader.readAsDataURL(file); reader.onload = () => resolve(reader.result);
         });
+    }
+
+    const vzlaData = {
+        "Amazonas": { "Atures": ["Fernando Girón Tovar", "Luis Alberto Gómez", "Pahueña", "Platanillal"], "Autana": ["Isla Ratón", "Munduapo", "Guayapo"], "Maroa": ["Maroa", "Victorino", "Comunidad"], "Río Negro": ["San Carlos de Río Negro", "Cocuy"], "Atabapo": ["San Fernando de Atabapo"] },
+        "Anzoátegui": { "Bolívar": ["Barcelona", "El Carmen", "San Cristóbal", "Naricual"], "Sotillo": ["Puerto La Cruz", "Pozuelos"], "Urbaneja": ["Lechería", "El Morro"], "Guanta": ["Guanta", "Chorrerrón"], "Anaco": ["Anaco", "San Joaquín"] },
+        "Apure": { "San Fernando": ["San Fernando", "El Recreo", "Peñalver"], "Páez": ["Guasdualito", "Aramendi"], "Biruaca": ["Biruaca"] },
+        "Aragua": { "Girardot": ["Maracay", "Choroní", "Joaquín Crespo", "José Casanova Godoy"], "Santiago Mariño": ["Turmero", "Samán de Güere"], "Ribas": ["La Victoria", "Castor Nieves Ríos"], "Zamora": ["Villa de Cura"] },
+        "Barinas": { "Barinas": ["Barinas", "Alfredo Arvelo Larriva", "Alto Barinas"], "Bolívar": ["Barinitas", "Altamira"], "Sucre": ["Socopó"] },
+        "Bolívar": { "Caroní": ["Puerto Ordaz", "San Félix", "Unare", "Cachamay"], "Heres": ["Ciudad Bolívar", "Catedral", "Agua Salada"], "Piar": ["Upata"] },
+        "Carabobo": {
+            "Valencia": ["Socorro", "San Blas", "Catedral", "Santa Rosa", "Candelaria", "San José", "Rafael Urdaneta", "Negro Primero", "Miguel Peña"],
+            "Puerto Cabello": ["Bartolomé Salom", "Democracia", "Fraternidad", "Goaigoaza", "Juan José Flores", "Unión", "Borburata", "Patanemo"],
+            "Guacara": ["Guacara", "Ciudad Alianza", "Yagua"],
+            "Naguanagua": ["Naguanagua"],
+            "San Diego": ["San Diego"],
+            "Los Guayos": ["Los Guayos"],
+            "Libertador": ["Tocuyito", "Independencia"],
+            "San Joaquín": ["San Joaquín"],
+            "Diego Ibarra": ["Mariara", "Aguas Calientes"],
+            "Carlos Arvelo": ["Güigue", "Belén", "Tacarigua"],
+            "Juan José Mora": ["Morón", "Urama"]
+        },
+        "Cojedes": { "Ezequiel Zamora": ["San Carlos"], "Tinaquillo": ["Tinaquillo"] },
+        "Delta Amacuro": { "Tucupita": ["Tucupita", "San José", "Virgen del Valle"], "Casacoima": ["Sierra Imataca"] },
+        "Falcón": { "Miranda": ["Coro", "Santa Ana", "Guzmán Guillermo"], "Carirubana": ["Punto Fijo", "Norte", "Punta Cardón"], "Colina": ["La Vela de Coro"] },
+        "Guárico": { "Juan Germán Roscio": ["San Juan de los Morros", "Parapara"], "Infante": ["Valle de la Pascua"], "Miranda": ["Calabozo"] },
+        "Lara": { "Iribarren": ["Barquisimeto", "Catedral", "Concepción", "Santa Rosa", "Juan de Villegas", "Unión"], "Palavecino": ["Cabudare", "José Gregorio Bastidas"], "Jiménez": ["Quíbor"] },
+        "Mérida": { "Libertador": ["Mérida", "El Sagrario", "Milla", "Sagrario", "Soto Rosa"], "Alberto Adriani": ["El Vigía"], "Campo Elías": ["Ejido"] },
+        "Miranda": {
+            "Sucre": ["Petare", "Leoncio Martínez", "La Dolorita", "Caucagüita", "Filas de Mariche"],
+            "Chacao": ["Chacao"],
+            "Baruta": ["Baruta", "El Cafetal", "Las Minas"],
+            "Guaicaipuro": ["Los Teques", "San Pedro", "Cecilio Acosta"],
+            "Los Salias": ["San Antonio de los Altos"],
+            "Plaza": ["Guarenas"],
+            "Zamora": ["Guatire"],
+            "Cristóbal Rojas": ["Charallave"],
+            "Independencia": ["Santa Teresa del Tuy"],
+            "Lander": ["Ocumare del Tuy"]
+        },
+        "Monagas": { "Maturín": ["Maturín", "San Simón", "Alto de los Godos", "Las Cocuizas"], "Piar": ["Aragua de Maturín"] },
+        "Nueva Esparta": { "Mariño": ["Porlamar"], "Maneiro": ["Pampatar", "Aguirre"], "Arismendi": ["La Asunción"] },
+        "Portuguesa": { "Páez": ["Acarigua"], "Araure": ["Araure"], "Guanare": ["Guanare"] },
+        "Sucre": { "Sucre": ["Cumaná", "Altagracia", "Ayacucho", "Santa Inés"], "Bermúdez": ["Carúpano"] },
+        "Táchira": { "San Cristóbal": ["San Cristóbal", "La Concordia", "San Juan Bautista", "Pedro María Morantes"], "Cárdenas": ["Táriba"], "Junín": ["Rubio"] },
+        "Trujillo": { "Trujillo": ["Trujillo"], "Valera": ["Valera", "Mercedes Díaz", "Juan Ignacio Montilla"], "Boconó": ["Boconó"] },
+        "Vargas": { "Vargas": ["La Guaira", "Maiquetía", "Catia La Mar", "Macuto", "Caraballeda", "Naiguatá"] },
+        "Yaracuy": { "San Felipe": ["San Felipe"], "Peña": ["Yaritagua"], "Bruzual": ["Chivacoa"] },
+        "Zulia": { "Maracaibo": ["Maracaibo", "Juana de Avila", "Olegario Villalobos", "Coquivacoa", "Chiquinquirá", "Cacique Mara"], "San Francisco": ["San Francisco", "Francisco Ochoa", "Domitila Flores"], "Cabimas": ["Cabimas", "Ambrosio", "Germán Ríos Linares"], "Lagunillas": ["Ciudad Ojeda"] },
+        "Distrito Capital": { "Libertador": ["Altagracia", "Antímano", "Caricuao", "Catedral", "Coche", "El Junquito", "El Paraíso", "El Recreo", "El Valle", "La Candelaria", "La Pastora", "La Vega", "Macarao", "San Agustín", "San Bernardino", "San José", "San Juan", "San Pedro", "Santa Rosalía", "Santa Teresa", "Sucre (Catia)", "23 de Enero"] }
+    };
+
+    function updateStates(country) {
+        const stateSel = document.getElementById('reg-state');
+        const munSel = document.getElementById('reg-municipality');
+        const parSel = document.getElementById('reg-parish');
+        const secInp = document.getElementById('reg-sector');
+        stateSel.innerHTML = '<option value="">Seleccione Estado</option>';
+        stateSel.style.display = country === "Venezuela" ? 'block' : 'none';
+        munSel.style.display = 'none'; parSel.style.display = 'none'; secInp.style.display = 'none';
+
+        if(country === "Venezuela") {
+            Object.keys(vzlaData).sort().forEach(s => {
+                stateSel.innerHTML += `<option value="${s}">${s}</option>`;
+            });
+        }
+    }
+
+    function updateMunicipalities(state) {
+        const munSel = document.getElementById('reg-municipality');
+        const parSel = document.getElementById('reg-parish');
+        const secInp = document.getElementById('reg-sector');
+        munSel.innerHTML = '<option value="">Seleccione Municipio</option>';
+        munSel.style.display = state ? 'block' : 'none';
+        parSel.style.display = 'none'; secInp.style.display = 'none';
+
+        if(state && vzlaData[state]) {
+            Object.keys(vzlaData[state]).sort().forEach(m => {
+                munSel.innerHTML += `<option value="${m}">${m}</option>`;
+            });
+        }
+    }
+
+    function updateParishes(mun) {
+        const state = document.getElementById('reg-state').value;
+        const parSel = document.getElementById('reg-parish');
+        const secInp = document.getElementById('reg-sector');
+        parSel.innerHTML = '<option value="">Seleccione Parroquia</option>';
+        parSel.style.display = mun ? 'block' : 'none';
+        secInp.style.display = mun ? 'block' : 'none';
+
+        if(state && mun && vzlaData[state][mun]) {
+            vzlaData[state][mun].sort().forEach(p => {
+                parSel.innerHTML += `<option value="${p}">${p}</option>`;
+            });
+        }
     }
 
     function changeLanguage(lang) { alert("Idioma: " + lang); }
