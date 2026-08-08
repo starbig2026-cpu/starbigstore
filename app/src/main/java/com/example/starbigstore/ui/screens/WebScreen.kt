@@ -39,7 +39,16 @@ class WebAppInterface(
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 // 1. Crear usuario en Firebase Auth
-                auth.createUserWithEmailAndPassword(email.trim(), pass).await()
+                try {
+                    auth.createUserWithEmailAndPassword(email.trim(), pass).await()
+                } catch (e: Exception) {
+                    if (e.localizedMessage?.contains("already in use") == true) {
+                        // Si ya existe en Auth pero no en Firestore, permitimos continuar para recrear el perfil
+                        android.util.Log.d("WebScreen", "Usuario ya existe en Auth, procediendo a recrear en Firestore")
+                    } else {
+                        throw e
+                    }
+                }
 
                 // 2. Guardar en Firestore con estado inicial
                 val userMap = hashMapOf<String, Any>(
