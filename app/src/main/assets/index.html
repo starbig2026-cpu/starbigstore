@@ -732,8 +732,8 @@
 
     document.getElementById('login-form').onsubmit = (e) => {
         e.preventDefault();
-        const email = document.getElementById('login-email').value;
-        const pass = document.getElementById('login-pass').value;
+        const email = document.getElementById('login-email').value.trim();
+        const pass = document.getElementById('login-pass').value.trim();
 
         showNotification("Autenticando...");
 
@@ -751,7 +751,7 @@
                 });
             }).catch(err => {
                 let msg = err.message;
-                if(msg.includes("invalid-login-credentials") || msg.includes("wrong-password") || msg.includes("user-not-found")) {
+                if(msg.includes("invalid-login-credentials") || msg.includes("wrong-password") || msg.includes("user-not-found") || msg.includes("invalid-credential")) {
                     msg = "Correo o contraseña incorrectos";
                 }
                 showNotification("Error: " + msg, "error");
@@ -836,11 +836,11 @@
         try {
             const photo64 = await getBase64(document.getElementById('reg-photo').files[0]);
             const id64 = await getBase64(document.getElementById('reg-id-card').files[0]);
-            const name = document.getElementById('reg-name').value;
-            const lastname = document.getElementById('reg-lastname').value;
-            const email = document.getElementById('reg-email').value;
+            const name = document.getElementById('reg-name').value.trim();
+            const lastname = document.getElementById('reg-lastname').value.trim();
+            const email = document.getElementById('reg-email').value.trim();
 
-            const fullPhone = document.getElementById('reg-phone-code').value + document.getElementById('reg-phone').value;
+            const fullPhone = document.getElementById('reg-phone-code').value + document.getElementById('reg-phone').value.trim();
             const country = document.getElementById('reg-country').value;
             const state = document.getElementById('reg-state').value;
             const mun = document.getElementById('reg-municipality').value;
@@ -848,21 +848,22 @@
             const sector = document.getElementById('reg-sector').value;
             const fullAddress = `${sector ? sector + ', ' : ''}${parish ? parish + ', ' : ''}${mun ? mun + ', ' : ''}${state ? state + ', ' : ''}${country}`;
 
-            const pass = document.getElementById('reg-pass').value;
+            const pass = document.getElementById('reg-pass').value.trim();
 
             if(window.AndroidApp) {
                 window.AndroidApp.registerUser(name, lastname, email, fullPhone, fullAddress, photo64, id64, pass);
             } else {
                 // Registro desde Navegador Puro
-                const emailCheck = await db.collection("registros_clientes").where("email", "==", email).get();
-                const phoneCheck = await db.collection("registros_clientes").where("phone", "==", fullPhone).get();
-
-                if(!emailCheck.empty || !phoneCheck.empty) {
-                    showNotification("Error: Correo o teléfono ya registrados", "error");
-                    btn.disabled = false; btn.innerText = originalText;
-                    return;
+                try {
+                    // 1. Crear en Firebase Auth
+                    await auth.createUserWithEmailAndPassword(email, pass);
+                } catch (authErr) {
+                    if (authErr.code !== 'auth/email-already-in-use') {
+                        throw authErr;
+                    }
                 }
 
+                // 2. Guardar en Firestore
                 const docRef = await db.collection("registros_clientes").add({
                     name: `${name} ${lastname}`,
                     firstName: name,
