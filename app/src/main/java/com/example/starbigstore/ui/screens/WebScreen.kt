@@ -7,7 +7,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.userProfileChangeRequest
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.storage.FirebaseStorage
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -171,32 +173,67 @@ class WebAppInterface(
     @JavascriptInterface
     fun updateUserPhoto(photoBase64: String) {
         val db = FirebaseFirestore.getInstance()
-        val email = FirebaseAuth.getInstance().currentUser?.email ?: return
+        val auth = FirebaseAuth.getInstance()
+        val currentUser = auth.currentUser ?: return
+        val email = currentUser.email ?: return
+
+        webView.post {
+            webView.evaluateJavascript("showNotification('🚀 ACTUALIZANDO FOTO...', 'success')", null)
+        }
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val client = OkHttpClient.Builder().connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS).build()
+                // 1. Sincronizar con Google Script (subir a Drive y actualizar Sheets)
+                val client = OkHttpClient.Builder()
+                    .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+                
                 val payload = org.json.JSONObject().apply {
                     put("action", "updatePhoto")
-                    put("email", email)
+                    put("sheetName", "USUARIOS")
+                    put("email", email.trim())
                     put("photoBase64", photoBase64)
                 }
-                val body = payload.toString().toRequestBody("application/json".toMediaType())
+                
+                val body = payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
                 val request = Request.Builder().url(googleSheetsUrl).post(body).build()
                 
                 client.newCall(request).execute().use { response ->
-                    if (response.isSuccessful) {
-                        val resJson = org.json.JSONObject(response.body?.string() ?: "{}")
+                    val responseStr = (response.body?.string() ?: "").trim()
+                    
+                    if (response.isSuccessful && responseStr.startsWith("{")) {
+                        val resJson = org.json.JSONObject(responseStr)
                         val photoUrl = resJson.optString("photoUrl", "")
+                        
                         if (photoUrl.isNotEmpty()) {
-                            db.collection("registros_clientes").whereEqualTo("email", email).get().await().documents.firstOrNull()?.reference?.update("photoUrl", photoUrl)
-                            webView.post {
-                                webView.evaluateJavascript("showNotification('✅ FOTO ACTUALIZADA'); location.reload();", null)
+                            // 2. Actualizar Firestore
+                            val userQuery = db.collection("registros_clientes").whereEqualTo("email", email.trim()).get().await()
+                            userQuery.documents.firstOrNull()?.reference?.update("photoUrl", photoUrl)?.await()
+                            
+                            // 3. Actualizar Perfil de Firebase Auth
+                            val profileUpdates = userProfileChangeRequest {
+                                photoUri = Uri.parse(photoUrl)
                             }
+                            currentUser.updateProfile(profileUpdates).await()
+
+                            webView.post {
+                                webView.evaluateJavascript("showNotification('✅ FOTO ACTUALIZADA CON ÉXITO'); location.reload();", null)
+                            }
+                        } else {
+                            throw Exception("EL SCRIPT NO DEVOLVIÓ URL")
                         }
+                    } else {
+                        throw Exception("ERROR EN SERVIDOR DE GOOGLE")
                     }
                 }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                android.util.Log.e("WebScreen", "Update Error", e)
+                webView.post {
+                    val msg = e.localizedMessage?.uppercase() ?: "ERROR AL ACTUALIZAR"
+                    webView.evaluateJavascript("showNotification('$msg', 'error')", null)
+                }
+            }
         }
     }
 }
