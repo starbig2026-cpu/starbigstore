@@ -474,6 +474,8 @@ private fun deleteCustomer(reg: CustomerRegistration, db: FirebaseFirestore) {
                 put("action", "delete")
                 put("email", reg.email.trim())
                 put("deleteFromAuth", true) 
+                put("photoUrl", reg.photoUrl)
+                put("idCardUrl", reg.idCardUrl)
             }
             val request = Request.Builder()
                 .url(GOOGLE_SHEETS_URL)

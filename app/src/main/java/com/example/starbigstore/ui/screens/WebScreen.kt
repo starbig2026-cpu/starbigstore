@@ -151,8 +151,9 @@ class WebAppInterface(
                     val u = docs.documents[0]
                     val points = u.getLong("points") ?: 0
                     val status = u.getString("status") ?: "unverified"
+                    val userDataJson = org.json.JSONObject(u.data ?: emptyMap<String, Any>()).toString()
                     webView.post { 
-                        webView.evaluateJavascript("window.updateUserProfile('${u.getString("name")}', '$email', '${u.getString("photoUrl")}', '$status', $points)", null) 
+                        webView.evaluateJavascript("window.updateUserProfile('${u.getString("name")}', '$email', '${u.getString("photoUrl")}', '$status', $points, $userDataJson)", null)
                     }
                 } else {
                     webView.post {

@@ -266,6 +266,45 @@
     <img id="light-box-img" src="" style="max-width:95%; max-height:90%; border:2px solid #c5a059;" referrerpolicy="no-referrer" alt="IMG">
 </div>
 
+<!-- MODAL EDITAR PERFIL -->
+<div id="edit-profile-overlay" class="modal" style="background:rgba(0,0,0,0.8); z-index:7000;">
+    <div class="modal-content" style="background:#121216; border:1px solid #C5A059; max-width: 450px;">
+        <h2 style="color:white; margin-bottom:20px; font-weight: 900; letter-spacing: 1px;">EDITAR PERFIL</h2>
+
+        <div class="input-group">
+            <label for="edit-name">Nombre</label>
+            <input type="text" id="edit-name" style="width:100%; background:#08080a; color:white; border:1px solid #c5a05933; padding:10px; margin-bottom:15px;">
+        </div>
+
+        <div class="input-group">
+            <label for="edit-lastname">Apellido</label>
+            <input type="text" id="edit-lastname" style="width:100%; background:#08080a; color:white; border:1px solid #c5a05933; padding:10px; margin-bottom:15px;">
+        </div>
+
+        <div class="input-group">
+            <label for="edit-phone">WhatsApp / Teléfono</label>
+            <input type="tel" id="edit-phone" style="width:100%; background:#08080a; color:white; border:1px solid #c5a05933; padding:10px; margin-bottom:15px;">
+        </div>
+
+        <div class="input-group">
+            <label for="edit-country">Ubicación</label>
+            <select id="edit-country" onchange="updateEditStates(this.value)" style="width: 100%; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; margin-bottom: 5px;">
+                <option value="">Seleccione País</option>
+                <option value="Venezuela">Venezuela</option>
+                <option value="Colombia">Colombia</option>
+                <option value="USA">USA</option>
+            </select>
+            <select id="edit-state" aria-label="Estado" onchange="updateEditMunicipalities(this.value)" style="width: 100%; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; margin-bottom: 5px; display: none;"></select>
+            <select id="edit-municipality" aria-label="Municipio" onchange="updateEditParishes(this.value)" style="width: 100%; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; margin-bottom: 5px; display: none;"></select>
+            <select id="edit-parish" aria-label="Parroquia" style="width: 100%; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; margin-bottom: 5px; display: none;"></select>
+            <input type="text" id="edit-sector" aria-label="Sector" placeholder="Sector / Punto de Referencia" style="width: 100%; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; margin-bottom: 20px;">
+        </div>
+
+        <button id="btn-save-profile" onclick="saveProfileChanges()" class="btn-primary full-width">GUARDAR CAMBIOS</button>
+        <button onclick="document.getElementById('edit-profile-overlay').style.display='none'" class="btn-secondary full-width" style="margin-top:10px;">CANCELAR</button>
+    </div>
+</div>
+
 <script>
     const firebaseConfig = { apiKey: "AIzaSyAdKUDDG7c6jf_QWn7DVwnm8BIZbiIXgcg", authDomain: "starbigstore.firebaseapp.com", projectId: "starbigstore", storageBucket: "starbigstore.firebasestorage.app", messagingSenderId: "94012933332", appId: "1:94012933332:web:a245585b5465666f" };
     firebase.initializeApp(firebaseConfig);
@@ -276,6 +315,7 @@
     let tasaBcv = 36.5;
     let allProducts = [];
     let userStatus = "guest";
+    let currentUserData = null;
     let onlineHistory = Array(20).fill(1);
     let offlineHistory = Array(20).fill(0);
 
@@ -291,7 +331,7 @@
             db.collection("registros_clientes").where("email", "==", user.email).get().then(docs => {
                 if (!docs.empty) {
                     const u = docs.docs[0].data();
-                    window.updateUserProfile(u.name, user.email, u.photoUrl, u.status, u.points || 0);
+                    window.updateUserProfile(u.name, user.email, u.photoUrl, u.status, u.points || 0, u);
                 }
             });
         }
@@ -633,16 +673,22 @@
             showNotification("✅ Usuario Activado");
         } else if(confirm("¿Seguro que desea eliminar este usuario de TODAS las bases de datos (Firebase, Excel, Auth)?")) {
             try {
+                // Obtener datos antes de borrar para limpiar Drive
+                const userDoc = await db.collection("registros_clientes").doc(docId).get();
+                const uData = userDoc.data();
+
                 // 1. Borrar de Firestore
                 await db.collection("registros_clientes").doc(docId).delete();
 
-                // 2. Notificar al backend (Excel y Auth)
+                // 2. Notificar al backend (Excel, Auth y Drive)
                 fetch(googleSheetsUrl, {
                     method:'POST',
                     body: JSON.stringify({
                         action: "delete",
                         email: email,
-                        deleteFromAuth: true // Instrucción para tu script de Google
+                        deleteFromAuth: true,
+                        photoUrl: uData.photoUrl,
+                        idCardUrl: uData.idCardUrl
                     })
                 });
 
@@ -757,7 +803,7 @@
                 db.collection("registros_clientes").where("email", "==", email).get().then(docs => {
                     if(!docs.empty) {
                         const u = docs.docs[0].data();
-                        window.updateUserProfile(u.name, email, u.photoUrl, u.status, u.points || 0);
+                        window.updateUserProfile(u.name, email, u.photoUrl, u.status, u.points || 0, u);
                         showNotification("Bienvenido, " + u.name);
                         setTimeout(closeAuth, 1000);
                     }
@@ -779,8 +825,10 @@
         }
     };
 
-    window.updateUserProfile = function(name, email, photoUrl, status, points = 0) {
+    window.updateUserProfile = function(name, email, photoUrl, status, points = 0, fullData = null) {
         userStatus = status;
+        if(fullData) currentUserData = { ...fullData, email, photoUrl, status, points };
+
         document.getElementById('profile-name').innerText = name;
         document.getElementById('profile-status').innerText = status.toUpperCase();
         document.getElementById('user-points').innerText = points;
@@ -806,7 +854,85 @@
     };
 
     function editProfile() {
-        showNotification("EDICIÓN DE PERFIL: Contacte a soporte para cambios de datos maestros.");
+        if(!currentUserData) { showNotification("Cargando datos...", "error"); return; }
+
+        document.getElementById('edit-name').value = currentUserData.firstName || currentUserData.name.split(' ')[0] || "";
+        document.getElementById('edit-lastname').value = currentUserData.lastName || currentUserData.name.split(' ').slice(1).join(' ') || "";
+        document.getElementById('edit-phone').value = currentUserData.phone || "";
+
+        // Reset de selects de ubicación
+        document.getElementById('edit-country').value = "";
+        document.getElementById('edit-state').style.display = 'none';
+        document.getElementById('edit-municipality').style.display = 'none';
+        document.getElementById('edit-parish').style.display = 'none';
+        document.getElementById('edit-sector').value = "";
+
+        document.getElementById('edit-profile-overlay').style.display = 'block';
+    }
+
+    async function saveProfileChanges() {
+        const btn = document.getElementById('btn-save-profile');
+        const firstName = document.getElementById('edit-name').value.trim();
+        const lastName = document.getElementById('edit-lastname').value.trim();
+        const phone = document.getElementById('edit-phone').value.trim();
+
+        const country = document.getElementById('edit-country').value;
+        const state = document.getElementById('edit-state').value;
+        const mun = document.getElementById('edit-municipality').value;
+        const parish = document.getElementById('edit-parish').value;
+        const sector = document.getElementById('edit-sector').value;
+
+        if(!firstName || !phone) {
+            showNotification("Nombre y Teléfono son obligatorios", "error");
+            return;
+        }
+
+        let address = currentUserData.address; // Por defecto mantenemos la anterior
+        if(country) {
+            address = `${sector ? sector + ', ' : ''}${parish ? parish + ', ' : ''}${mun ? mun + ', ' : ''}${state ? state + ', ' : ''}${country}`;
+        }
+
+        btn.disabled = true; btn.innerText = "GUARDANDO...";
+
+        try {
+            const email = currentUserData.email;
+            const newName = `${firstName} ${lastName}`;
+
+            // 1. Actualizar en Firebase Firestore
+            const snap = await db.collection("registros_clientes").where("email", "==", email).get();
+            if(!snap.empty) {
+                await snap.docs[0].ref.update({
+                    firstName, lastName, name: newName, phone, address
+                });
+            }
+
+            // 2. Sincronizar con Google Sheets (Opcional pero recomendado)
+            fetch(googleSheetsUrl, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: "updateProfile",
+                    email: email,
+                    firstName, lastName, phone, address
+                })
+            });
+
+            // 3. Actualizar UI Local
+            currentUserData.firstName = firstName;
+            currentUserData.lastName = lastName;
+            currentUserData.name = newName;
+            currentUserData.phone = phone;
+            currentUserData.address = address;
+
+            document.getElementById('profile-name').innerText = newName;
+
+            showNotification("✅ PERFIL ACTUALIZADO");
+            document.getElementById('edit-profile-overlay').style.display = 'none';
+        } catch(err) {
+            console.error(err);
+            showNotification("ERROR AL GUARDAR CAMBIOS", "error");
+        } finally {
+            btn.disabled = false; btn.innerText = "GUARDAR CAMBIOS";
+        }
     }
 
     async function changePhoto() {
@@ -1063,6 +1189,49 @@
         parSel.innerHTML = '<option value="">Seleccione Parroquia</option>';
         parSel.style.display = mun ? 'block' : 'none';
         secInp.style.display = mun ? 'block' : 'none';
+
+        if(state && mun && vzlaData[state][mun]) {
+            vzlaData[state][mun].sort().forEach(p => {
+                parSel.innerHTML += `<option value="${p}">${p}</option>`;
+            });
+        }
+    }
+
+    // FUNCIONES PARA EDICIÓN DE PERFIL
+    function updateEditStates(country) {
+        const stateSel = document.getElementById('edit-state');
+        const munSel = document.getElementById('edit-municipality');
+        const parSel = document.getElementById('edit-parish');
+        stateSel.innerHTML = '<option value="">Seleccione Estado</option>';
+        stateSel.style.display = country === "Venezuela" ? 'block' : 'none';
+        munSel.style.display = 'none'; parSel.style.display = 'none';
+
+        if(country === "Venezuela") {
+            Object.keys(vzlaData).sort().forEach(s => {
+                stateSel.innerHTML += `<option value="${s}">${s}</option>`;
+            });
+        }
+    }
+
+    function updateEditMunicipalities(state) {
+        const munSel = document.getElementById('edit-municipality');
+        const parSel = document.getElementById('edit-parish');
+        munSel.innerHTML = '<option value="">Seleccione Municipio</option>';
+        munSel.style.display = state ? 'block' : 'none';
+        parSel.style.display = 'none';
+
+        if(state && vzlaData[state]) {
+            Object.keys(vzlaData[state]).sort().forEach(m => {
+                munSel.innerHTML += `<option value="${m}">${m}</option>`;
+            });
+        }
+    }
+
+    function updateEditParishes(mun) {
+        const state = document.getElementById('edit-state').value;
+        const parSel = document.getElementById('edit-parish');
+        parSel.innerHTML = '<option value="">Seleccione Parroquia</option>';
+        parSel.style.display = mun ? 'block' : 'none';
 
         if(state && mun && vzlaData[state][mun]) {
             vzlaData[state][mun].sort().forEach(p => {
