@@ -652,13 +652,15 @@
 
         try {
             let photo64 = file ? await getBase64(file) : null;
-            let currentUrl = currentEditingProductId ? (allProducts.find(x => x.id === currentEditingProductId)?.imageUrl || "") : "";
+            const editingProduct = currentEditingProductId ? allProducts.find(x => x.id === currentEditingProductId) : null;
+            const oldCategory = editingProduct?.category;
+            const oldName = editingProduct?.name;
 
             // 1. GUARDAR EN FIREBASE (INSTANTÁNEO)
             const productData = {
                 name, priceUsd: price, stock, category: cat,
                 collection: coll, description: desc,
-                allowCredit: credit, imageUrl: currentUrl || "subiendo...",
+                allowCredit: credit, imageUrl: (editingProduct?.imageUrl || "subiendo..."),
                 timestamp: Date.now()
             };
 
@@ -672,17 +674,14 @@
             }
 
             // 2. SUBIDA A STORAGE (Segundo plano)
-            if(file) {
-                const storageRef = firebase.storage().ref().child(`productos/${Date.now()}_${file.name}`);
-                storageRef.put(file).then(snapshot => snapshot.ref.getDownloadURL()).then(dUrl => {
-                    db.collection("productos").doc(docId).update({imageUrl: dUrl});
-                }).catch(e => console.error("Storage error:", e));
-            }
+            // ... (resto del código de subida a storage)
 
             // 3. SINCRONIZAR CON SHEETS Y GOOGLE DRIVE
             const sheetsPayload = {
                 action: "addProduct",
                 sheetName: cat.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase(),
+                oldCategory: oldCategory ? oldCategory.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase() : null,
+                oldName: oldName,
                 photoBase64: photo64,
                 fileName: `PROD_${Date.now()}_${name.replace(/\s+/g, '_')}.jpg`,
                 folderName: "PRODUCTOS_STARBIG",

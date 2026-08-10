@@ -262,6 +262,10 @@ fun AdminListContent() {
         }
 
         if (showAddProductDialog || productToEdit != null) {
+            val oldCategory = productToEdit?.category
+            val oldName = productToEdit?.name
+            val isEdit = productToEdit != null
+
             AddProductDialog(productToEdit, { showAddProductDialog = false; productToEdit = null }, { newProd, uri ->
                 isLoading = true
                 CoroutineScope(Dispatchers.IO).launch {
@@ -289,7 +293,7 @@ fun AdminListContent() {
                         }
                         
                         val finalProd = newProd.copy(imageUrl = url)
-                        val docId = if (productToEdit != null) {
+                        val docId = if (isEdit) {
                             db.collection("productos").document(productToEdit!!.id).set(finalProd).await()
                             productToEdit!!.id
                         } else {
@@ -315,6 +319,15 @@ fun AdminListContent() {
                                 val json = org.json.JSONObject().apply {
                                     put("action", "addProduct")
                                     put("sheetName", normalizedCategory)
+
+                                    if (isEdit) {
+                                        val normOldCat = if (oldCategory != null) java.text.Normalizer.normalize(oldCategory, java.text.Normalizer.Form.NFD)
+                                            .replace("[\\u0300-\\u036f]+".toRegex(), "")
+                                            .uppercase() else null
+                                        put("oldCategory", normOldCat)
+                                        put("oldName", oldName)
+                                    }
+
                                     put("photoBase64", base64)
                                     put("fileName", "PROD_${System.currentTimeMillis()}_${finalProd.name.replace(" ", "_")}.jpg")
                                     put("folderName", "PRODUCTOS_STARBIG")
