@@ -266,6 +266,44 @@
     <img id="light-box-img" src="" style="max-width:95%; max-height:90%; border:2px solid #c5a059;" referrerpolicy="no-referrer" alt="IMG">
 </div>
 
+<!-- MODAL DETALLE DE PRODUCTO -->
+<div id="product-detail-modal" class="modal" style="background: rgba(13, 13, 17, 0.98);">
+    <div class="modal-content" style="max-width: 900px; padding-top: 60px;">
+        <span class="close-modal" onclick="closeProductDetail()">&times;</span>
+        <div class="product-detail-container" style="display: flex; flex-wrap: wrap; gap: 40px;">
+            <div class="detail-img-box" style="flex: 1.2; min-width: 300px;">
+                <img id="detail-img" src="" style="width: 100%; border-radius: 20px; border: 1px solid rgba(197, 160, 89, 0.3); box-shadow: 0 20px 40px rgba(0,0,0,0.6); cursor: pointer;" onclick="expandImage(this.src)" alt="Producto">
+            </div>
+            <div class="detail-info-box" style="flex: 1; min-width: 300px; display: flex; flex-direction: column; justify-content: center;">
+                <span id="detail-category" class="tag" style="margin-bottom: 10px;">CATEGORÍA</span>
+                <h2 id="detail-name" style="font-family: 'Playfair Display', serif; font-size: 2.2rem; margin-bottom: 15px; color: white; letter-spacing: 1px;">NOMBRE PRODUCTO</h2>
+                <div style="display: flex; align-items: baseline; gap: 15px; margin-bottom: 25px;">
+                    <span id="detail-price-usd" style="font-size: 2rem; color: #c5a059; font-weight: 800;">$0.00</span>
+                    <span id="detail-price-bss" style="font-size: 1.1rem; color: #888;">(0.00 BSS)</span>
+                </div>
+
+                <div style="background: rgba(255,255,255,0.03); padding: 20px; border-radius: 15px; border-left: 4px solid #c5a059; margin-bottom: 25px;">
+                    <p id="detail-desc" style="color: #ccc; line-height: 1.8; font-size: 0.9rem; font-weight: 300;">Descripción detallada aquí...</p>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 30px;">
+                    <div style="background: #1a1a24; padding: 15px; border-radius: 12px; text-align: center;">
+                        <div style="font-size: 0.6rem; color: #888; text-transform: uppercase; margin-bottom: 5px; font-weight: 800;">Stock</div>
+                        <div id="detail-stock" style="font-weight: 800; color: #fff; font-size: 0.9rem;">0 UNIDADES</div>
+                    </div>
+                    <div style="background: #1a1a24; padding: 15px; border-radius: 12px; text-align: center;">
+                        <div style="font-size: 0.6rem; color: #888; text-transform: uppercase; margin-bottom: 5px; font-weight: 800;">Pago</div>
+                        <div id="detail-credit" style="font-weight: 800; color: #c5a059; font-size: 0.8rem;">APTO CRÉDITO</div>
+                    </div>
+                </div>
+
+                <button onclick="checkAccess()" class="btn-primary full-width" style="padding: 20px; font-size: 1rem; border-radius: 15px;">RESERVAR AHORA</button>
+                <p style="text-align: center; margin-top: 15px; color: #555; font-size: 0.7rem; letter-spacing: 2px; font-weight: 800;">STARBIG STORE | BOUTIQUE EXCLUSIVA</p>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- MODAL EDITAR PERFIL -->
 <div id="edit-profile-overlay" class="modal" style="background:rgba(0,0,0,0.8); z-index:7000;">
     <div class="modal-content" style="background:#121216; border:1px solid #C5A059; max-width: 450px;">
@@ -424,7 +462,7 @@
             const bss = (p.priceUsd * tasaBcv).toFixed(2);
             const imgUrl = fixDriveUrl(getImageUrl(p));
             grid.innerHTML += `
-                <div class="product-card">
+                <div class="product-card" onclick="openProductDetail('${p.id}')" style="cursor: pointer;">
                     <div class="badge">${p.allowCredit ? 'Crédito' : (p.collection || 'Premium')}</div>
                     <div class="product-img">
                         <img src="${imgUrl}" alt="${p.name}" style="width:100%; height:100%; object-fit:cover; border-radius:15px;" onerror="this.src='https://via.placeholder.com/200?text=STARBIG'" referrerpolicy="no-referrer">
@@ -432,10 +470,32 @@
                     <div class="product-info">
                         <h3>${p.name}</h3>
                         <p class="product-price">$${p.priceUsd} <span style="font-size:10px; color:#aaa;">(${bss} BSS)</span></p>
-                        <button onclick="checkAccess()" class="add-btn">RESERVAR</button>
+                        <button class="add-btn">VER DETALLES</button>
                     </div>
                 </div>`;
         });
+    }
+
+    function openProductDetail(id) {
+        const p = allProducts.find(x => x.id === id);
+        if(!p) return;
+
+        document.getElementById('detail-img').src = fixDriveUrl(getImageUrl(p));
+        document.getElementById('detail-name').innerText = p.name.toUpperCase();
+        document.getElementById('detail-category').innerText = (p.category + " | " + (p.collection || "PREMIUM")).toUpperCase();
+        document.getElementById('detail-price-usd').innerText = "$" + p.priceUsd;
+        document.getElementById('detail-price-bss').innerText = "(" + (p.priceUsd * tasaBcv).toFixed(2) + " BSS)";
+        document.getElementById('detail-desc').innerText = p.description || "Sin descripción disponible para este producto exclusivo de Starbig Store.";
+        document.getElementById('detail-stock').innerText = (p.stock || 0) + " UNIDADES DISPONIBLES";
+        document.getElementById('detail-credit').innerText = p.allowCredit ? "APTO PARA CRÉDITO" : "SOLO PAGO CONTADO";
+        document.getElementById('detail-credit').style.color = p.allowCredit ? "#c5a059" : "#ff4444";
+
+        document.getElementById('product-detail-modal').style.display = 'block';
+        lucide.createIcons();
+    }
+
+    function closeProductDetail() {
+        document.getElementById('product-detail-modal').style.display = 'none';
     }
 
     function filterByCategory(cat) {
