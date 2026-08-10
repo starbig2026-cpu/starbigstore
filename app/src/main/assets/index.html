@@ -119,17 +119,36 @@
     </div>
 </div>
 
-<!-- MODAL SELECCIÓN DE SOPORTE -->
+<!-- MODAL SELECCIÓN DE SOPORTE Y PAGOS -->
 <div id="contact-choice-modal" class="modal" style="background:rgba(0,0,0,0.8); z-index:9500;">
-    <div class="modal-content" style="background:#121216; border:1px solid #C5A059; max-width: 400px; text-align: center;">
+    <div class="modal-content" style="background:#121216; border:1px solid #C5A059; max-width: 450px; text-align: center; padding: 40px 20px;">
         <span class="close-modal" onclick="document.getElementById('contact-choice-modal').style.display='none'">&times;</span>
-        <h2 style="color:white; margin-bottom:20px; font-weight: 900; letter-spacing: 1px;">CONTACTAR SOPORTE</h2>
-        <p style="color:#888; font-size: 0.8rem; margin-bottom: 25px;">¿Con quién deseas hablar?</p>
-        <div style="display: flex; flex-direction: column; gap: 15px;">
-            <button onclick="contactWhatsapp('+584244019899')" class="btn-primary full-width" style="background:#25D366; border:none; color:white;">
+
+        <h2 style="color:white; margin-bottom:10px; font-weight: 900; letter-spacing: 1px;">FINALIZAR PEDIDO</h2>
+        <p style="color:#888; font-size: 0.7rem; margin-bottom: 25px; letter-spacing: 1px;">PAGA Y NOTIFICA A NUESTROS AGENTES</p>
+
+        <!-- SECCIÓN MÉTODOS DE PAGO -->
+        <div style="margin-bottom: 30px; background: rgba(255,255,255,0.02); padding: 20px; border-radius: 15px; border: 1px solid rgba(197, 160, 89, 0.1);">
+            <p style="color:#C5A059; font-size: 0.6rem; font-weight: 800; margin-bottom: 15px; letter-spacing: 2px;">MÉTODOS DE PAGO DISPONIBLES</p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <button onclick="showPayInfo('zelle')" style="background:#6A1B9A; color:white; border:none; padding:12px; font-size:10px; font-weight:800; border-radius:8px; cursor:pointer;">ZELLE</button>
+                <button onclick="showPayInfo('binance')" style="background:#F3BA2F; color:black; border:none; padding:12px; font-size:10px; font-weight:800; border-radius:8px; cursor:pointer;">BINANCE</button>
+                <button onclick="showPayInfo('zinli')" style="background:#222; color:white; border:1px solid #444; padding:12px; font-size:10px; font-weight:800; border-radius:8px; cursor:pointer;">ZINLI</button>
+                <button onclick="showPayInfo('pagomovil')" style="background:#C5A059; color:black; border:none; padding:12px; font-size:10px; font-weight:800; border-radius:8px; cursor:pointer;">PAGO MÓVIL</button>
+            </div>
+
+            <!-- CONTENEDOR DINÁMICO DE DATOS -->
+            <div id="pay-details-box" style="display:none; margin-top:15px; padding:15px; background:#000; border:1px dashed #C5A059; color:#fff; font-size:11px; text-align:left; line-height:1.6;">
+                <!-- Se llena con JS -->
+            </div>
+        </div>
+
+        <p style="color:#888; font-size: 0.6rem; font-weight: 800; margin-bottom: 15px; letter-spacing: 2px;">CONTACTAR SOPORTE</p>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+            <button onclick="contactWhatsapp('+584244019899')" class="btn-primary full-width" style="background:#25D366; border:none; color:white; height: 50px;">
                 <i data-lucide="message-circle"></i> SOPORTE VENTAS
             </button>
-            <button onclick="contactWhatsapp('+584124136485')" class="btn-primary full-width" style="background:#25D366; border:none; color:white;">
+            <button onclick="contactWhatsapp('+584124136485')" class="btn-primary full-width" style="background:#25D366; border:none; color:white; height: 50px;">
                 <i data-lucide="message-circle"></i> SOPORTE TÉCNICO
             </button>
         </div>
@@ -744,6 +763,28 @@
             closeProductDetail();
         }
     }
+
+    // FUNCIÓN PARA RECIBIR PEDIDOS DESDE EL CATÁLOGO NATIVO DE LA APP
+    window.addToCartFromNative = function(productId, qty, paymentMethod) {
+        const p = allProducts.find(x => x.id === productId);
+        if (p) {
+            const method = paymentMethod.toLowerCase().includes('crédito') ? 'credit' : 'cash';
+            const cartItem = {
+                ...p,
+                buyQty: qty,
+                paymentMethod: method
+            };
+
+            const existingIndex = cart.findIndex(item => item.id === productId && item.paymentMethod === method);
+            if (existingIndex > -1) {
+                cart[existingIndex].buyQty += qty;
+            } else {
+                cart.push(cartItem);
+            }
+            updateCartUI();
+            showNotification(`✅ ${qty}x ${p.name.toUpperCase()} AGREGADO AL CARRITO`);
+        }
+    };
 
     function updateCartUI() {
         const count = cart.reduce((sum, item) => sum + item.buyQty, 0);
@@ -1842,7 +1883,25 @@
     function openContactChoice(msg = "") {
         pendingWhatsappMsg = msg;
         document.getElementById('contact-choice-modal').style.display = 'block';
+        document.getElementById('pay-details-box').style.display = 'none'; // Reset
         lucide.createIcons();
+    }
+
+    function showPayInfo(method) {
+        const box = document.getElementById('pay-details-box');
+        box.style.display = 'block';
+
+        let html = "";
+        if(method === 'zelle') {
+            html = "<strong>DATOS ZELLE:</strong><br>Correo: pagos@starbigstore.com<br>Titular: STARBIG STORE LLC";
+        } else if(method === 'binance') {
+            html = "<strong>DATOS BINANCE (Pay ID):</strong><br>ID: 940129333<br>Titular: STARBIG Boutique";
+        } else if(method === 'zinli') {
+            html = "<strong>DATOS ZINLI:</strong><br>Correo: fashion@starbigstore.com";
+        } else if(method === 'pagomovil') {
+            html = "<strong>PAGO MÓVIL:</strong><br>Banco: BANCAMIGA (0172)<br>Tlf: 0424-4019899<br>C.I: 25.123.456";
+        }
+        box.innerHTML = html;
     }
 
     function contactWhatsapp(number) {

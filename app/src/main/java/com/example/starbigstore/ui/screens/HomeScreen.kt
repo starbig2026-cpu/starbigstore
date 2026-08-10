@@ -39,7 +39,11 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 
 @Composable
-fun HomeScreen(onNavigateToLogin: () -> Unit, modifier: Modifier = Modifier) {
+fun HomeScreen(
+    onNavigateToLogin: () -> Unit,
+    onAddToCart: (String, Int, String) -> Unit,
+    modifier: Modifier = Modifier
+) {
     val context = LocalContext.current
     var products by remember { mutableStateOf(listOf<Product>()) }
     var selectedProduct by remember { mutableStateOf<Product?>(null) }
@@ -151,9 +155,11 @@ fun HomeScreen(onNavigateToLogin: () -> Unit, modifier: Modifier = Modifier) {
             userPoints = userPoints,
             onDismiss = { productForQuantity = null },
             onConfirm = { qty, method ->
+                val id = productForQuantity?.id ?: ""
                 val name = productForQuantity?.name ?: ""
                 productForQuantity = null
-                Toast.makeText(context, "✅ ${qty}x $name ($method) AGREGADO", Toast.LENGTH_LONG).show()
+                onAddToCart(id, qty, method)
+                Toast.makeText(context, "✅ ${qty}x $name ($method) AGREGADO AL CARRITO", Toast.LENGTH_LONG).show()
             }
         )
     }

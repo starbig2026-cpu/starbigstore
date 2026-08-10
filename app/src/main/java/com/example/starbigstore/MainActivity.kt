@@ -67,6 +67,7 @@ class MainActivity : FragmentActivity() {
                 var currentTab by remember { mutableIntStateOf(0) }
                 var shouldShowAuth by remember { mutableStateOf(false) }
                 var shouldShowCart by remember { mutableStateOf(false) }
+                var addToCartCommand by remember { mutableStateOf<Triple<String, Int, String>?>(null) }
                 
                 val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
                     uri?.let { filePathCallback?.onReceiveValue(arrayOf(it)) } ?: filePathCallback?.onReceiveValue(null)
@@ -145,7 +146,9 @@ class MainActivity : FragmentActivity() {
                                 onAuthTriggered = { shouldShowAuth = false },
                                 triggerCart = shouldShowCart,
                                 onCartTriggered = { shouldShowCart = false },
-                                currentTab = currentTab
+                                currentTab = currentTab,
+                                addToCartCommand = addToCartCommand,
+                                onAddToCartProcessed = { addToCartCommand = null }
                             )
 
                             // Capa de Pantallas Nativas
@@ -160,6 +163,9 @@ class MainActivity : FragmentActivity() {
                                             onNavigateToLogin = {
                                                 shouldShowAuth = true
                                                 currentTab = 0
+                                            },
+                                            onAddToCart = { id, qty, method ->
+                                                addToCartCommand = Triple(id, qty, method)
                                             },
                                             modifier = Modifier.fillMaxSize()
                                         )

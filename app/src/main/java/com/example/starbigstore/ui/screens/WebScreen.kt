@@ -269,7 +269,9 @@ fun WebScreen(
     onAuthTriggered: () -> Unit = {},
     triggerCart: Boolean = false,
     onCartTriggered: () -> Unit = {},
-    currentTab: Int = 0
+    currentTab: Int = 0,
+    addToCartCommand: Triple<String, Int, String>? = null,
+    onAddToCartProcessed: () -> Unit = {}
 ) {
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
 
@@ -284,6 +286,15 @@ fun WebScreen(
         if (triggerCart && webViewInstance != null) {
             webViewInstance?.evaluateJavascript("toggleCart()", null)
             onCartTriggered()
+        }
+    }
+
+    LaunchedEffect(addToCartCommand, webViewInstance) {
+        addToCartCommand?.let { (id, qty, method) ->
+            if (webViewInstance != null) {
+                webViewInstance?.evaluateJavascript("if(window.addToCartFromNative) window.addToCartFromNative('$id', $qty, '$method')", null)
+                onAddToCartProcessed()
+            }
         }
     }
 
