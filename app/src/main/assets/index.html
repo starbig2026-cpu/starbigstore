@@ -21,6 +21,10 @@
                 <option value="es">ES</option>
                 <option value="en">EN</option>
             </select>
+            <button id="cart-nav-btn" class="icon-btn" onclick="toggleCart()" aria-label="Carrito" style="position: relative;">
+                <i data-lucide="shopping-cart"></i>
+                <span id="cart-count" style="position: absolute; top: -5px; right: -5px; background: #ff4444; color: white; font-size: 10px; padding: 2px 6px; border-radius: 50%; display: none;">0</span>
+            </button>
             <button class="icon-btn" onclick="openAuth()" aria-label="Usuario">
             <span id="user-photo-container" style="display: none; width: 32px; height: 32px; border-radius: 50%; overflow: hidden; border: 1px solid #c5a059;">
                 <img id="user-photo-nav" src="" style="width: 100%; height: 100%; object-fit: cover;" alt="P" referrerpolicy="no-referrer">
@@ -109,9 +113,27 @@
                 <button onclick="viewPoints()" class="menu-item-btn"><i data-lucide="award"></i> PUNTOS: <span id="user-points">0</span></button>
             </div>
 
-            <button id="whatsapp-verify-btn" onclick="contactAdmin()" class="btn-primary full-width" style="background:#25D366; margin-top:25px; display:none;">WHATSAPP VERIFICACIÓN</button>
+            <button id="whatsapp-verify-btn" onclick="openContactChoice()" class="btn-primary full-width" style="background:#25D366; margin-top:25px; display:none;">WHATSAPP VERIFICACIÓN</button>
             <button onclick="logout()" class="btn-secondary full-width" style="margin-top:15px;">CERRAR SESIÓN</button>
         </div>
+    </div>
+</div>
+
+<!-- MODAL SELECCIÓN DE SOPORTE -->
+<div id="contact-choice-modal" class="modal" style="background:rgba(0,0,0,0.8); z-index:9500;">
+    <div class="modal-content" style="background:#121216; border:1px solid #C5A059; max-width: 400px; text-align: center;">
+        <span class="close-modal" onclick="document.getElementById('contact-choice-modal').style.display='none'">&times;</span>
+        <h2 style="color:white; margin-bottom:20px; font-weight: 900; letter-spacing: 1px;">CONTACTAR SOPORTE</h2>
+        <p style="color:#888; font-size: 0.8rem; margin-bottom: 25px;">¿Con quién deseas hablar?</p>
+        <div style="display: flex; flex-direction: column; gap: 15px;">
+            <button onclick="contactWhatsapp('+584244019899')" class="btn-primary full-width" style="background:#25D366; border:none; color:white;">
+                <i data-lucide="message-circle"></i> SOPORTE VENTAS
+            </button>
+            <button onclick="contactWhatsapp('+584124136485')" class="btn-primary full-width" style="background:#25D366; border:none; color:white;">
+                <i data-lucide="message-circle"></i> SOPORTE TÉCNICO
+            </button>
+        </div>
+        <button onclick="document.getElementById('contact-choice-modal').style.display='none'" class="btn-secondary full-width" style="margin-top:20px; border:none; color:#666;">CANCELAR</button>
     </div>
 </div>
 
@@ -462,6 +484,12 @@
     lucide.createIcons();
     listenToTasa();
     startTrafficMonitor();
+
+    // Ocultar botón de carrito en navbar si estamos dentro de la App (porque ya tiene su barra inferior)
+    if(window.AndroidApp) {
+        const navCartBtn = document.getElementById('cart-nav-btn');
+        if(navCartBtn) navCartBtn.style.display = 'none';
+    }
 
     auth.onAuthStateChanged(user => {
         if (user) {
@@ -875,9 +903,8 @@
 
         const message = `🛍️ NUEVO PEDIDO STARBIG STORE\n\nOrden: ${orderId}\nCliente: ${currentUserData?.name}\nItems: ${itemsList}\nTotal: ${totalUsd} (${totalBss})\n\nPor favor, contacte para concretar el pago.`;
 
-        // Abrimos chat con el primer número de soporte
-        const waUrl = `https://wa.me/584244019899?text=${encodeURIComponent(message)}`;
-        window.open(waUrl);
+        // Abrimos el selector de contacto para que elija a qué número enviar el pedido
+        openContactChoice(message);
 
         cart = [];
         updateCartUI();
@@ -1505,9 +1532,7 @@
 
     function forgotEmail() {
         const msg = "Hola Soporte Starbig. He olvidado mi correo electrónico de registro. Solicito apoyo para recuperarlo.";
-        // Usamos el segundo número de soporte para correos
-        const waUrl = "https://wa.me/584124136485?text=" + encodeURIComponent(msg);
-        window.open(waUrl);
+        openContactChoice(msg);
     }
 
     async function forgotPassword() {
@@ -1811,11 +1836,36 @@
     }
 
     function changeLanguage(lang) { showNotification("Idioma cambiado: " + lang.toUpperCase()); }
+
+    let pendingWhatsappMsg = "";
+
+    function openContactChoice(msg = "") {
+        pendingWhatsappMsg = msg;
+        document.getElementById('contact-choice-modal').style.display = 'block';
+        lucide.createIcons();
+    }
+
+    function contactWhatsapp(number) {
+        let msg = pendingWhatsappMsg;
+        if(!msg) {
+            const name = document.getElementById('profile-name').innerText;
+            msg = `Hola, soy ${name}. Solicito asistencia.`;
+        }
+        window.open(`https://wa.me/${number.replace('+', '')}?text=${encodeURIComponent(msg)}`);
+        document.getElementById('contact-choice-modal').style.display = 'none';
+    }
+
     function contactAdmin() {
         const name = document.getElementById('profile-name').innerText;
         const msg = `Hola, soy ${name}. Solicito verificación.`;
-        window.open(`https://wa.me/584244019899?text=${encodeURIComponent(msg)}`);
+        openContactChoice(msg);
     }
+
+    function forgotEmail() {
+        const msg = "Hola Soporte Starbig. He olvidado mi correo electrónico de registro. Solicito apoyo para recuperarlo.";
+        openContactChoice(msg);
+    }
+
     function logout() {
         if(window.AndroidApp) window.AndroidApp.logoutUser();
         if(auth) auth.signOut().finally(() => location.reload());
