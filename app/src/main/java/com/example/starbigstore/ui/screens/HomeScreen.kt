@@ -46,6 +46,7 @@ fun HomeScreen(onNavigateToLogin: () -> Unit, modifier: Modifier = Modifier) {
     var productForQuantity by remember { mutableStateOf<Product?>(null) }
     var bcvRate by remember { mutableDoubleStateOf(36.5) }
     var userStatus by remember { mutableStateOf("guest") }
+    var userPoints by remember { mutableIntStateOf(0) }
     
     // Flag para navegar después de que el diálogo se cierre
     var pendingLoginNavigation by remember { mutableStateOf(false) }
@@ -93,11 +94,14 @@ fun HomeScreen(onNavigateToLogin: () -> Unit, modifier: Modifier = Modifier) {
                 .whereEqualTo("email", user.email?.trim())
                 .addSnapshotListener { snapshot, _ ->
                     if (snapshot != null && !snapshot.isEmpty) {
-                        userStatus = snapshot.documents[0].getString("status") ?: "unverified"
+                        val doc = snapshot.documents[0]
+                        userStatus = doc.getString("status") ?: "unverified"
+                        userPoints = doc.getLong("points")?.toInt() ?: 0
                     }
                 }
         } else {
             userStatus = "guest"
+            userPoints = 0
         }
     }
 
@@ -144,6 +148,7 @@ fun HomeScreen(onNavigateToLogin: () -> Unit, modifier: Modifier = Modifier) {
         QuantitySelectorDialog(
             product = productForQuantity!!,
             bcvRate = bcvRate,
+            userPoints = userPoints,
             onDismiss = { productForQuantity = null },
             onConfirm = { qty ->
                 val name = productForQuantity?.name ?: ""
@@ -158,12 +163,19 @@ fun HomeScreen(onNavigateToLogin: () -> Unit, modifier: Modifier = Modifier) {
 fun QuantitySelectorDialog(
     product: Product,
     bcvRate: Double,
+    userPoints: Int,
     onDismiss: () -> Unit,
     onConfirm: (Int) -> Unit
 ) {
     var quantity by remember { mutableIntStateOf(1) }
-    val totalBss = product.priceUsd * quantity * bcvRate
-    val creditBss = totalBss * 1.1
+    val totalCashBss = product.priceUsd * quantity * bcvRate
+    val totalCreditBss = totalCashBss * 1.1
+    val initialPayBss = totalCreditBss * 0.25
+    val remainingBss = totalCreditBss - initialPayBss
+    
+    val extraCuotas = userPoints / 10
+    val numCuotas = 2 + extraCuotas
+    val installmentVal = remainingBss / numCuotas
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -193,12 +205,14 @@ fun QuantitySelectorDialog(
                 
                 Spacer(modifier = Modifier.height(24.dp))
                 
-                IconButton(onClick = { if(quantity > 1) quantity-- }) {
-                    Icon(Icons.Default.Remove, null, tint = Color.White)
-                }
-                Text(quantity.toString(), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 24.dp))
-                IconButton(onClick = { quantity++ }) {
-                    Icon(Icons.Default.Add, null, tint = Color.White)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { if(quantity > 1) quantity-- }) {
+                        Icon(Icons.Default.Remove, null, tint = Color.White)
+                    }
+                    Text(quantity.toString(), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 24.dp))
+                    IconButton(onClick = { quantity++ }) {
+                        Icon(Icons.Default.Add, null, tint = Color.White)
+                    }
                 }
                 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -211,13 +225,23 @@ fun QuantitySelectorDialog(
                     Column(modifier = Modifier.padding(12.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("CONTADO:", color = Color.White.copy(0.5f), fontSize = 10.sp)
-                            Text("${totalBss.toInt()} BSS", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text("${totalCashBss.toInt()} BSS", color = Color.White, fontWeight = FontWeight.Bold)
                         }
                         if (product.allowCredit) {
                             HorizontalDivider(Modifier.padding(vertical = 8.dp), color = Color.White.copy(0.05f))
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("CRÉDITO (+10%):", color = Color(0xFFC5A059), fontSize = 10.sp)
-                                Text("${creditBss.toInt()} BSS", color = Color(0xFFC5A059), fontWeight = FontWeight.Black)
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("TOTAL CRÉDITO:", color = Color(0xFFC5A059), fontSize = 10.sp)
+                                    Text("${totalCreditBss.toInt()} BSS", color = Color(0xFFC5A059), fontWeight = FontWeight.Black)
+                                }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("INICIAL (25%):", color = Color.White.copy(0.6f), fontSize = 9.sp)
+                                    Text("${initialPayBss.toInt()} BSS", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                                }
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("$numCuotas CUOTAS DE:", color = Color.White.copy(0.6f), fontSize = 9.sp)
+                                    Text("${installmentVal.toInt()} BSS", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                                }
                             }
                         }
                     }

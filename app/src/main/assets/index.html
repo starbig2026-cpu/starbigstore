@@ -327,9 +327,19 @@
                 <span style="color: #888; font-size: 0.7rem; font-weight: 800;">PAGO DE CONTADO:</span>
                 <span id="qty-total-cash" style="color: #fff; font-weight: 800; font-size: 0.9rem;">0.00 BSS</span>
             </div>
-            <div id="qty-credit-box" style="display: flex; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.05); pt: 8px; margin-top: 8px;">
-                <span style="color: #c5a059; font-size: 0.7rem; font-weight: 800;">PAGO A CRÉDITO (+10%):</span>
-                <span id="qty-total-credit" style="color: #c5a059; font-weight: 900; font-size: 1rem;">0.00 BSS</span>
+            <div id="qty-credit-details" style="display: none; border-top: 1px solid rgba(255,255,255,0.05); margin-top: 8px; padding-top: 8px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                    <span style="color: #c5a059; font-size: 0.7rem; font-weight: 800;">TOTAL CRÉDITO (+10%):</span>
+                    <span id="qty-total-credit" style="color: #c5a059; font-weight: 900; font-size: 1rem;">0.00 BSS</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                    <span style="color: #aaa; font-size: 0.65rem;">INICIAL (25%):</span>
+                    <span id="qty-initial-pay" style="color: #fff; font-weight: 800; font-size: 0.8rem;">0.00 BSS</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span style="color: #aaa; font-size: 0.65rem;"><span id="qty-num-installments">2</span> CUOTAS DE:</span>
+                    <span id="qty-installment-val" style="color: #fff; font-weight: 800; font-size: 0.8rem;">0.00 BSS</span>
+                </div>
             </div>
         </div>
 
@@ -592,12 +602,25 @@
 
         document.getElementById('qty-total-cash').innerText = totalBss.toFixed(2) + " BSS";
 
-        const creditBox = document.getElementById('qty-credit-box');
+        const creditDetails = document.getElementById('qty-credit-details');
         if(currentViewingProduct.allowCredit) {
-            creditBox.style.display = 'flex';
-            document.getElementById('qty-total-credit').innerText = (totalBss * 1.1).toFixed(2) + " BSS";
+            creditDetails.style.display = 'block';
+            const totalCredit = totalBss * 1.1;
+            const initialPay = totalCredit * 0.25;
+            const remaining = totalCredit - initialPay;
+
+            // Lógica de cuotas según puntaje
+            const userPoints = currentUserData?.points || 0;
+            const extraCuotas = Math.floor(userPoints / 10); // +1 cuota por cada 10 puntos
+            const numCuotas = 2 + extraCuotas;
+            const installmentVal = remaining / numCuotas;
+
+            document.getElementById('qty-total-credit').innerText = totalCredit.toFixed(2) + " BSS";
+            document.getElementById('qty-initial-pay').innerText = initialPay.toFixed(2) + " BSS";
+            document.getElementById('qty-num-installments').innerText = numCuotas;
+            document.getElementById('qty-installment-val').innerText = installmentVal.toFixed(2) + " BSS";
         } else {
-            creditBox.style.display = 'none';
+            creditDetails.style.display = 'none';
         }
     }
 
