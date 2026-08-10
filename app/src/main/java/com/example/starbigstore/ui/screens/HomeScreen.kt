@@ -150,10 +150,10 @@ fun HomeScreen(onNavigateToLogin: () -> Unit, modifier: Modifier = Modifier) {
             bcvRate = bcvRate,
             userPoints = userPoints,
             onDismiss = { productForQuantity = null },
-            onConfirm = { qty ->
+            onConfirm = { qty, method ->
                 val name = productForQuantity?.name ?: ""
                 productForQuantity = null
-                Toast.makeText(context, "✅ ${qty}x $name AGREGADO AL CARRITO", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "✅ ${qty}x $name ($method) AGREGADO", Toast.LENGTH_LONG).show()
             }
         )
     }
@@ -165,9 +165,11 @@ fun QuantitySelectorDialog(
     bcvRate: Double,
     userPoints: Int,
     onDismiss: () -> Unit,
-    onConfirm: (Int) -> Unit
+    onConfirm: (Int, String) -> Unit
 ) {
     var quantity by remember { mutableIntStateOf(1) }
+    var isCredit by remember { mutableStateOf(false) }
+    
     val totalCashBss = product.priceUsd * quantity * bcvRate
     val totalCreditBss = totalCashBss * 1.1
     val initialPayBss = totalCreditBss * 0.25
@@ -215,6 +217,31 @@ fun QuantitySelectorDialog(
                     }
                 }
                 
+                if (product.allowCredit) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Button(
+                            onClick = { isCredit = false },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if(!isCredit) Color(0xFFC5A059) else Color(0xFF1A1A20),
+                                contentColor = if(!isCredit) Color.Black else Color.White.copy(0.4f)
+                            )
+                        ) { Text("CONTADO", fontSize = 10.sp, fontWeight = FontWeight.Bold) }
+                        
+                        Button(
+                            onClick = { isCredit = true },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if(isCredit) Color(0xFFC5A059) else Color(0xFF1A1A20),
+                                contentColor = if(isCredit) Color.Black else Color.White.copy(0.4f)
+                            )
+                        ) { Text("CRÉDITO", fontSize = 10.sp, fontWeight = FontWeight.Bold) }
+                    }
+                }
+                
                 Spacer(modifier = Modifier.height(24.dp))
                 
                 Surface(
@@ -223,12 +250,12 @@ fun QuantitySelectorDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("CONTADO:", color = Color.White.copy(0.5f), fontSize = 10.sp)
-                            Text("${totalCashBss.toInt()} BSS", color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                        if (product.allowCredit) {
-                            HorizontalDivider(Modifier.padding(vertical = 8.dp), color = Color.White.copy(0.05f))
+                        if (!isCredit) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("PAGO DE CONTADO:", color = Color.White.copy(0.5f), fontSize = 10.sp)
+                                Text("${totalCashBss.toInt()} BSS", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text("TOTAL CRÉDITO:", color = Color(0xFFC5A059), fontSize = 10.sp)
@@ -250,7 +277,7 @@ fun QuantitySelectorDialog(
                 Spacer(modifier = Modifier.height(24.dp))
                 
                 Button(
-                    onClick = { onConfirm(quantity) },
+                    onClick = { onConfirm(quantity, if(isCredit) "CRÉDITO" else "CONTADO") },
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059)),
                     shape = RoundedCornerShape(8.dp)

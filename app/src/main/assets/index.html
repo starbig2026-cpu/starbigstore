@@ -322,10 +322,20 @@
             <button onclick="changeQty(1)" style="background: #1a1a24; border: 1px solid #c5a059; color: white; width: 40px; height: 40px; border-radius: 50%; font-size: 20px; cursor: pointer;">+</button>
         </div>
 
+        <div id="payment-method-selector" style="display: none; margin-bottom: 20px;">
+            <label style="color: #888; font-size: 0.6rem; font-weight: 800; display: block; margin-bottom: 10px; letter-spacing: 2px;">MODALIDAD DE PAGO</label>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button id="btn-pay-cash" onclick="setPaymentMethod('cash')" style="flex: 1; background: #c5a059; border: 1px solid #c5a059; color: #000; padding: 12px; font-size: 0.7rem; font-weight: 800; cursor: pointer; border-radius: 8px; transition: 0.3s;">CONTADO</button>
+                <button id="btn-pay-credit" onclick="setPaymentMethod('credit')" style="flex: 1; background: transparent; border: 1px solid #444; color: #888; padding: 12px; font-size: 0.7rem; font-weight: 800; cursor: pointer; border-radius: 8px; transition: 0.3s;">CRÉDITO</button>
+            </div>
+        </div>
+
         <div id="qty-price-display" style="background: rgba(255,255,255,0.03); padding: 15px; border-radius: 10px; margin-bottom: 25px; border: 1px solid rgba(197,160,89,0.1);">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                <span style="color: #888; font-size: 0.7rem; font-weight: 800;">PAGO DE CONTADO:</span>
-                <span id="qty-total-cash" style="color: #fff; font-weight: 800; font-size: 0.9rem;">0.00 BSS</span>
+            <div id="qty-cash-details">
+                <div style="display: flex; justify-content: space-between;">
+                    <span style="color: #888; font-size: 0.7rem; font-weight: 800;">PAGO DE CONTADO:</span>
+                    <span id="qty-total-cash" style="color: #fff; font-weight: 800; font-size: 0.9rem;">0.00 BSS</span>
+                </div>
             </div>
             <div id="qty-credit-details" style="display: none; border-top: 1px solid rgba(255,255,255,0.05); margin-top: 8px; padding-top: 8px;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
@@ -429,6 +439,7 @@
     let currentAdminCategory = "Todos";
     let cart = [];
     let currentViewingProduct = null;
+    let selectedPaymentMethod = 'cash';
 
     lucide.createIcons();
     listenToTasa();
@@ -588,10 +599,37 @@
                 document.getElementById('qty-product-name').innerText = currentViewingProduct.name.toUpperCase();
                 document.getElementById('qty-product-img').src = fixDriveUrl(getImageUrl(currentViewingProduct));
                 document.getElementById('buy-quantity').value = 1;
+
+                selectedPaymentMethod = 'cash'; // Reset a contado por defecto
+
+                const selector = document.getElementById('payment-method-selector');
+                if(currentViewingProduct.allowCredit) {
+                    selector.style.display = 'block';
+                    setPaymentMethod('cash'); // Visual reset
+                } else {
+                    selector.style.display = 'none';
+                    setPaymentMethod('cash');
+                }
+
                 updateQtyPrice();
                 document.getElementById('quantity-modal').style.display = 'block';
             }
         }
+    }
+
+    function setPaymentMethod(method) {
+        selectedPaymentMethod = method;
+        const btnCash = document.getElementById('btn-pay-cash');
+        const btnCredit = document.getElementById('btn-pay-credit');
+
+        if(method === 'cash') {
+            btnCash.style.background = '#c5a059'; btnCash.style.color = '#000'; btnCash.style.borderColor = '#c5a059';
+            btnCredit.style.background = 'transparent'; btnCredit.style.color = '#888'; btnCredit.style.borderColor = '#444';
+        } else {
+            btnCredit.style.background = '#c5a059'; btnCredit.style.color = '#000'; btnCredit.style.borderColor = '#c5a059';
+            btnCash.style.background = 'transparent'; btnCash.style.color = '#888'; btnCash.style.borderColor = '#444';
+        }
+        updateQtyPrice();
     }
 
     function updateQtyPrice() {
@@ -600,18 +638,21 @@
         const priceUsd = currentViewingProduct.priceUsd;
         const totalBss = priceUsd * qty * tasaBcv;
 
+        const cashDetails = document.getElementById('qty-cash-details');
+        const creditDetails = document.getElementById('qty-credit-details');
+
         document.getElementById('qty-total-cash').innerText = totalBss.toFixed(2) + " BSS";
 
-        const creditDetails = document.getElementById('qty-credit-details');
-        if(currentViewingProduct.allowCredit) {
+        if(selectedPaymentMethod === 'credit') {
+            cashDetails.style.display = 'none';
             creditDetails.style.display = 'block';
+
             const totalCredit = totalBss * 1.1;
             const initialPay = totalCredit * 0.25;
             const remaining = totalCredit - initialPay;
 
-            // Lógica de cuotas según puntaje
             const userPoints = currentUserData?.points || 0;
-            const extraCuotas = Math.floor(userPoints / 10); // +1 cuota por cada 10 puntos
+            const extraCuotas = Math.floor(userPoints / 10);
             const numCuotas = 2 + extraCuotas;
             const installmentVal = remaining / numCuotas;
 
@@ -620,6 +661,7 @@
             document.getElementById('qty-num-installments').innerText = numCuotas;
             document.getElementById('qty-installment-val').innerText = installmentVal.toFixed(2) + " BSS";
         } else {
+            cashDetails.style.display = 'block';
             creditDetails.style.display = 'none';
         }
     }
@@ -637,11 +679,12 @@
         if(currentViewingProduct) {
             const cartItem = {
                 ...currentViewingProduct,
-                buyQty: qty
+                buyQty: qty,
+                paymentMethod: selectedPaymentMethod
             };
 
-            // Si ya está en el carrito, sumar cantidad
-            const existingIndex = cart.findIndex(item => item.id === currentViewingProduct.id);
+            // Si ya está en el carrito, sumar cantidad (si el método es igual)
+            const existingIndex = cart.findIndex(item => item.id === currentViewingProduct.id && item.paymentMethod === selectedPaymentMethod);
             if(existingIndex > -1) {
                 cart[existingIndex].buyQty += qty;
             } else {
@@ -691,7 +734,8 @@
                         <img src="${fixDriveUrl(getImageUrl(item))}" style="width:60px; height:60px; object-fit:cover; border-radius:10px;">
                         <div style="flex:1;">
                             <div style="color:white; font-size:0.9rem; font-weight:800;">${item.name.toUpperCase()}</div>
-                            <div style="color:#c5a059; font-size:0.8rem;">$${item.priceUsd} x ${item.buyQty}</div>
+                            <div style="color:#c5a059; font-size:0.7rem; font-weight:800; margin-bottom: 2px;">${item.paymentMethod === 'credit' ? 'CRÉDITO (+10%)' : 'CONTADO'}</div>
+                            <div style="color:#888; font-size:0.8rem;">$${item.priceUsd} x ${item.buyQty}</div>
                         </div>
                         <div style="text-align:right;">
                             <div style="color:white; font-weight:800;">$${subtotal.toFixed(2)}</div>
@@ -715,11 +759,11 @@
 
         showNotification("PROCESANDO PEDIDO...");
 
-        // Aquí podrías enviar el pedido a Firebase o WhatsApp
-        const itemsList = cart.map(i => `${i.buyQty}x ${i.name}`).join(', ');
+        const itemsList = cart.map(i => `${i.buyQty}x ${i.name} (${i.paymentMethod.toUpperCase()})`).join(', ');
         const totalUsd = document.getElementById('cart-total-usd').innerText;
+        const totalBss = document.getElementById('cart-total-bss').innerText;
 
-        const message = `🛍️ NUEVO PEDIDO STARBIG STORE\n\nCliente: ${currentUserData?.name}\nItems: ${itemsList}\nTotal: ${totalUsd}\n\nPor favor, contacte para concretar el pago.`;
+        const message = `🛍️ NUEVO PEDIDO STARBIG STORE\n\nCliente: ${currentUserData?.name}\nItems: ${itemsList}\nTotal: ${totalUsd} (${totalBss})\n\nPor favor, contacte para concretar el pago.`;
 
         const waUrl = `https://wa.me/584129431568?text=${encodeURIComponent(message)}`;
         window.open(waUrl);
