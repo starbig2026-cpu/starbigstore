@@ -151,13 +151,23 @@ class WebAppInterface(
                     val u = docs.documents[0]
                     val points = u.getLong("points") ?: 0
                     val status = u.getString("status") ?: "unverified"
-                    val userDataJson = org.json.JSONObject(u.data ?: emptyMap<String, Any>()).toString()
+                    val userData = (u.data ?: emptyMap<String, Any>()).toMutableMap()
+                    userData["docId"] = u.id // Incluimos el ID para actualizaciones desde JS
+                    val userDataJson = org.json.JSONObject(userData as Map<*, *>).toString()
+                    val safeName = (u.getString("name") ?: "").replace("'", "\\'")
                     webView.post { 
-                        webView.evaluateJavascript("window.updateUserProfile('${u.getString("name")}', '$email', '${u.getString("photoUrl")}', '$status', $points, $userDataJson)", null)
+                        webView.evaluateJavascript("""
+                            (function() {
+                                const userData = $userDataJson;
+                                if(window.updateUserProfile) {
+                                    window.updateUserProfile('$safeName', '$email', '${u.getString("photoUrl")}', '$status', $points, userData);
+                                }
+                            })();
+                        """.trimIndent(), null)
                     }
                 } else {
                     webView.post {
-                        webView.evaluateJavascript("showNotification('PERFIL NO ENCONTRADO EN BASE DE DATOS', 'error')", null)
+                        webView.evaluateJavascript("if(window.showNotification) showNotification('PERFIL NO ENCONTRADO EN BASE DE DATOS', 'error')", null)
                     }
                 }
             }
@@ -225,9 +235,9 @@ class WebAppInterface(
 
                             webView.post {
                                 webView.evaluateJavascript("""
-                                    showNotification('✅ FOTO ACTUALIZADA CON ÉXITO');
-                                    document.getElementById('profile-img-large').src = '${fixDriveUrl(photoUrl)}';
-                                    document.getElementById('user-photo-nav').src = '${fixDriveUrl(photoUrl)}';
+                                    if(window.showNotification) showNotification('✅ FOTO ACTUALIZADA CON ÉXITO');
+                                    if(document.getElementById('profile-img-large')) document.getElementById('profile-img-large').src = fixDriveUrl('$photoUrl');
+                                    if(document.getElementById('user-photo-nav')) document.getElementById('user-photo-nav').src = fixDriveUrl('$photoUrl');
                                 """.trimIndent(), null)
                             }
                         } else {

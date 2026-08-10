@@ -171,6 +171,7 @@
             <div id="adm-tab-users" class="tab-btn active" onclick="switchAdminTab('users')">SOLICITUDES</div>
             <div id="adm-tab-db" class="tab-btn" onclick="switchAdminTab('db')">BASE DE DATOS</div>
             <div id="adm-tab-inv" class="tab-btn" onclick="switchAdminTab('inventory')">INVENTARIO</div>
+            <div id="adm-tab-sales" class="tab-btn" onclick="switchAdminTab('sales')">COBRANZAS</div>
         </div>
 
         <div id="admin-content-users" class="admin-panel-section">
@@ -196,6 +197,9 @@
             </div>
 
             <div id="admin-inventory-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px;"></div>
+        </div>
+        <div id="admin-content-sales" class="admin-panel-section" style="display:none;">
+            <div id="admin-sales-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;"></div>
         </div>
     </div>
 </div>
@@ -449,8 +453,9 @@
         if (user) {
             db.collection("registros_clientes").where("email", "==", user.email).get().then(docs => {
                 if (!docs.empty) {
-                    const u = docs.docs[0].data();
-                    window.updateUserProfile(u.name, user.email, u.photoUrl, u.status, u.points || 0, u);
+                    const doc = docs.docs[0];
+                    const u = doc.data();
+                    window.updateUserProfile(u.name, user.email, u.photoUrl, u.status, u.points || 0, { ...u, docId: doc.id });
                 }
             });
         }
@@ -759,11 +764,44 @@
 
         showNotification("PROCESANDO PEDIDO...");
 
+        const orderId = "ORD_" + Date.now();
         const itemsList = cart.map(i => `${i.buyQty}x ${i.name} (${i.paymentMethod.toUpperCase()})`).join(', ');
         const totalUsd = document.getElementById('cart-total-usd').innerText;
         const totalBss = document.getElementById('cart-total-bss').innerText;
 
-        const message = `🛍️ NUEVO PEDIDO STARBIG STORE\n\nCliente: ${currentUserData?.name}\nItems: ${itemsList}\nTotal: ${totalUsd} (${totalBss})\n\nPor favor, contacte para concretar el pago.`;
+        // Lógica de Puntos Starbig
+        let pointsToAdd = 0;
+        cart.forEach(item => {
+            if(item.paymentMethod === 'cash') pointsToAdd += 25;
+            // Los puntos de crédito (10) se suman al pagar la cuota antes de 16 días (se gestiona en Admin)
+        });
+
+        try {
+            // Guardar pedido para registro
+            await db.collection("pedidos").doc(orderId).set({
+                orderId,
+                customerEmail: currentUserData.email,
+                customerName: currentUserData.name,
+                items: cart,
+                totalUsd,
+                totalBss,
+                status: "pending",
+                timestamp: Date.now()
+            });
+
+            // Si es de contado, sumamos puntos inmediatamente al enviar pedido
+            if(pointsToAdd > 0 && currentUserData.docId) {
+                const newPoints = (currentUserData.points || 0) + pointsToAdd;
+                await db.collection("registros_clientes").doc(currentUserData.docId).update({
+                    points: newPoints
+                });
+                currentUserData.points = newPoints;
+                document.getElementById('user-points').innerText = newPoints;
+                showNotification(`+${pointsToAdd} ESTRELLAS STARBIG POR PAGO DE CONTADO`);
+            }
+        } catch(e) { console.error("Error saving order:", e); }
+
+        const message = `🛍️ NUEVO PEDIDO STARBIG STORE\n\nOrden: ${orderId}\nCliente: ${currentUserData?.name}\nItems: ${itemsList}\nTotal: ${totalUsd} (${totalBss})\n\nPor favor, contacte para concretar el pago.`;
 
         const waUrl = `https://wa.me/584129431568?text=${encodeURIComponent(message)}`;
         window.open(waUrl);
@@ -795,8 +833,13 @@
         document.getElementById('admin-content-users').style.display = tab === 'users' ? 'block' : 'none';
         document.getElementById('admin-content-db').style.display = tab === 'db' ? 'block' : 'none';
         document.getElementById('admin-content-inventory').style.display = tab === 'inventory' ? 'block' : 'none';
+        document.getElementById('admin-content-sales').style.display = tab === 'sales' ? 'block' : 'none';
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        document.getElementById('adm-tab-' + (tab==='users'?'users':tab==='db'?'db':'inv')).classList.add('active');
+
+        const tabIdMap = { 'users': 'adm-tab-users', 'db': 'adm-tab-db', 'inventory': 'adm-tab-inv', 'sales': 'adm-tab-sales' };
+        document.getElementById(tabIdMap[tab]).classList.add('active');
+
+        if(tab === 'sales') loadAdminSales();
     }
 
     function loadAdminUsers() {
@@ -949,7 +992,7 @@
                     nombre: name, precio: price, stock: stock,
                     coleccion: coll, descripcion: desc,
                     credito: credit ? "SÍ" : "NO",
-                    imagen: ""
+                    imagen: editingProduct ? getImageUrl(editingProduct) : ""
                 }
             };
 
@@ -1014,6 +1057,57 @@
             } catch(e) {
                 showNotification("Error al eliminar", "error");
             }
+        }
+    }
+
+    function loadAdminSales() {
+        db.collection("pedidos").orderBy("timestamp", "desc").onSnapshot(snap => {
+            const list = document.getElementById('admin-sales-list');
+            list.innerHTML = "";
+            snap.forEach(doc => {
+                const order = doc.data();
+                const date = new Date(order.timestamp).toLocaleDateString();
+                const card = document.createElement('div');
+                card.style = "background:#121216; padding:15px; border:0.5px solid #c5a05944; color:white;";
+
+                let itemsHtml = "";
+                order.items.forEach(item => {
+                    itemsHtml += `<div style="font-size:10px; color:#aaa;">• ${item.buyQty}x ${item.name} (${item.paymentMethod.toUpperCase()})</div>`;
+                });
+
+                card.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                        <span style="color:#C5A059; font-weight:bold; font-size:10px;">${order.orderId}</span>
+                        <span style="font-size:10px; color:#888;">${date}</span>
+                    </div>
+                    <div style="font-weight:bold; margin-bottom:5px;">${order.customerName.toUpperCase()}</div>
+                    <div style="margin-bottom:10px;">${itemsHtml}</div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #ffffff11; padding-top:10px;">
+                        <span style="font-weight:bold; color:#c5a059;">${order.totalUsd}</span>
+                        <div style="display:flex; gap:5px;">
+                            ${order.status === 'pending' ? `<button onclick="confirmPayment('${doc.id}')" style="background:#25D366; color:black; border:none; padding:5px 10px; font-size:9px; font-weight:bold; cursor:pointer;">CONFIRMAR PAGO</button>` : '<span style="color:#25D366; font-size:9px; font-weight:bold;">PAGADO</span>'}
+                        </div>
+                    </div>`;
+                list.appendChild(card);
+            });
+        });
+    }
+
+    async function confirmPayment(orderId) {
+        if(!confirm("¿Confirmar recepción de pago y asignar puntos correspondientes?")) return;
+
+        try {
+            const orderRef = db.collection("pedidos").doc(orderId);
+            const orderDoc = await orderRef.get();
+            const order = orderDoc.data();
+
+            // Buscar al usuario para sumarle puntos si es de contado (si no se sumaron al checkout)
+            // O gestionar cuotas de crédito.
+
+            await orderRef.update({ status: "paid" });
+            showNotification("✅ Pago confirmado y Puntos actualizados");
+        } catch(e) {
+            showNotification("Error al confirmar pago", "error");
         }
     }
 
@@ -1147,28 +1241,45 @@
         userStatus = status;
         if(fullData) currentUserData = { ...fullData, email, photoUrl, status, points };
 
-        document.getElementById('profile-name').innerText = name;
-        document.getElementById('profile-status').innerText = status.toUpperCase();
-        document.getElementById('user-points').innerText = points;
+        const nameEl = document.getElementById('profile-name');
+        if(nameEl) nameEl.innerText = name;
+
+        const statusEl = document.getElementById('profile-status');
+        if(statusEl) statusEl.innerText = status.toUpperCase();
+
+        const pointsEl = document.getElementById('user-points');
+        if(pointsEl) pointsEl.innerText = points;
 
         const img = fixDriveUrl(photoUrl);
-        document.getElementById('profile-img-large').src = img;
-        document.getElementById('user-photo-nav').src = img;
+        const largeImg = document.getElementById('profile-img-large');
+        if(largeImg) largeImg.src = img;
 
-        document.getElementById('user-icon-nav').style.display = 'none';
-        document.getElementById('user-photo-container').style.display = 'block';
+        const navImg = document.getElementById('user-photo-nav');
+        if(navImg) navImg.src = img;
 
-        document.getElementById('login-container').style.display = 'none';
-        document.getElementById('register-container').style.display = 'none';
-        document.getElementById('profile-container').style.display = 'block';
+        const iconNav = document.getElementById('user-icon-nav');
+        if(iconNav) iconNav.style.display = 'none';
 
-        document.getElementById('whatsapp-verify-btn').style.display = status === 'unverified' ? 'block' : 'none';
+        const photoCont = document.getElementById('user-photo-container');
+        if(photoCont) photoCont.style.display = 'block';
 
-        // Ocultar pestañas si ya está logueado
-        document.getElementById('auth-tabs-container').style.display = 'none';
+        const loginCont = document.getElementById('login-container');
+        if(loginCont) loginCont.style.display = 'none';
+
+        const regCont = document.getElementById('register-container');
+        if(regCont) regCont.style.display = 'none';
+
+        const profileCont = document.getElementById('profile-container');
+        if(profileCont) profileCont.style.display = 'block';
+
+        const verifyBtn = document.getElementById('whatsapp-verify-btn');
+        if(verifyBtn) verifyBtn.style.display = status === 'unverified' ? 'block' : 'none';
+
+        const tabsCont = document.getElementById('auth-tabs-container');
+        if(tabsCont) tabsCont.style.display = 'none';
 
         closeAuth();
-        lucide.createIcons();
+        if(window.lucide) lucide.createIcons();
     };
 
     function editProfile() {
