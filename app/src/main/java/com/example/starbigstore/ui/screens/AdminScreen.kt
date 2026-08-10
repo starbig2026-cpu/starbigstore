@@ -309,7 +309,7 @@ fun AdminListContent() {
                         CoroutineScope(Dispatchers.IO).launch {
                             try {
                                 val normalizedCategory = java.text.Normalizer.normalize(finalProd.category, java.text.Normalizer.Form.NFD)
-                                    .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
+                                    .replace("[\\u0300-\\u036f]+".toRegex(), "")
                                     .uppercase()
 
                                 val json = org.json.JSONObject().apply {
@@ -587,8 +587,10 @@ fun InventorySection(products: List<Product>, bcv: Double, onAdd: () -> Unit, on
         }
         Spacer(modifier = Modifier.height(20.dp))
         
-        SecondaryScrollableTabRow(
-            selectedTabIndex = categories.indexOf(selectedCategory),
+        val tabIndex = categories.indexOf(selectedCategory).let { if (it == -1) 0 else it }
+        
+        ScrollableTabRow(
+            selectedTabIndex = tabIndex,
             containerColor = Color.Transparent,
             contentColor = Color(0xFFC5A059),
             edgePadding = 0.dp,
