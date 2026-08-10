@@ -227,16 +227,20 @@ fun AdminListContent() {
         db.collection("pedidos").orderBy("timestamp", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, _ ->
                 if (snapshot != null) orders = snapshot.documents.map { doc ->
-                    val items = (doc.get("items") as? List<Map<String, Any>>)?.map {
-                        OrderItem(
-                            name = it["name"] as? String ?: "",
-                            buyQty = (it["buyQty"] as? Long)?.toInt() ?: 1,
-                            paymentMethod = it["paymentMethod"] as? String ?: "cash",
-                            priceUsd = (it["priceUsd"] as? Double) ?: 0.0
-                        )
+                    val itemsRaw = doc.get("items") as? List<*>
+                    val items = itemsRaw?.mapNotNull { item ->
+                        val map = item as? Map<*, *>
+                        if (map != null) {
+                            OrderItem(
+                                name = map["name"] as? String ?: "",
+                                buyQty = (map["buyQty"] as? Number)?.toInt() ?: 1,
+                                paymentMethod = map["paymentMethod"] as? String ?: "cash",
+                                priceUsd = (map["priceUsd"] as? Number)?.toDouble() ?: 0.0
+                            )
+                        } else null
                     } ?: emptyList()
 
-                    val reportMap = doc.get("paymentReport") as? Map<String, Any>
+                    val reportMap = doc.get("paymentReport") as? Map<*, *>
                     val report = reportMap?.let {
                         PaymentReport(
                             reference = it["reference"] as? String ?: "",

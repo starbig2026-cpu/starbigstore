@@ -111,6 +111,7 @@
                 <button onclick="changePhoto()" class="menu-item-btn"><i data-lucide="camera"></i> CAMBIAR FOTO</button>
                 <button onclick="openSecurity()" class="menu-item-btn"><i data-lucide="lock"></i> SEGURIDAD</button>
                 <button onclick="viewPoints()" class="menu-item-btn"><i data-lucide="award"></i> PUNTOS: <span id="user-points">0</span></button>
+                <button onclick="openMyCredits()" class="menu-item-btn" style="grid-column: span 2; background: rgba(197, 160, 89, 0.1); border-color: #c5a059;"><i data-lucide="calendar"></i> MI CALENDARIO DE PAGOS / DEUDAS</button>
             </div>
 
             <button id="whatsapp-verify-btn" onclick="openContactChoice()" class="btn-primary full-width" style="background:#25D366; margin-top:25px; display:none;">WHATSAPP VERIFICACIÓN</button>
@@ -545,6 +546,59 @@
     </div>
 </div>
 
+<!-- MODAL MIS CRÉDITOS Y CALENDARIO -->
+<div id="credits-modal" class="modal" style="background:rgba(0,0,0,0.9); z-index:8600;">
+    <div class="modal-content" style="max-width: 500px; padding: 40px 20px;">
+        <span class="close-modal" onclick="document.getElementById('credits-modal').style.display='none'">&times;</span>
+        <h2 style="color:white; margin-bottom:10px; font-family: 'Playfair Display', serif;">MIS <span>PAGOS</span></h2>
+        <p style="color:#888; font-size: 0.7rem; margin-bottom: 25px; letter-spacing: 1px;">CALENDARIO DE COBRANZAS STARBIG</p>
+
+        <!-- CALENDARIO VISUAL -->
+        <div id="calendar-container" style="background: #1a1a24; border-radius: 15px; padding: 15px; margin-bottom: 25px; border: 1px solid rgba(197, 160, 89, 0.2);">
+            <div id="calendar-header" style="display: flex; justify-content: space-between; color: white; font-weight: 800; margin-bottom: 15px; font-size: 0.9rem;">
+                <button onclick="changeMonth(-1)" style="background:none; border:none; color:#C5A059; cursor:pointer;">&lt;</button>
+                <span id="calendar-month-year">AGOSTO 2026</span>
+                <button onclick="changeMonth(1)" style="background:none; border:none; color:#C5A059; cursor:pointer;">&gt;</button>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; font-size: 0.6rem; color: #666; font-weight: 800; margin-bottom: 10px;">
+                <span>DOM</span><span>LUN</span><span>MAR</span><span>MIE</span><span>JUE</span><span>VIE</span><span>SAB</span>
+            </div>
+            <div id="calendar-days" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center;">
+                <!-- Se llena con JS -->
+            </div>
+        </div>
+
+        <!-- LISTA DE DEUDAS -->
+        <div id="active-credits-list" style="margin-bottom: 25px;">
+            <!-- Se llena dinámicamente -->
+        </div>
+
+        <button onclick="document.getElementById('credits-modal').style.display='none'" class="btn-secondary full-width">CERRAR</button>
+    </div>
+</div>
+
+<!-- MODAL GESTIONAR PAGO DE DEUDA -->
+<div id="debt-pay-modal" class="modal" style="background:rgba(0,0,0,0.85); z-index:9600;">
+    <div class="modal-content" style="background:#121216; border:1px solid #C5A059; max-width: 400px; text-align: center;">
+        <span class="close-modal" onclick="document.getElementById('debt-pay-modal').style.display='none'">&times;</span>
+        <h2 style="color:white; margin-bottom:10px; font-weight: 900;">ABONAR A DEUDA</h2>
+        <p id="debt-pay-title" style="color:#C5A059; font-size: 0.8rem; margin-bottom: 25px;"></p>
+
+        <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 25px;">
+            <button onclick="setDebtPayAmount('installment')" class="btn-primary full-width" style="background:rgba(197, 160, 89, 0.1); color:#C5A059; border:1px solid #C5A059;">ADELANTAR CUOTA: <span id="debt-val-inst">0</span> BSS</button>
+            <button onclick="setDebtPayAmount('full')" class="btn-primary full-width">LIQUIDAR TODO: <span id="debt-val-full">0</span> BSS</button>
+            <button onclick="setDebtPayAmount('other')" class="btn-secondary full-width">OTRO MONTO</button>
+        </div>
+
+        <div id="debt-other-monto-box" style="display: none; margin-bottom: 20px;">
+            <label style="color: #888; font-size: 0.6rem; font-weight: 800; display: block; margin-bottom: 8px;">MONTO A PAGAR (BSS)</label>
+            <input type="number" id="debt-custom-amount" step="0.01" placeholder="0.00" style="width: 100%; background: #000; border: 1px solid #C5A05933; color: white; padding: 12px; text-align: center; font-size: 1.2rem; font-weight: 800;">
+        </div>
+
+        <button onclick="confirmDebtPayment()" class="btn-primary full-width" style="height: 55px;">REPORTAR PAGO</button>
+    </div>
+</div>
+
 <!-- MODAL EDITAR PERFIL -->
 <div id="edit-profile-overlay" class="modal" style="background:rgba(0,0,0,0.8); z-index:7000;">
     <div class="modal-content" style="background:#121216; border:1px solid #C5A059; max-width: 450px;">
@@ -607,6 +661,10 @@
         zelle: "Cargando...", binance: "Cargando...",
         zinli: "Cargando...", pagomovil: "Cargando..."
     };
+
+    let calendarDate = new Date();
+    let userCredits = [];
+    let currentPayingDebt = null;
 
     lucide.createIcons();
     listenToTasa();
@@ -1048,6 +1106,7 @@
                 totalUsd,
                 totalBss: totalBssText,
                 pointsUsed: pointsToSubtract,
+                userPointsAtPurchase: currentUserData.points || 0, // Guardamos puntos para cálculo de cuotas futuro
                 status: "pending",
                 timestamp: Date.now()
             });
@@ -2309,6 +2368,159 @@
         if(window.AndroidApp) window.AndroidApp.logoutUser();
         if(auth) auth.signOut().finally(() => location.reload());
         else location.reload();
+    }
+
+    // --- LÓGICA DE CRÉDITOS Y CALENDARIO ---
+    async function openMyCredits() {
+        if(!currentUserData) return;
+        document.getElementById('credits-modal').style.display = 'block';
+        loadUserCredits();
+    }
+
+    function loadUserCredits() {
+        // Obtenemos pedidos con pago a crédito confirmados
+        db.collection("pedidos")
+            .where("customerEmail", "==", currentUserData.email)
+            .where("status", "==", "paid")
+            .onSnapshot(snap => {
+                userCredits = [];
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    if(data.items.some(i => i.paymentMethod === 'credit')) {
+                        userCredits.push({...data, id: doc.id});
+                    }
+                });
+                renderCalendar();
+                renderCreditsList();
+            });
+    }
+
+    function changeMonth(val) {
+        calendarDate.setMonth(calendarDate.getMonth() + val);
+        renderCalendar();
+    }
+
+    function renderCalendar() {
+        const header = document.getElementById('calendar-month-year');
+        const grid = document.getElementById('calendar-days');
+        const months = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
+
+        header.innerText = `${months[calendarDate.getMonth()]} ${calendarDate.getFullYear()}`;
+        grid.innerHTML = "";
+
+        const firstDay = new Date(calendarDate.getFullYear(), calendarDate.getMonth(), 1).getDay();
+        const daysInMonth = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 0).getDate();
+
+        // Citas de cobro (cada 16 días desde la compra)
+        const dueDates = [];
+        userCredits.forEach(credit => {
+            const purchaseDate = new Date(credit.timestamp);
+            // Calculamos el número de cuotas (basado en la misma lógica del checkout)
+            const extraCuotas = Math.floor((credit.userPointsAtPurchase || 0) / 550);
+            const numCuotas = Math.min(12, 2 + extraCuotas);
+
+            for(let i=1; i<=numCuotas; i++) {
+                const d = new Date(purchaseDate);
+                d.setDate(d.getDate() + (i * 16));
+                if(d.getMonth() === calendarDate.getMonth() && d.getFullYear() === calendarDate.getFullYear()) {
+                    dueDates.push(d.getDate());
+                }
+            }
+        });
+
+        for(let i=0; i<firstDay; i++) { grid.innerHTML += '<div></div>'; }
+        for(let d=1; d<=daysInMonth; d++) {
+            const isDue = dueDates.includes(d);
+            const isToday = d === new Date().getDate() && calendarDate.getMonth() === new Date().getMonth() && calendarDate.getFullYear() === new Date().getFullYear();
+
+            grid.innerHTML += `
+                <div style="padding: 8px; font-size: 0.7rem; border-radius: 5px;
+                    ${isDue ? 'background:#C5A059; color:black; font-weight:900;' : 'color:#fff;'}
+                    ${isToday ? 'border: 1px solid #C5A059;' : ''}">
+                    ${d}
+                </div>`;
+        }
+    }
+
+    function renderCreditsList() {
+        const container = document.getElementById('active-credits-list');
+        container.innerHTML = "";
+
+        if(userCredits.length === 0) {
+            container.innerHTML = "<p style='color:#666; font-size:0.7rem; text-align:center;'>NO TIENES DEUDAS ACTIVAS</p>";
+            return;
+        }
+
+        userCredits.forEach(credit => {
+            const totalBss = parseFloat(credit.totalBss.replace(" BSS", "")) || 0;
+            const initial = totalBss * 0.25;
+            const remaining = (credit.remainingDebt !== undefined) ? credit.remainingDebt : (totalBss - initial);
+
+            if(remaining <= 0) return; // Ya pagada
+
+            const extraCuotas = Math.floor((credit.userPointsAtPurchase || 0) / 550);
+            const numCuotas = Math.min(12, 2 + extraCuotas);
+            const installment = (totalBss - initial) / numCuotas;
+
+            container.innerHTML += `
+                <div style="background:#121216; padding:15px; border-radius:12px; border:1px solid rgba(197, 160, 89, 0.2); margin-bottom:15px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                        <span style="color:#C5A059; font-weight:800; font-size:0.75rem;">ORDEN: ${credit.orderId}</span>
+                        <span style="color:#888; font-size:0.6rem;">${new Date(credit.timestamp).toLocaleDateString()}</span>
+                    </div>
+                    <div style="color:white; font-size:0.8rem; margin-bottom:15px;">
+                        DEUDA RESTANTE: <strong style="color:#C5A059;">${remaining.toFixed(2)} BSS</strong>
+                    </div>
+                    <button onclick="openDebtPay('${credit.id}', ${installment}, ${remaining})" class="btn-primary full-width" style="padding:10px; font-size:0.7rem;">PAGAR / ABONAR</button>
+                </div>`;
+        });
+    }
+
+    function openDebtPay(id, installment, remaining) {
+        currentPayingDebt = { id, installment, remaining };
+        document.getElementById('debt-pay-title').innerText = "Deuda Restante: " + remaining.toFixed(2) + " BSS";
+        document.getElementById('debt-val-inst').innerText = installment.toFixed(2);
+        document.getElementById('debt-val-full').innerText = remaining.toFixed(2);
+        document.getElementById('debt-other-monto-box').style.display = 'none';
+        document.getElementById('debt-pay-modal').style.display = 'block';
+    }
+
+    function setDebtPayAmount(type) {
+        const input = document.getElementById('debt-custom-amount');
+        const box = document.getElementById('debt-other-monto-box');
+
+        if(type === 'installment') {
+            input.value = currentPayingDebt.installment.toFixed(2);
+            box.style.display = 'none';
+        } else if(type === 'full') {
+            input.value = currentPayingDebt.remaining;
+            box.style.display = 'none';
+        } else {
+            box.style.display = 'block';
+            input.value = "";
+            input.focus();
+        }
+    }
+
+    async function confirmDebtPayment() {
+        const amount = parseFloat(document.getElementById('debt-custom-amount').value);
+        if(!amount || amount <= 0) { showNotification("INGRESE UN MONTO VÁLIDO", "error"); return; }
+
+        showNotification("PREPARANDO REPORTE DE ABONO...");
+
+        // Generamos un mensaje especial de abono para WhatsApp
+        const msg = `💰 REPORTE DE ABONO A DEUDA\n\nOrden: ${currentPayingDebt.id}\nCliente: ${currentUserData.name}\nMonto a abonar: ${amount.toFixed(2)} BSS\n\nPor favor, confirme los datos para proceder al pago.`;
+
+        // Abrimos el selector de contacto (reutilizamos el que ya existe)
+        // Pero primero guardamos una referencia temporal para el abono
+        currentOrderId = currentPayingDebt.id; // Para que el formulario de reporte sepa a qué orden pertenece
+        currentOrderTotalBss = amount; // Sugerimos este monto en el reporte
+
+        document.getElementById('debt-pay-modal').style.display = 'none';
+        document.getElementById('credits-modal').style.display = 'none';
+
+        openContactChoice(msg);
+        showPayInfo('pagomovil'); // Por defecto abrimos pago móvil que es lo más común para abonos
     }
 </script>
 </body>
