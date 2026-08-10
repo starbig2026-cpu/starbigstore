@@ -62,6 +62,7 @@ class MainActivity : FragmentActivity() {
 
             StarbigStoreTheme(darkTheme = true) {
                 var currentTab by remember { mutableIntStateOf(0) }
+                var shouldShowAuth by remember { mutableStateOf(false) }
                 
                 val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
                     uri?.let { filePathCallback?.onReceiveValue(arrayOf(it)) } ?: filePathCallback?.onReceiveValue(null)
@@ -106,9 +107,17 @@ class MainActivity : FragmentActivity() {
                                         filePathCallback = callback
                                         pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                                     },
+                                    modifier = Modifier.fillMaxSize(),
+                                    triggerAuth = shouldShowAuth,
+                                    onAuthTriggered = { shouldShowAuth = false }
+                                )
+                                1 -> HomeScreen(
+                                    onNavigateToLogin = {
+                                        shouldShowAuth = true
+                                        currentTab = 0
+                                    },
                                     modifier = Modifier.fillMaxSize()
                                 )
-                                1 -> HomeScreen(modifier = Modifier.fillMaxSize())
                                 2 -> AdminScreen(onBack = { currentTab = 0 }, modifier = Modifier.fillMaxSize())
                                 else -> Box(Modifier.fillMaxSize())
                             }

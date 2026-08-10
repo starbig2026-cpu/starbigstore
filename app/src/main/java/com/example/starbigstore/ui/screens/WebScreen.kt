@@ -250,22 +250,38 @@ class WebAppInterface(
 
 @Composable
 fun WebScreen(
-    url: String, 
-    onAdminRequest: () -> Unit, 
-    onBiometricRequest: () -> Unit, 
+    url: String,
+    onAdminRequest: () -> Unit,
+    onBiometricRequest: () -> Unit,
     onFileChoose: (ValueCallback<Array<Uri>>?) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    triggerAuth: Boolean = false,
+    onAuthTriggered: () -> Unit = {}
 ) {
+    var webViewInstance by remember { mutableStateOf<WebView?>(null) }
+
+    LaunchedEffect(triggerAuth, webViewInstance) {
+        if (triggerAuth && webViewInstance != null) {
+            webViewInstance?.evaluateJavascript("openAuth()", null)
+            onAuthTriggered()
+        }
+    }
+
     AndroidView(
         modifier = modifier,
         factory = { context ->
             WebView(context).apply {
+                webViewInstance = this
                 val webInterface = WebAppInterface(context, this, onAdminRequest, onBiometricRequest)
                 addJavascriptInterface(webInterface, "AndroidApp")
                 
                 webViewClient = object : WebViewClient() {
                     override fun onPageFinished(view: WebView?, url: String?) {
                         super.onPageFinished(view, url)
+                        if (triggerAuth) {
+                            evaluateJavascript("openAuth()", null)
+                            onAuthTriggered()
+                        }
                     }
                 }
 

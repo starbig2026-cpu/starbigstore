@@ -1,5 +1,7 @@
 package com.example.starbigstore.ui.screens
 
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -31,14 +33,29 @@ import com.example.starbigstore.R
 import com.example.starbigstore.data.Product
 import com.example.starbigstore.ui.components.ProductCard
 import com.example.starbigstore.ui.components.fixDriveUrl
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 
 @Composable
-fun HomeScreen(modifier: Modifier = Modifier) {
+fun HomeScreen(onNavigateToLogin: () -> Unit, modifier: Modifier = Modifier) {
     var products by remember { mutableStateOf(listOf<Product>()) }
     var selectedProduct by remember { mutableStateOf<Product?>(null) }
     var bcvRate by remember { mutableDoubleStateOf(36.5) }
+    var userStatus by remember { mutableStateOf("guest") }
+    
+    // Flag para navegar después de que el diálogo se cierre
+    var pendingLoginNavigation by remember { mutableStateOf(false) }
+
     val db = FirebaseFirestore.getInstance()
+    val auth = FirebaseAuth.getInstance()
+
+    // Manejar la navegación después de cerrar el diálogo
+    LaunchedEffect(selectedProduct) {
+        if (selectedProduct == null && pendingLoginNavigation) {
+            pendingLoginNavigation = false
+            onNavigateToLogin()
+        }
+    }
 
     LaunchedEffect(Unit) {
         db.collection("productos").addSnapshotListener { snapshot, _ ->
@@ -62,6 +79,21 @@ fun HomeScreen(modifier: Modifier = Modifier) {
             if (doc != null && doc.exists()) {
                 bcvRate = doc.getDouble("valor") ?: 36.5
             }
+        }
+    }
+
+    LaunchedEffect(auth.currentUser) {
+        val user = auth.currentUser
+        if (user != null) {
+            db.collection("registros_clientes")
+                .whereEqualTo("email", user.email?.trim())
+                .addSnapshotListener { snapshot, _ ->
+                    if (snapshot != null && !snapshot.isEmpty) {
+                        userStatus = snapshot.documents[0].getString("status") ?: "unverified"
+                    }
+                }
+        } else {
+            userStatus = "guest"
         }
     }
 
@@ -91,13 +123,19 @@ fun HomeScreen(modifier: Modifier = Modifier) {
         ProductDetailDialog(
             product = selectedProduct!!,
             bcvRate = bcvRate,
+            userStatus = userStatus,
+            onGuestClick = {
+                pendingLoginNavigation = true
+                selectedProduct = null
+            },
             onDismiss = { selectedProduct = null }
         )
     }
 }
 
 @Composable
-fun ProductDetailDialog(product: Product, bcvRate: Double, onDismiss: () -> Unit) {
+fun ProductDetailDialog(product: Product, bcvRate: Double, userStatus: String, onGuestClick: () -> Unit, onDismiss: () -> Unit) {
+    val context = LocalContext.current
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
@@ -198,7 +236,22 @@ fun ProductDetailDialog(product: Product, bcvRate: Double, onDismiss: () -> Unit
                     Spacer(modifier = Modifier.height(30.dp))
                     
                     Button(
-                        onClick = onDismiss,
+                        onClick = {
+                            when (userStatus) {
+                                "active" -> {
+                                    Toast.makeText(context, "🚀 PROCESANDO SOLICITUD DE COMPRA...", Toast.LENGTH_SHORT).show()
+                                }
+                                "unverified" -> {
+                                    Toast.makeText(context, "⚠️ CUENTA EN REVISIÓN. ESPERE VERIFICACIÓN PARA COMPRAR.", Toast.LENGTH_LONG).show()
+                                }
+                                "guest" -> {
+                                    onGuestClick()
+                                }
+                                else -> {
+                                    Toast.makeText(context, "ESTADO DE CUENTA: ${userStatus.uppercase()}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
                         modifier = Modifier
                             .height(50.dp)
                             .widthIn(min = 200.dp),
