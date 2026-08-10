@@ -146,6 +146,76 @@
                     <i data-lucide="copy" style="width:12px; height:12px; vertical-align:middle; margin-right:5px;"></i> COPIAR DATOS
                 </button>
             </div>
+
+            <!-- RESUMEN DEL PLAN DE PAGO -->
+            <div id="payment-plan-summary" style="display:none; margin-top:15px; padding:15px; background:rgba(197,160,89,0.05); border:1px solid #C5A05933; border-radius:8px; text-align:left;">
+                <!-- Se llena dinámicamente -->
+            </div>
+
+            <!-- FORMULARIO DE REPORTE DE PAGO -->
+            <div id="payment-report-container" style="display:none; margin-top:25px; text-align:left; border-top:1px solid rgba(197,160,89,0.2); padding-top:20px;">
+                <p style="color:#C5A059; font-size: 0.6rem; font-weight: 800; margin-bottom: 15px; letter-spacing: 2px; text-align:center;">REPORTAR PAGO REALIZADO</p>
+
+                <div class="input-group">
+                    <label>Referencia / ID Transacción</label>
+                    <input type="text" id="report-ref" placeholder="Solo números para Pago Móvil" style="background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; width:100%; font-size:12px;">
+                </div>
+
+                <div class="input-group">
+                    <label>Banco Emisor</label>
+                    <select id="report-bank" style="background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; width:100%; font-size:12px;">
+                        <option value="">Seleccione Banco</option>
+                        <option value="Banesco">Banesco</option>
+                        <option value="Banco de Venezuela">Banco de Venezuela</option>
+                        <option value="Mercantil">Mercantil</option>
+                        <option value="Provincial">Provincial</option>
+                        <option value="Bancamiga">Bancamiga</option>
+                        <option value="Banplus">Banplus</option>
+                        <option value="BNC">BNC</option>
+                        <option value="BOD">BOD</option>
+                        <option value="DHS">DHS (Zelle/USA)</option>
+                        <option value="Binance">Binance</option>
+                        <option value="Otro">Otro</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label>Fecha de Pago</label>
+                    <div style="display:flex; gap:5px; margin-bottom:5px;">
+                        <button onclick="setReportDate('today')" style="flex:1; background:#1a1a24; color:white; border:1px solid #333; padding:8px; font-size:10px; cursor:pointer;">HOY</button>
+                        <button onclick="setReportDate('yesterday')" style="flex:1; background:#1a1a24; color:white; border:1px solid #333; padding:8px; font-size:10px; cursor:pointer;">AYER</button>
+                        <button onclick="document.getElementById('report-date-calendar').style.display='block'" style="flex:1; background:#1a1a24; color:white; border:1px solid #333; padding:8px; font-size:10px; cursor:pointer;">OTRA</button>
+                    </div>
+                    <div id="report-date-display" style="color:#C5A059; font-size:12px; font-weight:800; margin-bottom:10px; text-align:center;"></div>
+                    <input type="date" id="report-date-calendar" onchange="setReportDate('manual')" style="display:none; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; width:100%;">
+                </div>
+
+                <div class="input-group">
+                    <label>Número de Teléfono / Cuenta</label>
+                    <input type="tel" id="report-phone" placeholder="Desde el que pagó" style="background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; width:100%; font-size:12px;">
+                </div>
+
+                <div style="display:flex; gap:10px;">
+                    <div class="input-group" style="flex:1;">
+                        <label>Monto Pagado</label>
+                        <div style="display:flex; gap:5px;">
+                            <input type="number" id="report-amount" step="0.01" placeholder="0.00" style="background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; width:100%; font-size:12px;">
+                            <button onclick="document.getElementById('report-amount').readOnly=false; document.getElementById('report-amount').focus();" style="background:#1a1a24; color:#C5A059; border:1px solid #333; padding:5px; font-size:8px; cursor:pointer;">OTRO MONTO</button>
+                        </div>
+                    </div>
+                    <div id="report-installments-box" class="input-group" style="flex:1; display:none;">
+                        <label>Cuotas</label>
+                        <input type="number" id="report-installments" value="1" min="1" style="background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; width:100%; font-size:12px;">
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>Capture de Pago</label>
+                    <input type="file" id="report-capture" accept="image/*" style="width:100%; font-size:10px;">
+                </div>
+
+                <button onclick="submitPaymentReport()" class="btn-primary full-width" style="margin-top: 10px; background: #C5A059; color: black; border: none; font-weight: 900; letter-spacing: 1px;">¡YA PAGUÉ!</button>
+            </div>
         </div>
 
         <p style="color:#888; font-size: 0.6rem; font-weight: 800; margin-bottom: 15px; letter-spacing: 2px;">CONTACTAR SOPORTE</p>
@@ -950,7 +1020,10 @@
         const orderId = "ORD_" + Date.now();
         const itemsList = cart.map(i => `${i.buyQty}x ${i.name} (${i.paymentMethod.toUpperCase()})`).join(', ');
         const totalUsd = document.getElementById('cart-total-usd').innerText;
-        const totalBss = document.getElementById('cart-total-bss').innerText;
+        const totalBssText = document.getElementById('cart-total-bss').innerText;
+
+        currentOrderTotalBss = parseFloat(totalBssText.replace(" BSS", "")) || 0;
+        currentOrderHasCredit = cart.some(item => item.paymentMethod === 'credit');
 
         // Lógica de Puntos Starbig
         let pointsToAdd = 0;
@@ -973,11 +1046,13 @@
                 customerName: currentUserData.name,
                 items: cart,
                 totalUsd,
-                totalBss,
+                totalBss: totalBssText,
                 pointsUsed: pointsToSubtract,
                 status: "pending",
                 timestamp: Date.now()
             });
+
+            currentOrderId = orderId; // Guardamos para el reporte de pago
 
             // Solo restamos puntos si usó recompensa y actualizamos fecha de beneficio mensual
             if(pointsToSubtract > 0 && currentUserData.docId) {
@@ -997,7 +1072,7 @@
             }
         } catch(e) { console.error("Error saving order:", e); }
 
-        const message = `🛍️ NUEVO PEDIDO STARBIG STORE\n\nOrden: ${orderId}\nCliente: ${currentUserData?.name}\nItems: ${itemsList}\nTotal: ${totalUsd} (${totalBss})\n\nPor favor, contacte para concretar el pago.`;
+        const message = `🛍️ NUEVO PEDIDO STARBIG STORE\n\nOrden: ${orderId}\nCliente: ${currentUserData?.name}\nItems: ${itemsList}\nTotal: ${totalUsd} (${totalBssText})\n\nPor favor, contacte para concretar el pago.`;
 
         // Abrimos el selector de contacto para que elija a qué número enviar el pedido
         openContactChoice(message);
@@ -1310,10 +1385,28 @@
                     </div>
                     <div style="font-weight:bold; margin-bottom:5px;">${order.customerName.toUpperCase()}</div>
                     <div style="margin-bottom:10px;">${itemsHtml}</div>
+
+                    ${order.paymentReport ? `
+                        <div style="background:rgba(197,160,89,0.05); padding:10px; border-radius:8px; margin-bottom:10px; font-size:10px; border:1px solid rgba(197,160,89,0.2);">
+                            <div style="color:#C5A059; font-weight:800; margin-bottom:5px;">DETALLES DEL PAGO:</div>
+                            <div><strong>REF:</strong> ${order.paymentReport.reference}</div>
+                            <div><strong>BANCO:</strong> ${order.paymentReport.bank}</div>
+                            <div><strong>FECHA:</strong> ${order.paymentReport.date}</div>
+                            <div><strong>TLF:</strong> ${order.paymentReport.phone}</div>
+                            <div><strong>MONTO:</strong> ${order.paymentReport.amount} BSS</div>
+                            ${order.paymentReport.installments > 1 ? `<div><strong>CUOTAS:</strong> ${order.paymentReport.installments}</div>` : ''}
+                            ${order.paymentReport.captureBase64 ? `
+                                <div style="margin-top:10px; height:100px; background:#000; display:flex; justify-content:center; align-items:center; cursor:pointer;" onclick="expandImage('data:image/jpeg;base64,${order.paymentReport.captureBase64}')">
+                                    <img src="data:image/jpeg;base64,${order.paymentReport.captureBase64}" style="max-width:100%; max-height:100%;">
+                                </div>
+                            ` : ''}
+                        </div>
+                    ` : '<div style="color:#666; font-size:9px; margin-bottom:10px;">PAGO AÚN NO REPORTADO</div>'}
+
                     <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #ffffff11; padding-top:10px;">
                         <span style="font-weight:bold; color:#c5a059;">${order.totalUsd}</span>
                         <div style="display:flex; gap:5px;">
-                            ${order.status === 'pending' ? `
+                            ${(order.status === 'pending' || order.status === 'awaiting_verification') ? `
                                 <button onclick="confirmPayment('${doc.id}')" style="background:#25D366; color:black; border:none; padding:5px 10px; font-size:9px; font-weight:bold; cursor:pointer; border-radius:4px;">APROBAR</button>
                                 <button onclick="rejectPayment('${doc.id}')" style="background:#ff4444; color:white; border:none; padding:5px 10px; font-size:9px; font-weight:bold; cursor:pointer; border-radius:4px;">RECHAZAR</button>
                             ` : order.status === 'paid' ? '<span style="color:#25D366; font-size:9px; font-weight:bold;">PAGADO</span>' : '<span style="color:#ff4444; font-size:9px; font-weight:bold;">RECHAZADO</span>'}
@@ -2040,19 +2133,147 @@
 
     let pendingWhatsappMsg = "";
 
+    let currentOrderId = null;
+    let selectedReportDate = new Date().toISOString().split('T')[0];
+    let currentOrderTotalBss = 0;
+    let currentOrderHasCredit = false;
+
     function openContactChoice(msg = "") {
         pendingWhatsappMsg = msg;
         document.getElementById('contact-choice-modal').style.display = 'block';
         document.getElementById('pay-details-container').style.display = 'none'; // Reset
+        document.getElementById('payment-report-container').style.display = 'none'; // Reset
         lucide.createIcons();
     }
 
     function showPayInfo(method) {
         const container = document.getElementById('pay-details-container');
         const box = document.getElementById('pay-details-box');
+        const reportForm = document.getElementById('payment-report-container');
+        const summary = document.getElementById('payment-plan-summary');
+
         container.style.display = 'block';
+        reportForm.style.display = 'block';
+        summary.style.display = 'block';
         box.innerHTML = (paymentSettings[method] || "Sin datos configurados").replace(/\n/g, "<br>");
+
+        const totalBssValue = currentOrderTotalBss;
+        const amountInput = document.getElementById('report-amount');
+
+        // Determinar si el pedido actual contiene crédito
+        const hasCredit = currentOrderHasCredit;
+
+        let summaryHtml = "";
+        if(hasCredit) {
+            // Lógica de cuotas (usando el primer artículo a crédito como referencia o sumando todos)
+            const initialPay = totalBssValue * 0.25;
+            const remaining = totalBssValue - initialPay;
+            const userPoints = currentUserData?.points || 0;
+            const extraCuotas = Math.floor(userPoints / 550);
+            const numCuotas = Math.min(12, 2 + extraCuotas);
+            const installmentVal = remaining / numCuotas;
+
+            // Calcular fechas (cada 16 días)
+            const dates = [];
+            for(let i=1; i<=numCuotas; i++) {
+                let d = new Date();
+                d.setDate(d.getDate() + (i * 16));
+                dates.push(d.toLocaleDateString());
+            }
+
+            summaryHtml = `
+                <div style="color:#C5A059; font-size:10px; font-weight:800; margin-bottom:10px; border-bottom:1px solid #C5A05933; padding-bottom:5px;">RESUMEN DE CRÉDITO</div>
+                <div style="font-size:11px; color:white; line-height:1.6;">
+                    Usted ha seleccionado pago a crédito. <br>
+                    <strong>PAGO INICIAL (25%):</strong> ${initialPay.toFixed(2)} BSS<br>
+                    <strong>SALDO RESTANTE:</strong> ${remaining.toFixed(2)} BSS<br>
+                    <strong>CUOTAS:</strong> ${numCuotas} pagos de ${installmentVal.toFixed(2)} BSS<br><br>
+                    <span style="color:#888; font-size:10px;">PRÓXIMAS FECHAS DE COBRO:</span><br>
+                    ${dates.map((date, idx) => `<div style="font-size:10px; color:#aaa;">Cuota ${idx+1}: ${date}</div>`).join('')}
+                </div>
+            `;
+            amountInput.value = initialPay.toFixed(2); // Sugerimos pagar la inicial
+        } else {
+            summaryHtml = `
+                <div style="color:#C5A059; font-size:10px; font-weight:800; margin-bottom:5px;">PAGO DE CONTADO</div>
+                <div style="font-size:11px; color:white;">Total a transferir: <strong>${totalBssValue.toFixed(2)} BSS</strong>. Recibirá 25 puntos por cada artículo al confirmar.</div>
+            `;
+            amountInput.value = totalBssValue.toFixed(2);
+        }
+
+        summary.innerHTML = summaryHtml;
+        amountInput.readOnly = true;
+
+        document.getElementById('report-installments-box').style.display = hasCredit ? 'block' : 'none';
         lucide.createIcons();
+    }
+
+    function setReportDate(type) {
+        const calendar = document.getElementById('report-date-calendar');
+        const display = document.getElementById('report-date-display');
+        const today = new Date();
+
+        if(type === 'today') {
+            selectedReportDate = today.toISOString().split('T')[0];
+            calendar.style.display = 'none';
+        } else if(type === 'yesterday') {
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            selectedReportDate = yesterday.toISOString().split('T')[0];
+            calendar.style.display = 'none';
+        } else if(type === 'manual') {
+            selectedReportDate = calendar.value;
+        }
+
+        display.innerText = "FECHA SELECCIONADA: " + selectedReportDate;
+        showNotification("FECHA FIJADA: " + selectedReportDate);
+    }
+
+    async function submitPaymentReport() {
+        const ref = document.getElementById('report-ref').value;
+        const bank = document.getElementById('report-bank').value;
+        const phone = document.getElementById('report-phone').value;
+        const amount = document.getElementById('report-amount').value;
+        const inst = document.getElementById('report-installments').value;
+        const fileInput = document.getElementById('report-capture');
+        const file = fileInput.files[0];
+
+        if(!ref || !bank || !amount) {
+            showNotification("POR FAVOR, LLENE LOS CAMPOS OBLIGATORIOS", "error");
+            return;
+        }
+
+        showNotification("GUARDANDO REPORTE...");
+
+        try {
+            let capture64 = file ? await getBase64(file) : null;
+            const finalDate = document.getElementById('report-date-calendar').value || selectedReportDate;
+
+            await db.collection("pedidos").doc(currentOrderId).update({
+                paymentReport: {
+                    reference: ref,
+                    bank: bank,
+                    date: finalDate,
+                    phone: phone,
+                    amount: amount,
+                    installments: inst,
+                    captureBase64: capture64,
+                    timestamp: Date.now()
+                },
+                status: "awaiting_verification"
+            });
+
+            const msg = `${pendingWhatsappMsg}\n\n✅ REPORTE DE PAGO:\nRef: ${ref}\nBanco: ${bank}\nMonto: ${amount} BSS\nFecha: ${finalDate}`;
+
+            // Abrir WhatsApp con el reporte incluido
+            contactWhatsapp('+584244019899', msg);
+
+            document.getElementById('contact-choice-modal').style.display = 'none';
+            showNotification("✅ REPORTE ENVIADO CORRECTAMENTE");
+        } catch(e) {
+            console.error(e);
+            showNotification("Error al enviar reporte", "error");
+        }
     }
 
     function copyPaymentData() {
@@ -2064,14 +2285,13 @@
         });
     }
 
-    function contactWhatsapp(number) {
-        let msg = pendingWhatsappMsg;
+    function contactWhatsapp(number, customMsg = null) {
+        const msg = customMsg || pendingWhatsappMsg;
         if(!msg) {
             const name = document.getElementById('profile-name').innerText;
             msg = `Hola, soy ${name}. Solicito asistencia.`;
         }
         window.open(`https://wa.me/${number.replace('+', '')}?text=${encodeURIComponent(msg)}`);
-        document.getElementById('contact-choice-modal').style.display = 'none';
     }
 
     function contactAdmin() {

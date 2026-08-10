@@ -58,6 +58,38 @@ data class CustomerRegistration(
     val idCardUrl: String = ""
 )
 
+data class PaymentReport(
+    val reference: String = "",
+    val bank: String = "",
+    val date: String = "",
+    val phone: String = "",
+    val amount: String = "",
+    val installments: String = "1",
+    val captureBase64: String? = null,
+    val timestamp: Long = 0
+)
+
+data class OrderItem(
+    val name: String = "",
+    val buyQty: Int = 1,
+    val paymentMethod: String = "cash",
+    val priceUsd: Double = 0.0
+)
+
+data class Order(
+    val id: String = "",
+    val orderId: String = "",
+    val customerEmail: String = "",
+    val customerName: String = "",
+    val items: List<OrderItem> = emptyList(),
+    val totalUsd: String = "",
+    val totalBss: String = "",
+    val status: String = "pending",
+    val timestamp: Long = 0,
+    val paymentReport: PaymentReport? = null,
+    val pointsUsed: Int = 0
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
@@ -120,6 +152,7 @@ fun AdminListContent() {
     var selectedTab by remember { mutableIntStateOf(2) }
     var registrations by remember { mutableStateOf(listOf<CustomerRegistration>()) }
     var products by remember { mutableStateOf(listOf<Product>()) }
+    var orders by remember { mutableStateOf(listOf<Order>()) }
     var bcvRate by remember { mutableDoubleStateOf(36.5) }
     var paymentSettings by remember { mutableStateOf(mapOf("zelle" to "", "binance" to "", "zinli" to "", "pagomovil" to "")) }
     var isLoading by remember { mutableStateOf(false) }
@@ -191,6 +224,47 @@ fun AdminListContent() {
             }
         }
 
+        db.collection("pedidos").orderBy("timestamp", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null) orders = snapshot.documents.map { doc ->
+                    val items = (doc.get("items") as? List<Map<String, Any>>)?.map {
+                        OrderItem(
+                            name = it["name"] as? String ?: "",
+                            buyQty = (it["buyQty"] as? Long)?.toInt() ?: 1,
+                            paymentMethod = it["paymentMethod"] as? String ?: "cash",
+                            priceUsd = (it["priceUsd"] as? Double) ?: 0.0
+                        )
+                    } ?: emptyList()
+
+                    val reportMap = doc.get("paymentReport") as? Map<String, Any>
+                    val report = reportMap?.let {
+                        PaymentReport(
+                            reference = it["reference"] as? String ?: "",
+                            bank = it["bank"] as? String ?: "",
+                            date = it["date"] as? String ?: "",
+                            phone = it["phone"] as? String ?: "",
+                            amount = it["amount"]?.toString() ?: "",
+                            installments = it["installments"]?.toString() ?: "1",
+                            captureBase64 = it["captureBase64"] as? String
+                        )
+                    }
+
+                    Order(
+                        id = doc.id,
+                        orderId = doc.getString("orderId") ?: "",
+                        customerEmail = doc.getString("customerEmail") ?: "",
+                        customerName = doc.getString("customerName") ?: "",
+                        items = items,
+                        totalUsd = doc.getString("totalUsd") ?: "",
+                        totalBss = doc.getString("totalBss") ?: "",
+                        status = doc.getString("status") ?: "pending",
+                        timestamp = doc.getLong("timestamp") ?: 0,
+                        paymentReport = report,
+                        pointsUsed = (doc.getLong("pointsUsed") ?: 0).toInt()
+                    )
+                }
+            }
+
         db.collection("config").document("tasa_bcv").addSnapshotListener { snapshot, _ ->
             if (snapshot != null && snapshot.exists()) bcvRate = snapshot.getDouble("valor") ?: 36.5
         }
@@ -216,11 +290,18 @@ fun AdminListContent() {
 
             TrafficMonitorSection()
             Spacer(modifier = Modifier.height(24.dp))
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AdminNavButton("DB", Icons.Default.Storage, selectedTab == 0, Modifier.weight(0.8f)) { selectedTab = 0 }
-                AdminNavButton("STOCK", Icons.Default.Inventory, selectedTab == 1, Modifier.weight(1f)) { selectedTab = 1 }
-                AdminNavButton("PAGOS", Icons.Default.Payments, selectedTab == 3, Modifier.weight(1f)) { selectedTab = 3 }
-                AdminNavButton("SOLIC.", Icons.Default.Group, selectedTab == 2, Modifier.weight(1f)) { selectedTab = 2 }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                AdminNavButton("DB", Icons.Default.Storage, selectedTab == 0, Modifier.width(80.dp)) { selectedTab = 0 }
+                AdminNavButton("STOCK", Icons.Default.Inventory, selectedTab == 1, Modifier.width(80.dp)) { selectedTab = 1 }
+                AdminNavButton("COBROS", Icons.Default.MonetizationOn, selectedTab == 4, Modifier.width(80.dp)) { selectedTab = 4 }
+                AdminNavButton("PAGOS", Icons.Default.Payments, selectedTab == 3, Modifier.width(80.dp)) { selectedTab = 3 }
+                AdminNavButton("SOLIC.", Icons.Default.Group, selectedTab == 2, Modifier.width(80.dp)) { selectedTab = 2 }
             }
             Spacer(modifier = Modifier.height(24.dp))
             HorizontalDivider(color = Color(0xFFC5A059).copy(alpha = 0.15f), thickness = 0.5.dp)
@@ -252,6 +333,14 @@ fun AdminListContent() {
                             showModernToast("❌ ERROR AL GUARDAR", true)
                         }
                     }
+                    4 -> CollectionsSection(
+                        orders = orders,
+                        onConfirmPayment = { confirmOrderPayment(it, db, showModernToast) },
+                        onRejectPayment = { rejectOrderPayment(it, db, showModernToast) },
+                        onDeleteSale = { deleteOrder(it, db, showModernToast) },
+                        onClearHistory = { clearCompletedOrders(db, showModernToast) },
+                        onImageClick = { expandedImageUrl = it }
+                    )
                 }
             }
         }
@@ -265,9 +354,18 @@ fun AdminListContent() {
         if (expandedImageUrl != null) {
             Dialog(onDismissRequest = { expandedImageUrl = null }) {
                 Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(0.9f)).clickable { expandedImageUrl = null }, contentAlignment = Alignment.Center) {
+                    val imageData = if (expandedImageUrl!!.startsWith("data:image")) {
+                        try {
+                            val base64String = expandedImageUrl!!.substringAfter("base64,")
+                            android.util.Base64.decode(base64String, android.util.Base64.DEFAULT)
+                        } catch(e: Exception) { expandedImageUrl }
+                    } else {
+                        expandedImageUrl
+                    }
+
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
-                            .data(fixDriveUrl(expandedImageUrl))
+                            .data(imageData)
                             .crossfade(true)
                             .build(),
                         contentDescription = null,
@@ -779,6 +877,193 @@ fun AdminLargeTextField(v: String, onV: (String) -> Unit, l: String) {
         ),
         shape = RoundedCornerShape(0.dp)
     )
+}
+
+@Composable
+fun CollectionsSection(
+    orders: List<Order>,
+    onConfirmPayment: (Order) -> Unit,
+    onRejectPayment: (Order) -> Unit,
+    onDeleteSale: (Order) -> Unit,
+    onClearHistory: () -> Unit,
+    onImageClick: (String) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("HISTORIAL DE COBROS", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black)
+            TextButton(onClick = onClearHistory) {
+                Text("LIMPIAR", color = Color.Red, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        
+        if (orders.isEmpty()) {
+            InfoSection("No hay pedidos registrados")
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
+                items(orders) { order ->
+                    OrderAdminCard(order, onConfirmPayment, onRejectPayment, onDeleteSale, onImageClick)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun OrderAdminCard(
+    order: Order,
+    onConfirm: (Order) -> Unit,
+    onReject: (Order) -> Unit,
+    onDelete: (Order) -> Unit,
+    onImageClick: (String) -> Unit
+) {
+    val date = java.text.SimpleDateFormat("dd/MM/yy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(order.timestamp))
+    
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(0.dp), border = BorderStroke(0.5.dp, Color(0xFFC5A059).copy(alpha = 0.2f))) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(order.orderId, color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(date, color = Color.White.copy(0.4f), fontSize = 10.sp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(onClick = { onDelete(order) }, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.Delete, null, tint = Color.Red.copy(0.4f), modifier = Modifier.size(14.dp))
+                    }
+                }
+            }
+            
+            Text(order.customerName.uppercase(), color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            order.items.forEach { item ->
+                Text("• ${item.buyQty}x ${item.name} (${item.paymentMethod.uppercase()})", color = Color.White.copy(0.6f), fontSize = 11.sp)
+            }
+            
+            order.paymentReport?.let { report ->
+                Spacer(modifier = Modifier.height(16.dp))
+                Surface(color = Color(0xFFC5A059).copy(0.05f), border = BorderStroke(0.5.dp, Color(0xFFC5A059).copy(0.2f)), modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text("DETALLES DEL PAGO:", color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Black)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        PaymentDetailItem("REF", report.reference)
+                        PaymentDetailItem("BANCO", report.bank)
+                        PaymentDetailItem("MONTO", "${report.amount} BSS")
+                        if(report.installments.toInt() > 1) PaymentDetailItem("CUOTAS", report.installments)
+                        
+                        report.captureBase64?.let { base64 ->
+                            if (base64.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(120.dp)
+                                        .background(Color.Black)
+                                        .clickable { onImageClick("data:image/jpeg;base64,$base64") },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(LocalContext.current)
+                                            .data(try { android.util.Base64.decode(base64, android.util.Base64.DEFAULT) } catch(e: Exception) { null })
+                                            .crossfade(true)
+                                            .build(),
+                                        contentDescription = null,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Fit,
+                                        error = painterResource(R.drawable.logo_admin),
+                                        placeholder = painterResource(R.drawable.logo_admin)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(order.totalUsd, color = Color(0xFFC5A059), fontWeight = FontWeight.Black, fontSize = 16.sp)
+                
+                when (order.status) {
+                    "pending", "awaiting_verification" -> {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { onConfirm(order) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp), shape = RoundedCornerShape(4.dp), modifier = Modifier.height(32.dp)) {
+                                Text("APROBAR", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Black)
+                            }
+                            Button(onClick = { onReject(order) }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp), shape = RoundedCornerShape(4.dp), modifier = Modifier.height(32.dp)) {
+                                Text("RECHAZAR", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Black)
+                            }
+                        }
+                    }
+                    "paid" -> Text("PAGADO", color = Color(0xFF25D366), fontWeight = FontWeight.Black, fontSize = 10.sp)
+                    "rejected" -> Text("RECHAZADO", color = Color.Red, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PaymentDetailItem(label: String, value: String) {
+    Row {
+        Text("$label: ", color = Color.White.copy(0.4f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Text(value, color = Color.White, fontSize = 10.sp)
+    }
+}
+
+private fun confirmOrderPayment(order: Order, db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) {
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            var totalPointsToGain = 0
+            order.items.forEach { if(it.paymentMethod == "cash") totalPointsToGain += 25 }
+            if (order.items.any { it.paymentMethod == "credit" }) totalPointsToGain += 10
+            
+            if (totalPointsToGain > 0) {
+                val userSnap = db.collection("registros_clientes").whereEqualTo("email", order.customerEmail).get().await()
+                if (!userSnap.isEmpty) {
+                    val userDoc = userSnap.documents[0]
+                    val currentPoints = userDoc.getLong("points") ?: 0
+                    userDoc.reference.update("points", currentPoints + totalPointsToGain).await()
+                }
+            }
+            
+            db.collection("pedidos").document(order.id).update("status", "paid").await()
+            CoroutineScope(Dispatchers.Main).launch { showToast("✅ PAGO CONFIRMADO", false) }
+        } catch (e: Exception) {
+            CoroutineScope(Dispatchers.Main).launch { showToast("❌ ERROR AL CONFIRMAR", true) }
+        }
+    }
+}
+
+private fun rejectOrderPayment(order: Order, db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) {
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            if (order.pointsUsed > 0) {
+                val userSnap = db.collection("registros_clientes").whereEqualTo("email", order.customerEmail).get().await()
+                if (!userSnap.isEmpty) {
+                    val userDoc = userSnap.documents[0]
+                    val currentPoints = userDoc.getLong("points") ?: 0
+                    userDoc.reference.update("points", currentPoints + order.pointsUsed).await()
+                }
+            }
+            db.collection("pedidos").document(order.id).update("status", "rejected").await()
+            CoroutineScope(Dispatchers.Main).launch { showToast("❌ PAGO RECHAZADO", true) }
+        } catch (e: Exception) {
+            CoroutineScope(Dispatchers.Main).launch { showToast("❌ ERROR AL RECHAZAR", true) }
+        }
+    }
+}
+
+private fun deleteOrder(order: Order, db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) {
+    db.collection("pedidos").document(order.id).delete().addOnSuccessListener {
+        showToast("Registro eliminado", false)
+    }
+}
+
+private fun clearCompletedOrders(db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) {
+    db.collection("pedidos").whereIn("status", listOf("paid", "rejected")).get().addOnSuccessListener { snap ->
+        val batch = db.batch()
+        snap.documents.forEach { batch.delete(it.reference) }
+        batch.commit().addOnSuccessListener { showToast("✅ HISTORIAL LIMPIO", false) }
+    }
 }
 
 @Composable
