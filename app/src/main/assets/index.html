@@ -246,6 +246,10 @@
             <div id="admin-inventory-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px;"></div>
         </div>
         <div id="admin-content-sales" class="admin-panel-section" style="display:none;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="color:white; letter-spacing: 2px; font-weight: 900; font-size: 14px;">HISTORIAL DE COBRANZAS</h3>
+                <button onclick="clearSalesHistory()" style="background:transparent; color:#ff4444; border:1px solid #ff4444; padding:8px 15px; font-weight:900; cursor:pointer; font-size: 9px; letter-spacing: 1px;">LIMPIAR HISTORIAL</button>
+            </div>
             <div id="admin-sales-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;"></div>
         </div>
 
@@ -975,9 +979,9 @@
                 timestamp: Date.now()
             });
 
-            // Actualizar puntos del usuario y fecha de última recompensa
-            if(currentUserData.docId && (pointsToAdd > 0 || pointsToSubtract > 0)) {
-                const newPoints = (currentUserData.points || 0) + pointsToAdd - pointsToSubtract;
+            // Solo restamos puntos si usó recompensa y actualizamos fecha de beneficio mensual
+            if(pointsToSubtract > 0 && currentUserData.docId) {
+                const newPoints = (currentUserData.points || 0) - pointsToSubtract;
                 const updateData = { points: Math.max(0, newPoints) };
 
                 if(usedRewardNow) {
@@ -989,8 +993,7 @@
                 currentUserData.points = Math.max(0, newPoints);
                 document.getElementById('user-points').innerText = currentUserData.points;
 
-                if(pointsToSubtract > 0) showNotification(`-${pointsToSubtract} ESTRELLAS STARBIG POR CANJE DE PREMIOS`, "error");
-                if(pointsToAdd > 0) showNotification(`+${pointsToAdd} ESTRELLAS STARBIG POR PAGO DE CONTADO`);
+                showNotification(`-${pointsToSubtract} ESTRELLAS STARBIG POR CANJE DE PREMIOS`, "error");
             }
         } catch(e) { console.error("Error saving order:", e); }
 
@@ -1300,19 +1303,36 @@
                 card.innerHTML = `
                     <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
                         <span style="color:#C5A059; font-weight:bold; font-size:10px;">${order.orderId}</span>
-                        <span style="font-size:10px; color:#888;">${date}</span>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span style="font-size:10px; color:#888;">${date}</span>
+                            <button onclick="deleteSingleSale('${doc.id}')" style="background:none; border:none; color:#ff444455; cursor:pointer; padding:0;"><i data-lucide="trash-2" style="width:12px; height:12px;"></i></button>
+                        </div>
                     </div>
                     <div style="font-weight:bold; margin-bottom:5px;">${order.customerName.toUpperCase()}</div>
                     <div style="margin-bottom:10px;">${itemsHtml}</div>
                     <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #ffffff11; padding-top:10px;">
                         <span style="font-weight:bold; color:#c5a059;">${order.totalUsd}</span>
                         <div style="display:flex; gap:5px;">
-                            ${order.status === 'pending' ? `<button onclick="confirmPayment('${doc.id}')" style="background:#25D366; color:black; border:none; padding:5px 10px; font-size:9px; font-weight:bold; cursor:pointer;">CONFIRMAR PAGO</button>` : '<span style="color:#25D366; font-size:9px; font-weight:bold;">PAGADO</span>'}
+                            ${order.status === 'pending' ? `
+                                <button onclick="confirmPayment('${doc.id}')" style="background:#25D366; color:black; border:none; padding:5px 10px; font-size:9px; font-weight:bold; cursor:pointer; border-radius:4px;">APROBAR</button>
+                                <button onclick="rejectPayment('${doc.id}')" style="background:#ff4444; color:white; border:none; padding:5px 10px; font-size:9px; font-weight:bold; cursor:pointer; border-radius:4px;">RECHAZAR</button>
+                            ` : order.status === 'paid' ? '<span style="color:#25D366; font-size:9px; font-weight:bold;">PAGADO</span>' : '<span style="color:#ff4444; font-size:9px; font-weight:bold;">RECHAZADO</span>'}
                         </div>
                     </div>`;
                 list.appendChild(card);
             });
+            lucide.createIcons();
         });
+    }
+
+    async function deleteSingleSale(orderId) {
+        if(!confirm("¿Eliminar este registro permanentemente del historial?")) return;
+        try {
+            await db.collection("pedidos").doc(orderId).delete();
+            showNotification("Registro eliminado");
+        } catch(e) {
+            showNotification("Error al eliminar", "error");
+        }
     }
 
     async function confirmPayment(orderId) {
@@ -1323,24 +1343,83 @@
             const orderDoc = await orderRef.get();
             const order = orderDoc.data();
 
-            // Lógica de Puntos por Cuota de Crédito
-            // Si el pedido tiene artículos a crédito, al confirmar el pago se otorgan 10 puntos.
+            // Lógica de Puntos Starbig (Solo se agregan al confirmar pago)
+            let totalPointsToGain = 0;
+
+            // 1. Puntos por artículos de contado (25 por cada uno)
+            order.items.forEach(item => {
+                if(item.paymentMethod === 'cash') totalPointsToGain += 25;
+            });
+
+            // 2. Puntos por pago de cuota de crédito (10 por la transacción)
             const hasCredit = order.items.some(i => i.paymentMethod === 'credit');
-            if(hasCredit) {
+            if(hasCredit) totalPointsToGain += 10;
+
+            if(totalPointsToGain > 0) {
                 const userSnap = await db.collection("registros_clientes").where("email", "==", order.customerEmail).get();
                 if(!userSnap.empty) {
                     const userDoc = userSnap.docs[0];
-                    const newPoints = (userDoc.data().points || 0) + 10;
+                    const currentPoints = userDoc.data().points || 0;
+                    const newPoints = currentPoints + totalPointsToGain;
                     await userDoc.ref.update({ points: newPoints });
-                    showNotification(`+10 ESTRELLAS STARBIG ASIGNADAS A ${order.customerName}`);
+                    showNotification(`+${totalPointsToGain} ESTRELLAS STARBIG ASIGNADAS A ${order.customerName}`);
                 }
             }
 
             await orderRef.update({ status: "paid" });
-            showNotification("✅ Pago confirmado");
+            showNotification("✅ PAGO CONFIRMADO");
         } catch(e) {
             console.error(e);
             showNotification("Error al confirmar pago", "error");
+        }
+    }
+
+    async function rejectPayment(orderId) {
+        if(!confirm("¿Seguro que desea RECHAZAR este pago? Se devolverán los puntos si se usaron recompensas.")) return;
+
+        try {
+            const orderRef = db.collection("pedidos").doc(orderId);
+            const orderDoc = await orderRef.get();
+            const order = orderDoc.data();
+
+            // Si usó puntos (recompensas), se los devolvemos
+            if (order.pointsUsed && order.pointsUsed > 0) {
+                const userSnap = await db.collection("registros_clientes").where("email", "==", order.customerEmail).get();
+                if(!userSnap.empty) {
+                    const userDoc = userSnap.docs[0];
+                    const currentPoints = userDoc.data().points || 0;
+                    const newPoints = currentPoints + order.pointsUsed;
+                    // También reseteamos la fecha de recompensa si es necesario
+                    // (Opcional, dependiendo de qué tan estricto quieras ser)
+                    await userDoc.ref.update({ points: newPoints });
+                    showNotification(`Puntos devueltos a ${order.customerName}`);
+                }
+            }
+
+            await orderRef.update({ status: "rejected" });
+            showNotification("❌ PAGO RECHAZADO", "error");
+        } catch(e) {
+            console.error(e);
+            showNotification("Error al rechazar pago", "error");
+        }
+    }
+
+    async function clearSalesHistory() {
+        if(!confirm("¿Deseas eliminar permanentemente todos los registros de pagos APROBADOS y RECHAZADOS? Los pedidos pendientes se mantendrán.")) return;
+
+        try {
+            const snapshot = await db.collection("pedidos").where("status", "in", ["paid", "rejected"]).get();
+            const batch = db.batch();
+
+            snapshot.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+
+            await batch.commit();
+            showNotification("✅ HISTORIAL DE COBRANZAS LIMPIO");
+        } catch(e) {
+            console.error(e);
+            showNotification("Error al limpiar historial", "error");
         }
     }
 
