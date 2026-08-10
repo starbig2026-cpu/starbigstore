@@ -316,6 +316,8 @@ fun AdminListContent() {
                                     put("action", "addProduct")
                                     put("sheetName", normalizedCategory)
                                     put("photoBase64", base64)
+                                    put("fileName", "PROD_${System.currentTimeMillis()}_${finalProd.name.replace(" ", "_")}.jpg")
+                                    put("folderName", "PRODUCTOS_STARBIG")
                                     put("data", org.json.JSONObject().apply {
                                         put("fecha", java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date()))
                                         put("nombre", finalProd.name); put("precio", finalProd.priceUsd); put("stock", finalProd.stock)

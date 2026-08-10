@@ -286,6 +286,17 @@
     listenToTasa();
     startTrafficMonitor();
 
+    auth.onAuthStateChanged(user => {
+        if (user) {
+            db.collection("registros_clientes").where("email", "==", user.email).get().then(docs => {
+                if (!docs.empty) {
+                    const u = docs.docs[0].data();
+                    window.updateUserProfile(u.name, user.email, u.photoUrl, u.status, u.points || 0);
+                }
+            });
+        }
+    });
+
     function openAuth() {
         document.getElementById("auth-modal").style.display = "block";
         lucide.createIcons();
@@ -573,6 +584,8 @@
                 action: "addProduct",
                 sheetName: cat.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase(),
                 photoBase64: photo64,
+                fileName: `PROD_${Date.now()}_${name.replace(/\s+/g, '_')}.jpg`,
+                folderName: "PRODUCTOS_STARBIG",
                 data: {
                     fecha: new Date().toLocaleString(),
                     nombre: name, precio: price, stock: stock,
@@ -733,7 +746,7 @@
     document.getElementById('login-form').onsubmit = (e) => {
         e.preventDefault();
         const email = document.getElementById('login-email').value.trim();
-        const pass = document.getElementById('login-pass').value.trim();
+        const pass = document.getElementById('login-pass').value;
 
         showNotification("Autenticando...");
 
@@ -750,11 +763,18 @@
                     }
                 });
             }).catch(err => {
+                console.error("Auth Error:", err);
                 let msg = err.message;
-                if(msg.includes("invalid-login-credentials") || msg.includes("wrong-password") || msg.includes("user-not-found") || msg.includes("invalid-credential")) {
-                    msg = "Correo o contraseña incorrectos";
+                let code = err.code || "";
+
+                if(code === "auth/wrong-password" || code === "auth/user-not-found" || code === "auth/invalid-credential" || msg.includes("invalid-login-credentials")) {
+                    msg = "CORREO O CONTRASEÑA INCORRECTOS";
+                } else if (code === "auth/invalid-email") {
+                    msg = "FORMATO DE CORREO INVÁLIDO";
+                } else {
+                    msg = "ERROR: " + (code || msg).toUpperCase();
                 }
-                showNotification("Error: " + msg, "error");
+                showNotification(msg, "error");
             });
         }
     };
@@ -813,7 +833,9 @@
                                     action: "updatePhoto",
                                     sheetName: "USUARIOS",
                                     email: user.email,
-                                    photoBase64: base64
+                                    photoBase64: base64,
+                                    fileName: `PERFIL_${Date.now()}_${user.email.split('@')[0]}.jpg`,
+                                    folderName: "PERFILES_USUARIOS"
                                 })
                             });
                             const resData = await response.json();
@@ -823,7 +845,9 @@
                                 if(!snap.empty) {
                                     await snap.docs[0].ref.update({ photoUrl: resData.photoUrl });
                                     showNotification("✅ FOTO ACTUALIZADA");
-                                    location.reload();
+                                    // Actualizar UI sin recargar
+                                    document.getElementById('profile-img-large').src = fixDriveUrl(resData.photoUrl);
+                                    document.getElementById('user-photo-nav').src = fixDriveUrl(resData.photoUrl);
                                 }
                             }
                         } catch(err) {
@@ -876,7 +900,7 @@
             const sector = document.getElementById('reg-sector').value;
             const fullAddress = `${sector ? sector + ', ' : ''}${parish ? parish + ', ' : ''}${mun ? mun + ', ' : ''}${state ? state + ', ' : ''}${country}`;
 
-            const pass = document.getElementById('reg-pass').value.trim();
+            const pass = document.getElementById('reg-pass').value;
 
             if(window.AndroidApp) {
                 window.AndroidApp.registerUser(name, lastname, email, fullPhone, fullAddress, photo64, id64, pass);
@@ -912,7 +936,11 @@
                         email: email, phone: fullPhone,
                         address: fullAddress,
                         status: "unverified",
-                        photoBase64: photo64, idCardBase64: id64
+                        photoBase64: photo64,
+                        idCardBase64: id64,
+                        photoName: `PERFIL_${Date.now()}_${email.split('@')[0]}.jpg`,
+                        idCardName: `ID_${Date.now()}_${email.split('@')[0]}.jpg`,
+                        folderName: "REGISTROS_NUEVOS"
                     })
                 });
 

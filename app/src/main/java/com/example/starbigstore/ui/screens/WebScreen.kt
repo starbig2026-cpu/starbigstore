@@ -85,6 +85,9 @@ class WebAppInterface(
                     put("status", "unverified")
                     put("photoBase64", photoBase64)
                     put("idCardBase64", idCardBase64)
+                    put("photoName", "PERFIL_${System.currentTimeMillis()}_${email.trim().split("@")[0]}.jpg")
+                    put("idCardName", "ID_${System.currentTimeMillis()}_${email.trim().split("@")[0]}.jpg")
+                    put("folderName", "REGISTROS_NUEVOS")
                     put("date", java.text.SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(Date()))
                 }
                 
@@ -194,6 +197,8 @@ class WebAppInterface(
                     put("sheetName", "USUARIOS")
                     put("email", email.trim())
                     put("photoBase64", photoBase64)
+                    put("fileName", "PERFIL_${System.currentTimeMillis()}_${email.trim().split("@")[0]}.jpg")
+                    put("folderName", "PERFILES_USUARIOS")
                 }
                 
                 val body = payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
@@ -218,7 +223,11 @@ class WebAppInterface(
                             currentUser.updateProfile(profileUpdates).await()
 
                             webView.post {
-                                webView.evaluateJavascript("showNotification('✅ FOTO ACTUALIZADA CON ÉXITO'); location.reload();", null)
+                                webView.evaluateJavascript("""
+                                    showNotification('✅ FOTO ACTUALIZADA CON ÉXITO');
+                                    document.getElementById('profile-img-large').src = '${fixDriveUrl(photoUrl)}';
+                                    document.getElementById('user-photo-nav').src = '${fixDriveUrl(photoUrl)}';
+                                """.trimIndent(), null)
                             }
                         } else {
                             throw Exception("EL SCRIPT NO DEVOLVIÓ URL")
