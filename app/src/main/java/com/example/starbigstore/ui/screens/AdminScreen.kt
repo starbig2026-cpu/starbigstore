@@ -602,7 +602,7 @@ fun InventorySection(products: List<Product>, bcv: Double, onAdd: () -> Unit, on
         
         val tabIndex = categories.indexOf(selectedCategory).let { if (it == -1) 0 else it }
         
-        ScrollableTabRow(
+        SecondaryScrollableTabRow(
             selectedTabIndex = tabIndex,
             containerColor = Color.Transparent,
             contentColor = Color(0xFFC5A059),

@@ -1,21 +1,43 @@
 package com.example.starbigstore.ui.screens
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.example.starbigstore.R
 import com.example.starbigstore.data.Product
 import com.example.starbigstore.ui.components.ProductCard
+import com.example.starbigstore.ui.components.fixDriveUrl
 import com.google.firebase.firestore.FirebaseFirestore
 
 @Composable
 fun HomeScreen(modifier: Modifier = Modifier) {
     var products by remember { mutableStateOf(listOf<Product>()) }
+    var selectedProduct by remember { mutableStateOf<Product?>(null) }
+    var bcvRate by remember { mutableDoubleStateOf(36.5) }
     val db = FirebaseFirestore.getInstance()
 
     LaunchedEffect(Unit) {
@@ -30,9 +52,15 @@ fun HomeScreen(modifier: Modifier = Modifier) {
                         category = doc.getString("category") ?: "",
                         collection = doc.getString("collection") ?: "",
                         imageUrl = doc.getString("imageUrl") ?: "",
-                        stock = doc.getLong("stock")?.toInt() ?: 0
+                        stock = doc.getLong("stock")?.toInt() ?: 0,
+                        allowCredit = doc.getBoolean("allowCredit") ?: false
                     )
                 }
+            }
+        }
+        db.collection("config").document("tasa_bcv").addSnapshotListener { doc, _ ->
+            if (doc != null && doc.exists()) {
+                bcvRate = doc.getDouble("valor") ?: 36.5
             }
         }
     }
@@ -42,7 +70,8 @@ fun HomeScreen(modifier: Modifier = Modifier) {
             text = "Catálogo Premium",
             style = MaterialTheme.typography.headlineSmall,
             color = Color.White,
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(16.dp),
+            fontWeight = FontWeight.Black
         )
         
         LazyVerticalGrid(
@@ -53,8 +82,156 @@ fun HomeScreen(modifier: Modifier = Modifier) {
             modifier = Modifier.fillMaxSize()
         ) {
             items(products) { product ->
-                ProductCard(product = product)
+                ProductCard(product = product, onClick = { selectedProduct = product })
             }
         }
+    }
+
+    if (selectedProduct != null) {
+        ProductDetailDialog(
+            product = selectedProduct!!,
+            bcvRate = bcvRate,
+            onDismiss = { selectedProduct = null }
+        )
+    }
+}
+
+@Composable
+fun ProductDetailDialog(product: Product, bcvRate: Double, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.85f),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0D0D11)),
+            shape = RoundedCornerShape(24.dp),
+            border = BorderStroke(1.dp, Color(0xFFC5A059).copy(0.3f))
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(fixDriveUrl(product.imageUrl))
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(280.dp)
+                            .clip(RoundedCornerShape(16.dp)),
+                        contentScale = ContentScale.Crop,
+                        error = painterResource(R.drawable.logo_admin)
+                    )
+                    
+                    Spacer(modifier = Modifier.height(20.dp))
+                    
+                    Text(
+                        text = product.category.uppercase(),
+                        color = Color(0xFFC5A059),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp
+                    )
+                    
+                    Text(
+                        text = product.name.uppercase(),
+                        color = Color.White,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Black,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                    
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = "$${product.priceUsd}",
+                            color = Color(0xFFC5A059),
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "(${(product.priceUsd * bcvRate).toInt()} BSS)",
+                            color = Color.White.copy(0.6f),
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(20.dp))
+                    
+                    Surface(
+                        color = Color.White.copy(0.05f),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = product.description.ifEmpty { "Sin descripción disponible para este producto exclusivo de Starbig Store." },
+                            color = Color.White.copy(0.8f),
+                            fontSize = 14.sp,
+                            lineHeight = 22.sp,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(20.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        InfoBadge(label = "STOCK", value = "${product.stock} UNIDADES", modifier = Modifier.weight(1f))
+                        InfoBadge(
+                            label = "PAGO", 
+                            value = if(product.allowCredit) "APTO CRÉDITO" else "CONTADO",
+                            modifier = Modifier.weight(1f),
+                            valueColor = if(product.allowCredit) Color(0xFFC5A059) else Color(0xFFFF4444)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(30.dp))
+                    
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .height(50.dp)
+                            .widthIn(min = 200.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059)),
+                        shape = RoundedCornerShape(50.dp)
+                    ) {
+                        Text("COMPRAR AHORA", color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                }
+                
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(10.dp)
+                        .background(Color.Black.copy(0.5f), RoundedCornerShape(50.dp))
+                ) {
+                    Icon(Icons.Default.Close, contentDescription = null, tint = Color.White)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun InfoBadge(label: String, value: String, modifier: Modifier = Modifier, valueColor: Color = Color.White) {
+    Column(
+        modifier = modifier
+            .background(Color.White.copy(0.03f), RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(text = label, color = Color.White.copy(0.5f), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+        Text(text = value, color = valueColor, fontSize = 11.sp, fontWeight = FontWeight.Black)
     }
 }
