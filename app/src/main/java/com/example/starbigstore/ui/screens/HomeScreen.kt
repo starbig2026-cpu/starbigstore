@@ -175,8 +175,8 @@ fun QuantitySelectorDialog(
     val initialPayBss = totalCreditBss * 0.25
     val remainingBss = totalCreditBss - initialPayBss
     
-    val extraCuotas = userPoints / 10
-    val numCuotas = 2 + extraCuotas
+    val extraCuotas = userPoints / 550
+    val numCuotas = (2 + extraCuotas).coerceAtMost(12)
     val installmentVal = remainingBss / numCuotas
 
     Dialog(onDismissRequest = onDismiss) {
