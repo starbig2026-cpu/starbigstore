@@ -11,6 +11,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CreditCard
@@ -22,9 +23,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import com.example.starbigstore.ui.screens.AdminScreen
@@ -63,6 +66,7 @@ class MainActivity : FragmentActivity() {
             StarbigStoreTheme(darkTheme = true) {
                 var currentTab by remember { mutableIntStateOf(0) }
                 var shouldShowAuth by remember { mutableStateOf(false) }
+                var shouldShowCart by remember { mutableStateOf(false) }
                 
                 val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
                     uri?.let { filePathCallback?.onReceiveValue(arrayOf(it)) } ?: filePathCallback?.onReceiveValue(null)
@@ -83,43 +87,86 @@ class MainActivity : FragmentActivity() {
                         bottomBar = {
                             if (currentTab != 2) {
                                 NavigationBar(
-                                    containerColor = Color.Black.copy(alpha = 0.7f),
-                                    contentColor = MaterialTheme.colorScheme.primary,
+                                    containerColor = Color(0xFF08080A),
+                                    tonalElevation = 0.dp,
                                     modifier = Modifier.navigationBarsPadding()
                                 ) {
-                                    NavigationBarItem(selected = currentTab == 0, onClick = { currentTab = 0 }, icon = { Icon(Icons.Default.Home, null) }, label = { Text("Tienda") })
-                                    NavigationBarItem(selected = currentTab == 1, onClick = { currentTab = 1 }, icon = { Icon(Icons.Default.ShoppingCart, null) }, label = { Text("Catálogo") })
-                                    NavigationBarItem(selected = currentTab == 3, onClick = { currentTab = 3 }, icon = { Icon(Icons.Default.CreditCard, null) }, label = { Text("Crédito") })
-                                    NavigationBarItem(selected = currentTab == 4, onClick = { currentTab = 4 }, icon = { Icon(Icons.Default.ShoppingBag, null) }, label = { Text("Carrito") })
+                                    val items = listOf(
+                                        Triple(0, Icons.Default.Home, "Tienda"),
+                                        Triple(1, Icons.Default.ShoppingCart, "Catálogo"),
+                                        Triple(3, Icons.Default.CreditCard, "Crédito"),
+                                        Triple(4, Icons.Default.ShoppingBag, "Carrito")
+                                    )
+
+                                    items.forEach { (index, icon, label) ->
+                                        NavigationBarItem(
+                                            selected = currentTab == index,
+                                            onClick = {
+                                                if (index == 4) {
+                                                    shouldShowCart = true
+                                                    currentTab = 4
+                                                } else {
+                                                    currentTab = index
+                                                }
+                                            },
+                                            icon = { Icon(icon, null) },
+                                            label = { Text(label, fontSize = 10.sp) },
+                                            colors = NavigationBarItemDefaults.colors(
+                                                selectedIconColor = Color(0xFFC5A059),
+                                                selectedTextColor = Color(0xFFC5A059),
+                                                unselectedIconColor = Color.White.copy(0.4f),
+                                                unselectedTextColor = Color.White.copy(0.4f),
+                                                indicatorColor = Color(0xFFC5A059).copy(0.1f)
+                                            )
+                                        )
+                                    }
                                 }
                             }
                         },
                         modifier = Modifier.fillMaxSize()
                     ) { innerPadding ->
                         Box(modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding()).statusBarsPadding()) {
-                            when (currentTab) {
-                                0 -> WebScreen(
-                                    url = "file:///android_asset/index.html",
-                                    onAdminRequest = { currentTab = 2 },
-                                    onBiometricRequest = { showBiometricPrompt() },
-                                    onFileChoose = { callback ->
-                                        filePathCallback?.onReceiveValue(null)
-                                        filePathCallback = callback
-                                        pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            // Capa de la Web (siempre presente para no perder sesión)
+                            WebScreen(
+                                url = "file:///android_asset/index.html",
+                                onAdminRequest = { currentTab = 2 },
+                                onBiometricRequest = { showBiometricPrompt() },
+                                onFileChoose = { callback ->
+                                    filePathCallback?.onReceiveValue(null)
+                                    filePathCallback = callback
+                                    pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                },
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer { 
+                                        alpha = if (currentTab == 0 || currentTab == 4) 1f else 0f 
                                     },
-                                    modifier = Modifier.fillMaxSize(),
-                                    triggerAuth = shouldShowAuth,
-                                    onAuthTriggered = { shouldShowAuth = false }
-                                )
-                                1 -> HomeScreen(
-                                    onNavigateToLogin = {
-                                        shouldShowAuth = true
-                                        currentTab = 0
-                                    },
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                                2 -> AdminScreen(onBack = { currentTab = 0 }, modifier = Modifier.fillMaxSize())
-                                else -> Box(Modifier.fillMaxSize())
+                                triggerAuth = shouldShowAuth,
+                                onAuthTriggered = { shouldShowAuth = false },
+                                triggerCart = shouldShowCart,
+                                onCartTriggered = { shouldShowCart = false },
+                                currentTab = currentTab
+                            )
+
+                            // Capa de Pantallas Nativas
+                            if (currentTab != 0 && currentTab != 4) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Color.Black.copy(alpha = 0.95f))
+                                ) {
+                                    when (currentTab) {
+                                        1 -> HomeScreen(
+                                            onNavigateToLogin = {
+                                                shouldShowAuth = true
+                                                currentTab = 0
+                                            },
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                        2 -> AdminScreen(onBack = { currentTab = 0 }, modifier = Modifier.fillMaxSize())
+                                        3 -> Box(Modifier.fillMaxSize()) // Placeholder para Crédito
+                                    }
+                                }
                             }
                         }
                     }

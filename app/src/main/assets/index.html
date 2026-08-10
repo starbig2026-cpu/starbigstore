@@ -15,13 +15,13 @@
 
 <header class="navbar">
     <div class="logo" onclick="handleLogoClick()">STARBIG<span>STORE</span></div>
-    <div class="nav-icons">
-        <label for="language-selector" style="display:none;">Idioma</label>
-        <select id="language-selector" onchange="changeLanguage(this.value)" style="background:transparent; color:#c5a059; border:1px solid #c5a059; font-size:12px; cursor:pointer;">
-            <option value="es">ES</option>
-            <option value="en">EN</option>
-        </select>
-        <button class="icon-btn" onclick="openAuth()" aria-label="Usuario">
+        <div class="nav-icons">
+            <label for="language-selector" style="display:none;">Idioma</label>
+            <select id="language-selector" onchange="changeLanguage(this.value)" style="background:transparent; color:#c5a059; border:1px solid #c5a059; font-size:12px; cursor:pointer;">
+                <option value="es">ES</option>
+                <option value="en">EN</option>
+            </select>
+            <button class="icon-btn" onclick="openAuth()" aria-label="Usuario">
             <span id="user-photo-container" style="display: none; width: 32px; height: 32px; border-radius: 50%; overflow: hidden; border: 1px solid #c5a059;">
                 <img id="user-photo-nav" src="" style="width: 100%; height: 100%; object-fit: cover;" alt="P" referrerpolicy="no-referrer">
             </span>
@@ -304,6 +304,64 @@
     </div>
 </div>
 
+<!-- MODAL CANTIDAD COMPRA -->
+<div id="quantity-modal" class="modal" style="background:rgba(0,0,0,0.8); z-index:8000;">
+    <div class="modal-content" style="background:#121216; border:1px solid #C5A059; max-width: 400px; text-align: center;">
+        <h2 style="color:white; margin-bottom:20px; font-weight: 900; letter-spacing: 1px;">¿CUÁNTOS DESEAS?</h2>
+
+        <div style="width: 120px; height: 120px; margin: 0 auto 15px; border-radius: 15px; overflow: hidden; border: 1px solid rgba(197, 160, 89, 0.3);">
+            <img id="qty-product-img" src="" style="width: 100%; height: 100%; object-fit: cover;" alt="P">
+        </div>
+
+        <p id="qty-product-name" style="color: #c5a059; margin-bottom: 20px; font-weight: 700;"></p>
+
+        <div style="display: flex; justify-content: center; align-items: center; gap: 20px; margin-bottom: 20px;">
+            <button onclick="changeQty(-1)" style="background: #1a1a24; border: 1px solid #c5a059; color: white; width: 40px; height: 40px; border-radius: 50%; font-size: 20px; cursor: pointer;">-</button>
+            <label for="buy-quantity" style="display:none;">Cantidad</label>
+            <input type="number" id="buy-quantity" value="1" min="1" oninput="updateQtyPrice()" style="width: 80px; background: transparent; border: none; border-bottom: 2px solid #c5a059; color: white; text-align: center; font-size: 24px; font-weight: 800; outline: none;">
+            <button onclick="changeQty(1)" style="background: #1a1a24; border: 1px solid #c5a059; color: white; width: 40px; height: 40px; border-radius: 50%; font-size: 20px; cursor: pointer;">+</button>
+        </div>
+
+        <div id="qty-price-display" style="background: rgba(255,255,255,0.03); padding: 15px; border-radius: 10px; margin-bottom: 25px; border: 1px solid rgba(197,160,89,0.1);">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                <span style="color: #888; font-size: 0.7rem; font-weight: 800;">PAGO DE CONTADO:</span>
+                <span id="qty-total-cash" style="color: #fff; font-weight: 800; font-size: 0.9rem;">0.00 BSS</span>
+            </div>
+            <div id="qty-credit-box" style="display: flex; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.05); pt: 8px; margin-top: 8px;">
+                <span style="color: #c5a059; font-size: 0.7rem; font-weight: 800;">PAGO A CRÉDITO (+10%):</span>
+                <span id="qty-total-credit" style="color: #c5a059; font-weight: 900; font-size: 1rem;">0.00 BSS</span>
+            </div>
+        </div>
+
+        <button onclick="confirmAddToCart()" class="btn-primary full-width">AGREGAR AL CARRITO</button>
+        <button onclick="document.getElementById('quantity-modal').style.display='none'" class="btn-secondary full-width" style="margin-top:10px;">CANCELAR</button>
+    </div>
+</div>
+
+<!-- MODAL CARRITO -->
+<div id="cart-modal" class="modal" style="background:rgba(0,0,0,0.95); z-index:8500;">
+    <div class="modal-content" style="max-width: 600px;">
+        <span class="close-modal" onclick="toggleCart()">&times;</span>
+        <h2 style="color:white; margin-bottom:30px; font-family: 'Playfair Display', serif; border-bottom: 1px solid #c5a059; padding-bottom: 10px;">TU <span>CARRITO</span></h2>
+
+        <div id="cart-items-container" style="margin-bottom: 30px;">
+            <!-- Items del carrito -->
+        </div>
+
+        <div id="cart-summary" style="border-top: 1px solid #2a2a3c; padding-top: 20px;">
+            <div style="display: flex; justify-content: space-between; color: white; margin-bottom: 10px;">
+                <span>Subtotal USD:</span>
+                <span id="cart-total-usd" style="font-weight: 800; color: #c5a059;">$0.00</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; color: #888; font-size: 0.9rem; margin-bottom: 30px;">
+                <span>Total BSS:</span>
+                <span id="cart-total-bss">0.00 BSS</span>
+            </div>
+            <button onclick="checkout()" class="btn-primary full-width">FINALIZAR PEDIDO</button>
+        </div>
+    </div>
+</div>
+
 <!-- MODAL EDITAR PERFIL -->
 <div id="edit-profile-overlay" class="modal" style="background:rgba(0,0,0,0.8); z-index:7000;">
     <div class="modal-content" style="background:#121216; border:1px solid #C5A059; max-width: 450px;">
@@ -359,6 +417,8 @@
 
     let currentEditingProductId = null;
     let currentAdminCategory = "Todos";
+    let cart = [];
+    let currentViewingProduct = null;
 
     lucide.createIcons();
     listenToTasa();
@@ -479,6 +539,7 @@
     function openProductDetail(id) {
         const p = allProducts.find(x => x.id === id);
         if(!p) return;
+        currentViewingProduct = p;
 
         document.getElementById('detail-img').src = fixDriveUrl(getImageUrl(p));
         document.getElementById('detail-name').innerText = p.name.toUpperCase();
@@ -512,7 +573,138 @@
     function checkAccess() {
         if(userStatus === "unverified") showNotification("⚠️ Cuenta en revisión.", "error");
         else if(userStatus === "guest") openAuth();
-        else showNotification("Abriendo Catálogo de Créditos...");
+        else {
+            if(currentViewingProduct) {
+                document.getElementById('qty-product-name').innerText = currentViewingProduct.name.toUpperCase();
+                document.getElementById('qty-product-img').src = fixDriveUrl(getImageUrl(currentViewingProduct));
+                document.getElementById('buy-quantity').value = 1;
+                updateQtyPrice();
+                document.getElementById('quantity-modal').style.display = 'block';
+            }
+        }
+    }
+
+    function updateQtyPrice() {
+        if(!currentViewingProduct) return;
+        const qty = parseInt(document.getElementById('buy-quantity').value) || 1;
+        const priceUsd = currentViewingProduct.priceUsd;
+        const totalBss = priceUsd * qty * tasaBcv;
+
+        document.getElementById('qty-total-cash').innerText = totalBss.toFixed(2) + " BSS";
+
+        const creditBox = document.getElementById('qty-credit-box');
+        if(currentViewingProduct.allowCredit) {
+            creditBox.style.display = 'flex';
+            document.getElementById('qty-total-credit').innerText = (totalBss * 1.1).toFixed(2) + " BSS";
+        } else {
+            creditBox.style.display = 'none';
+        }
+    }
+
+    // CARRITO LOGIC
+    function changeQty(val) {
+        const input = document.getElementById('buy-quantity');
+        let current = parseInt(input.value) || 1;
+        input.value = Math.max(1, current + val);
+        updateQtyPrice();
+    }
+
+    function confirmAddToCart() {
+        const qty = parseInt(document.getElementById('buy-quantity').value) || 1;
+        if(currentViewingProduct) {
+            const cartItem = {
+                ...currentViewingProduct,
+                buyQty: qty
+            };
+
+            // Si ya está en el carrito, sumar cantidad
+            const existingIndex = cart.findIndex(item => item.id === currentViewingProduct.id);
+            if(existingIndex > -1) {
+                cart[existingIndex].buyQty += qty;
+            } else {
+                cart.push(cartItem);
+            }
+
+            updateCartUI();
+            showNotification(`✅ ${qty} x ${currentViewingProduct.name.toUpperCase()} AGREGADO`);
+            document.getElementById('quantity-modal').style.display = 'none';
+            closeProductDetail();
+        }
+    }
+
+    function updateCartUI() {
+        const count = cart.reduce((sum, item) => sum + item.buyQty, 0);
+        const badge = document.getElementById('cart-count');
+        if(badge) {
+            badge.innerText = count;
+            badge.style.display = count > 0 ? 'block' : 'none';
+        }
+        renderCart();
+    }
+
+    function toggleCart() {
+        const modal = document.getElementById('cart-modal');
+        modal.style.display = modal.style.display === 'block' ? 'none' : 'block';
+        if(modal.style.display === 'block') renderCart();
+    }
+
+    function closeCart() {
+        document.getElementById('cart-modal').style.display = 'none';
+    }
+
+    function renderCart() {
+        const container = document.getElementById('cart-items-container');
+        container.innerHTML = "";
+        let total = 0;
+
+        if(cart.length === 0) {
+            container.innerHTML = "<p style='color:#666; text-align:center; padding: 40px 0;'>TU CARRITO ESTÁ VACÍO</p>";
+        } else {
+            cart.forEach((item, index) => {
+                const subtotal = item.priceUsd * item.buyQty;
+                total += subtotal;
+                container.innerHTML += `
+                    <div style="display:flex; align-items:center; gap:15px; background:#1a1a24; padding:15px; border-radius:15px; margin-bottom:15px; border: 1px solid rgba(255,255,255,0.05);">
+                        <img src="${fixDriveUrl(getImageUrl(item))}" style="width:60px; height:60px; object-fit:cover; border-radius:10px;">
+                        <div style="flex:1;">
+                            <div style="color:white; font-size:0.9rem; font-weight:800;">${item.name.toUpperCase()}</div>
+                            <div style="color:#c5a059; font-size:0.8rem;">$${item.priceUsd} x ${item.buyQty}</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="color:white; font-weight:800;">$${subtotal.toFixed(2)}</div>
+                            <button onclick="removeFromCart(${index})" style="background:none; border:none; color:#ff4444; cursor:pointer; font-size:0.7rem; margin-top:5px;">ELIMINAR</button>
+                        </div>
+                    </div>`;
+            });
+        }
+
+        document.getElementById('cart-total-usd').innerText = "$" + total.toFixed(2);
+        document.getElementById('cart-total-bss').innerText = (total * tasaBcv).toFixed(2) + " BSS";
+    }
+
+    function removeFromCart(index) {
+        cart.splice(index, 1);
+        updateCartUI();
+    }
+
+    async function checkout() {
+        if(cart.length === 0) return;
+
+        showNotification("PROCESANDO PEDIDO...");
+
+        // Aquí podrías enviar el pedido a Firebase o WhatsApp
+        const itemsList = cart.map(i => `${i.buyQty}x ${i.name}`).join(', ');
+        const totalUsd = document.getElementById('cart-total-usd').innerText;
+
+        const message = `🛍️ NUEVO PEDIDO STARBIG STORE\n\nCliente: ${currentUserData?.name}\nItems: ${itemsList}\nTotal: ${totalUsd}\n\nPor favor, contacte para concretar el pago.`;
+
+        const waUrl = `https://wa.me/584129431568?text=${encodeURIComponent(message)}`;
+        window.open(waUrl);
+
+        cart = [];
+        updateCartUI();
+        toggleCart();
+        showNotification("✅ PEDIDO ENVIADO POR WHATSAPP");
     }
 
     // ADMIN WEB LOGIC

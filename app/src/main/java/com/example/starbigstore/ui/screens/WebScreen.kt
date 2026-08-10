@@ -256,7 +256,10 @@ fun WebScreen(
     onFileChoose: (ValueCallback<Array<Uri>>?) -> Unit,
     modifier: Modifier = Modifier,
     triggerAuth: Boolean = false,
-    onAuthTriggered: () -> Unit = {}
+    onAuthTriggered: () -> Unit = {},
+    triggerCart: Boolean = false,
+    onCartTriggered: () -> Unit = {},
+    currentTab: Int = 0
 ) {
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
 
@@ -264,6 +267,19 @@ fun WebScreen(
         if (triggerAuth && webViewInstance != null) {
             webViewInstance?.evaluateJavascript("openAuth()", null)
             onAuthTriggered()
+        }
+    }
+
+    LaunchedEffect(triggerCart, webViewInstance) {
+        if (triggerCart && webViewInstance != null) {
+            webViewInstance?.evaluateJavascript("toggleCart()", null)
+            onCartTriggered()
+        }
+    }
+
+    LaunchedEffect(currentTab, webViewInstance) {
+        if (webViewInstance != null && currentTab != 4) {
+            webViewInstance?.evaluateJavascript("if(typeof closeCart === 'function') closeCart()", null)
         }
     }
 
@@ -278,6 +294,12 @@ fun WebScreen(
                 webViewClient = object : WebViewClient() {
                     override fun onPageFinished(view: WebView?, url: String?) {
                         super.onPageFinished(view, url)
+                        
+                        // Restaurar sesión si hay un usuario logueado en Firebase Android
+                        FirebaseAuth.getInstance().currentUser?.email?.let { email ->
+                            webInterface.fetchUserData(email)
+                        }
+
                         if (triggerAuth) {
                             evaluateJavascript("openAuth()", null)
                             onAuthTriggered()
@@ -294,6 +316,7 @@ fun WebScreen(
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
+                    databaseEnabled = true
                     allowFileAccess = true
                     allowContentAccess = true
                     mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW

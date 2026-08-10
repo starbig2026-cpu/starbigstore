@@ -12,7 +12,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,8 +40,10 @@ import com.google.firebase.firestore.FirebaseFirestore
 
 @Composable
 fun HomeScreen(onNavigateToLogin: () -> Unit, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
     var products by remember { mutableStateOf(listOf<Product>()) }
     var selectedProduct by remember { mutableStateOf<Product?>(null) }
+    var productForQuantity by remember { mutableStateOf<Product?>(null) }
     var bcvRate by remember { mutableDoubleStateOf(36.5) }
     var userStatus by remember { mutableStateOf("guest") }
     
@@ -128,13 +132,114 @@ fun HomeScreen(onNavigateToLogin: () -> Unit, modifier: Modifier = Modifier) {
                 pendingLoginNavigation = true
                 selectedProduct = null
             },
+            onBuyClick = {
+                productForQuantity = selectedProduct
+                selectedProduct = null
+            },
             onDismiss = { selectedProduct = null }
+        )
+    }
+
+    if (productForQuantity != null) {
+        QuantitySelectorDialog(
+            product = productForQuantity!!,
+            bcvRate = bcvRate,
+            onDismiss = { productForQuantity = null },
+            onConfirm = { qty ->
+                val name = productForQuantity?.name ?: ""
+                productForQuantity = null
+                Toast.makeText(context, "✅ ${qty}x $name AGREGADO AL CARRITO", Toast.LENGTH_LONG).show()
+            }
         )
     }
 }
 
 @Composable
-fun ProductDetailDialog(product: Product, bcvRate: Double, userStatus: String, onGuestClick: () -> Unit, onDismiss: () -> Unit) {
+fun QuantitySelectorDialog(
+    product: Product,
+    bcvRate: Double,
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit
+) {
+    var quantity by remember { mutableIntStateOf(1) }
+    val totalBss = product.priceUsd * quantity * bcvRate
+    val creditBss = totalBss * 1.1
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, Color(0xFFC5A059).copy(0.3f))
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("¿CUÁNTOS DESEAS?", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                AsyncImage(
+                    model = fixDriveUrl(product.imageUrl),
+                    contentDescription = null,
+                    modifier = Modifier.size(100.dp).clip(RoundedCornerShape(12.dp)),
+                    contentScale = ContentScale.Crop
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Text(product.name.uppercase(), color = Color(0xFFC5A059), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                IconButton(onClick = { if(quantity > 1) quantity-- }) {
+                    Icon(Icons.Default.Remove, null, tint = Color.White)
+                }
+                Text(quantity.toString(), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(horizontal = 24.dp))
+                IconButton(onClick = { quantity++ }) {
+                    Icon(Icons.Default.Add, null, tint = Color.White)
+                }
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                Surface(
+                    color = Color.White.copy(0.03f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("CONTADO:", color = Color.White.copy(0.5f), fontSize = 10.sp)
+                            Text("${totalBss.toInt()} BSS", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                        if (product.allowCredit) {
+                            HorizontalDivider(Modifier.padding(vertical = 8.dp), color = Color.White.copy(0.05f))
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("CRÉDITO (+10%):", color = Color(0xFFC5A059), fontSize = 10.sp)
+                                Text("${creditBss.toInt()} BSS", color = Color(0xFFC5A059), fontWeight = FontWeight.Black)
+                            }
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                Button(
+                    onClick = { onConfirm(quantity) },
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("AGREGAR AL CARRITO", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ProductDetailDialog(product: Product, bcvRate: Double, userStatus: String, onGuestClick: () -> Unit, onBuyClick: () -> Unit, onDismiss: () -> Unit) {
     val context = LocalContext.current
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -239,7 +344,7 @@ fun ProductDetailDialog(product: Product, bcvRate: Double, userStatus: String, o
                         onClick = {
                             when (userStatus) {
                                 "active" -> {
-                                    Toast.makeText(context, "🚀 PROCESANDO SOLICITUD DE COMPRA...", Toast.LENGTH_SHORT).show()
+                                    onBuyClick()
                                 }
                                 "unverified" -> {
                                     Toast.makeText(context, "⚠️ CUENTA EN REVISIÓN. ESPERE VERIFICACIÓN PARA COMPRAR.", Toast.LENGTH_LONG).show()
