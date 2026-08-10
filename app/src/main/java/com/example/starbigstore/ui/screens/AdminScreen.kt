@@ -121,6 +121,7 @@ fun AdminListContent() {
     var registrations by remember { mutableStateOf(listOf<CustomerRegistration>()) }
     var products by remember { mutableStateOf(listOf<Product>()) }
     var bcvRate by remember { mutableDoubleStateOf(36.5) }
+    var paymentSettings by remember { mutableStateOf(mapOf("zelle" to "", "binance" to "", "zinli" to "", "pagomovil" to "")) }
     var isLoading by remember { mutableStateOf(false) }
     var expandedImageUrl by remember { mutableStateOf<String?>(null) }
     var showAddProductDialog by remember { mutableStateOf(false) }
@@ -194,6 +195,12 @@ fun AdminListContent() {
             if (snapshot != null && snapshot.exists()) bcvRate = snapshot.getDouble("valor") ?: 36.5
         }
 
+        db.collection("config").document("metodos_pago").addSnapshotListener { snapshot, _ ->
+            if (snapshot != null && snapshot.exists()) {
+                paymentSettings = snapshot.data as Map<String, String>
+            }
+        }
+
         syncBcv()
     }
 
@@ -209,10 +216,11 @@ fun AdminListContent() {
 
             TrafficMonitorSection()
             Spacer(modifier = Modifier.height(24.dp))
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                AdminNavButton("BASE DE DATOS", Icons.Default.Storage, selectedTab == 0, Modifier.weight(1f)) { selectedTab = 0 }
-                AdminNavButton("INVENTARIO", Icons.Default.Inventory, selectedTab == 1, Modifier.weight(1f)) { selectedTab = 1 }
-                AdminNavButton("SOLICITUDES", Icons.Default.Group, selectedTab == 2, Modifier.weight(1.2f)) { selectedTab = 2 }
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AdminNavButton("DB", Icons.Default.Storage, selectedTab == 0, Modifier.weight(0.8f)) { selectedTab = 0 }
+                AdminNavButton("STOCK", Icons.Default.Inventory, selectedTab == 1, Modifier.weight(1f)) { selectedTab = 1 }
+                AdminNavButton("PAGOS", Icons.Default.Payments, selectedTab == 3, Modifier.weight(1f)) { selectedTab = 3 }
+                AdminNavButton("SOLIC.", Icons.Default.Group, selectedTab == 2, Modifier.weight(1f)) { selectedTab = 2 }
             }
             Spacer(modifier = Modifier.height(24.dp))
             HorizontalDivider(color = Color(0xFFC5A059).copy(alpha = 0.15f), thickness = 0.5.dp)
@@ -232,6 +240,16 @@ fun AdminListContent() {
                         if (pendings.isEmpty()) InfoSection("No hay solicitudes")
                         else LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                             items(pendings) { reg -> CustomerAdminCard(reg, { approveCustomer(reg, db) }, { deleteCustomer(reg, db) }, { expandedImageUrl = it }) }
+                        }
+                    }
+                    3 -> PaymentSettingsSection(paymentSettings) { updatedSettings ->
+                        isLoading = true
+                        db.collection("config").document("metodos_pago").set(updatedSettings).addOnSuccessListener {
+                            isLoading = false
+                            showModernToast("✅ PAGOS ACTUALIZADOS", false)
+                        }.addOnFailureListener {
+                            isLoading = false
+                            showModernToast("❌ ERROR AL GUARDAR", true)
                         }
                     }
                 }
@@ -717,6 +735,49 @@ fun AddProductDialog(editingProduct: Product? = null, onDismiss: () -> Unit, onC
             }
         },
         confirmButton = { Button(onClick = { onConfirm(Product(id = editingProduct?.id ?: "", name = name, priceUsd = pUsd, description = description, category = selectedCat, collection = selectedColl, stock = stock.toIntOrNull() ?: 0, allowCredit = allowCredit, imageUrl = editingProduct?.imageUrl ?: ""), uri) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059))) { Text("GUARDAR", color = Color.Black) } }
+    )
+}
+
+@Composable
+fun PaymentSettingsSection(currentSettings: Map<String, String>, onSave: (Map<String, String>) -> Unit) {
+    var zelle by remember(currentSettings) { mutableStateOf(currentSettings["zelle"] ?: "") }
+    var binance by remember(currentSettings) { mutableStateOf(currentSettings["binance"] ?: "") }
+    var zinli by remember(currentSettings) { mutableStateOf(currentSettings["zinli"] ?: "") }
+    var pagomovil by remember(currentSettings) { mutableStateOf(currentSettings["pagomovil"] ?: "") }
+
+    Column(modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        Text("CONFIGURACIÓN DE PAGOS", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black)
+        
+        AdminLargeTextField(zelle, { zelle = it }, "DATOS ZELLE")
+        AdminLargeTextField(binance, { binance = it }, "DATOS BINANCE")
+        AdminLargeTextField(zinli, { zinli = it }, "DATOS ZINLI")
+        AdminLargeTextField(pagomovil, { pagomovil = it }, "DATOS PAGO MÓVIL")
+
+        Button(
+            onClick = { onSave(mapOf("zelle" to zelle, "binance" to binance, "zinli" to zinli, "pagomovil" to pagomovil)) },
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059)),
+            shape = RoundedCornerShape(0.dp)
+        ) {
+            Text("GUARDAR CAMBIOS", color = Color.Black, fontWeight = FontWeight.Black)
+        }
+    }
+}
+
+@Composable
+fun AdminLargeTextField(v: String, onV: (String) -> Unit, l: String) {
+    OutlinedTextField(
+        value = v,
+        onValueChange = onV,
+        label = { Text(l, fontSize = 10.sp, color = Color(0xFFC5A059)) },
+        modifier = Modifier.fillMaxWidth().height(120.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = Color(0xFFC5A059),
+            unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
+            focusedTextColor = Color.White,
+            unfocusedTextColor = Color.White
+        ),
+        shape = RoundedCornerShape(0.dp)
     )
 }
 

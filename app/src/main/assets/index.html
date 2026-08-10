@@ -138,8 +138,13 @@
             </div>
 
             <!-- CONTENEDOR DINÁMICO DE DATOS -->
-            <div id="pay-details-box" style="display:none; margin-top:15px; padding:15px; background:#000; border:1px dashed #C5A059; color:#fff; font-size:11px; text-align:left; line-height:1.6;">
-                <!-- Se llena con JS -->
+            <div id="pay-details-container" style="display:none; margin-top:15px;">
+                <div id="pay-details-box" style="padding:15px; background:#000; border:1px dashed #C5A059; color:#fff; font-size:11px; text-align:left; line-height:1.6;">
+                    <!-- Se llena con JS -->
+                </div>
+                <button onclick="copyPaymentData()" style="width:100%; background:rgba(197, 160, 89, 0.1); color:#C5A059; border:1px solid #C5A059; padding:8px; margin-top:10px; font-size:10px; font-weight:800; cursor:pointer; letter-spacing:1px;">
+                    <i data-lucide="copy" style="width:12px; height:12px; vertical-align:middle; margin-right:5px;"></i> COPIAR DATOS
+                </button>
             </div>
         </div>
 
@@ -213,6 +218,7 @@
             <div id="adm-tab-db" class="tab-btn" onclick="switchAdminTab('db')">BASE DE DATOS</div>
             <div id="adm-tab-inv" class="tab-btn" onclick="switchAdminTab('inventory')">INVENTARIO</div>
             <div id="adm-tab-sales" class="tab-btn" onclick="switchAdminTab('sales')">COBRANZAS</div>
+            <div id="adm-tab-pay" class="tab-btn" onclick="switchAdminTab('payments')">PAGOS</div>
         </div>
 
         <div id="admin-content-users" class="admin-panel-section">
@@ -241,6 +247,30 @@
         </div>
         <div id="admin-content-sales" class="admin-panel-section" style="display:none;">
             <div id="admin-sales-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;"></div>
+        </div>
+
+        <div id="admin-content-payments" class="admin-panel-section" style="display:none;">
+            <h3 style="color:white; margin-bottom:20px; font-weight:900; font-size:14px; letter-spacing:2px;">CONFIGURACIÓN DE PAGOS</h3>
+
+            <div style="background:#121216; padding:20px; border:0.5px solid #c5a05933;">
+                <div class="input-group">
+                    <label>DATOS ZELLE</label>
+                    <textarea id="set-pay-zelle" style="width:100%; height:80px; background:#08080a; color:white; border:1px solid #c5a05933; padding:10px; font-size:11px; resize:none;"></textarea>
+                </div>
+                <div class="input-group">
+                    <label>DATOS BINANCE</label>
+                    <textarea id="set-pay-binance" style="width:100%; height:80px; background:#08080a; color:white; border:1px solid #c5a05933; padding:10px; font-size:11px; resize:none;"></textarea>
+                </div>
+                <div class="input-group">
+                    <label>DATOS ZINLI</label>
+                    <textarea id="set-pay-zinli" style="width:100%; height:80px; background:#08080a; color:white; border:1px solid #c5a05933; padding:10px; font-size:11px; resize:none;"></textarea>
+                </div>
+                <div class="input-group">
+                    <label>DATOS PAGO MÓVIL</label>
+                    <textarea id="set-pay-pagomovil" style="width:100%; height:80px; background:#08080a; color:white; border:1px solid #c5a05933; padding:10px; font-size:11px; resize:none;"></textarea>
+                </div>
+                <button onclick="savePaymentSettings()" class="btn-primary full-width" style="margin-top:10px;">GUARDAR CONFIGURACIÓN</button>
+            </div>
         </div>
     </div>
 </div>
@@ -499,9 +529,14 @@
     let cart = [];
     let currentViewingProduct = null;
     let selectedPaymentMethod = 'cash';
+    let paymentSettings = {
+        zelle: "Cargando...", binance: "Cargando...",
+        zinli: "Cargando...", pagomovil: "Cargando..."
+    };
 
     lucide.createIcons();
     listenToTasa();
+    listenToPaymentSettings();
     startTrafficMonitor();
 
     // Ocultar botón de carrito en navbar si estamos dentro de la App (porque ya tiene su barra inferior)
@@ -591,6 +626,23 @@
     function listenToTasa() {
         db.collection("config").doc("tasa_bcv").onSnapshot(doc => {
             if(doc.exists) { tasaBcv = doc.data().valor; loadProducts(); }
+        });
+    }
+
+    function listenToPaymentSettings() {
+        db.collection("config").doc("metodos_pago").onSnapshot(doc => {
+            if(doc.exists) {
+                paymentSettings = doc.data();
+            } else {
+                // Valores por defecto si no existe el doc
+                paymentSettings = {
+                    zelle: "DATOS ZELLE:\nCorreo: pagos@starbigstore.com\nTitular: STARBIG STORE LLC",
+                    binance: "DATOS BINANCE (Pay ID):\nID: 940129333\nTitular: STARBIG Boutique",
+                    zinli: "DATOS ZINLI:\nCorreo: fashion@starbigstore.com",
+                    pagomovil: "PAGO MÓVIL:\nBanco: BANCAMIGA (0172)\nTlf: 0424-4019899\nC.I: 25.123.456"
+                };
+                db.collection("config").doc("metodos_pago").set(paymentSettings);
+            }
         });
     }
 
@@ -975,12 +1027,41 @@
         document.getElementById('admin-content-db').style.display = tab === 'db' ? 'block' : 'none';
         document.getElementById('admin-content-inventory').style.display = tab === 'inventory' ? 'block' : 'none';
         document.getElementById('admin-content-sales').style.display = tab === 'sales' ? 'block' : 'none';
+        document.getElementById('admin-content-payments').style.display = tab === 'payments' ? 'block' : 'none';
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
 
-        const tabIdMap = { 'users': 'adm-tab-users', 'db': 'adm-tab-db', 'inventory': 'adm-tab-inv', 'sales': 'adm-tab-sales' };
+        const tabIdMap = {
+            'users': 'adm-tab-users', 'db': 'adm-tab-db',
+            'inventory': 'adm-tab-inv', 'sales': 'adm-tab-sales',
+            'payments': 'adm-tab-pay'
+        };
         document.getElementById(tabIdMap[tab]).classList.add('active');
 
         if(tab === 'sales') loadAdminSales();
+        if(tab === 'payments') loadAdminPayments();
+    }
+
+    function loadAdminPayments() {
+        document.getElementById('set-pay-zelle').value = paymentSettings.zelle;
+        document.getElementById('set-pay-binance').value = paymentSettings.binance;
+        document.getElementById('set-pay-zinli').value = paymentSettings.zinli;
+        document.getElementById('set-pay-pagomovil').value = paymentSettings.pagomovil;
+    }
+
+    async function savePaymentSettings() {
+        const data = {
+            zelle: document.getElementById('set-pay-zelle').value,
+            binance: document.getElementById('set-pay-binance').value,
+            zinli: document.getElementById('set-pay-zinli').value,
+            pagomovil: document.getElementById('set-pay-pagomovil').value
+        };
+
+        try {
+            await db.collection("config").doc("metodos_pago").set(data);
+            showNotification("✅ CONFIGURACIÓN DE PAGOS ACTUALIZADA");
+        } catch(e) {
+            showNotification("Error al guardar configuración", "error");
+        }
     }
 
     function loadAdminUsers() {
@@ -1883,25 +1964,25 @@
     function openContactChoice(msg = "") {
         pendingWhatsappMsg = msg;
         document.getElementById('contact-choice-modal').style.display = 'block';
-        document.getElementById('pay-details-box').style.display = 'none'; // Reset
+        document.getElementById('pay-details-container').style.display = 'none'; // Reset
         lucide.createIcons();
     }
 
     function showPayInfo(method) {
+        const container = document.getElementById('pay-details-container');
         const box = document.getElementById('pay-details-box');
-        box.style.display = 'block';
+        container.style.display = 'block';
+        box.innerHTML = (paymentSettings[method] || "Sin datos configurados").replace(/\n/g, "<br>");
+        lucide.createIcons();
+    }
 
-        let html = "";
-        if(method === 'zelle') {
-            html = "<strong>DATOS ZELLE:</strong><br>Correo: pagos@starbigstore.com<br>Titular: STARBIG STORE LLC";
-        } else if(method === 'binance') {
-            html = "<strong>DATOS BINANCE (Pay ID):</strong><br>ID: 940129333<br>Titular: STARBIG Boutique";
-        } else if(method === 'zinli') {
-            html = "<strong>DATOS ZINLI:</strong><br>Correo: fashion@starbigstore.com";
-        } else if(method === 'pagomovil') {
-            html = "<strong>PAGO MÓVIL:</strong><br>Banco: BANCAMIGA (0172)<br>Tlf: 0424-4019899<br>C.I: 25.123.456";
-        }
-        box.innerHTML = html;
+    function copyPaymentData() {
+        const text = document.getElementById('pay-details-box').innerText;
+        navigator.clipboard.writeText(text).then(() => {
+            showNotification("✅ DATOS COPIADOS AL PORTAPAPELES");
+        }).catch(() => {
+            showNotification("Error al copiar datos", "error");
+        });
     }
 
     function contactWhatsapp(number) {
