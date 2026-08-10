@@ -105,7 +105,7 @@
             <div class="profile-menu-grid">
                 <button onclick="editProfile()" class="menu-item-btn"><i data-lucide="user-cog"></i> EDITAR PERFIL</button>
                 <button onclick="changePhoto()" class="menu-item-btn"><i data-lucide="camera"></i> CAMBIAR FOTO</button>
-                <button onclick="changePassword()" class="menu-item-btn"><i data-lucide="lock"></i> SEGURIDAD</button>
+                <button onclick="openSecurity()" class="menu-item-btn"><i data-lucide="lock"></i> SEGURIDAD</button>
                 <button onclick="viewPoints()" class="menu-item-btn"><i data-lucide="award"></i> PUNTOS: <span id="user-points">0</span></button>
             </div>
 
@@ -383,6 +383,20 @@
             </div>
             <button onclick="checkout()" class="btn-primary full-width">FINALIZAR PEDIDO</button>
         </div>
+    </div>
+</div>
+
+<!-- MODAL SEGURIDAD -->
+<div id="security-modal" class="modal" style="background:rgba(0,0,0,0.8); z-index:8500;">
+    <div class="modal-content" style="background:#121216; border:1px solid #C5A059; max-width: 400px; text-align: center;">
+        <span class="close-modal" onclick="document.getElementById('security-modal').style.display='none'">&times;</span>
+        <h2 style="color:white; margin-bottom:20px; font-weight: 900; letter-spacing: 1px;">SEGURIDAD</h2>
+        <p style="color:#888; font-size: 0.8rem; margin-bottom: 25px;">¿En qué podemos ayudarte?</p>
+        <div style="display: flex; flex-direction: column; gap: 15px;">
+            <button onclick="forgotEmail()" class="btn-secondary full-width">OLVIDÉ MI CORREO</button>
+            <button onclick="forgotPassword()" class="btn-primary full-width">OLVIDÉ MI CONTRASEÑA</button>
+        </div>
+        <button onclick="document.getElementById('security-modal').style.display='none'" class="btn-secondary full-width" style="margin-top:20px; border:none; color:#666;">CERRAR</button>
     </div>
 </div>
 
@@ -861,7 +875,8 @@
 
         const message = `🛍️ NUEVO PEDIDO STARBIG STORE\n\nOrden: ${orderId}\nCliente: ${currentUserData?.name}\nItems: ${itemsList}\nTotal: ${totalUsd} (${totalBss})\n\nPor favor, contacte para concretar el pago.`;
 
-        const waUrl = `https://wa.me/584129431568?text=${encodeURIComponent(message)}`;
+        // Abrimos chat con el primer número de soporte
+        const waUrl = `https://wa.me/584244019899?text=${encodeURIComponent(message)}`;
         window.open(waUrl);
 
         cart = [];
@@ -1484,6 +1499,48 @@
         fileInput.click();
     }
 
+    function openSecurity() {
+        document.getElementById('security-modal').style.display = 'block';
+    }
+
+    function forgotEmail() {
+        const msg = "Hola Soporte Starbig. He olvidado mi correo electrónico de registro. Solicito apoyo para recuperarlo.";
+        // Usamos el segundo número de soporte para correos
+        const waUrl = "https://wa.me/584124136485?text=" + encodeURIComponent(msg);
+        window.open(waUrl);
+    }
+
+    async function forgotPassword() {
+        const email = prompt("INGRESE SU CORREO ELECTRÓNICO DE REGISTRO:");
+        if (!email) return;
+
+        if (!email.includes('@')) {
+            showNotification("FORMATO DE CORREO INVÁLIDO", "error");
+            return;
+        }
+
+        showNotification("VERIFICANDO CORREO...");
+
+        try {
+            // Verificar primero en la base de datos de registros
+            const snapshot = await db.collection("registros_clientes").where("email", "==", email.trim()).get();
+
+            if (snapshot.empty) {
+                showNotification("DENEGADO: EL CORREO NO EXISTE EN NUESTROS REGISTROS", "error");
+                return;
+            }
+
+            // Si existe, proceder con el envío
+            await auth.sendPasswordResetEmail(email.trim());
+            showNotification("ENLACE DE RECUPERACIÓN ENVIADO A: " + email.toUpperCase(), "success");
+            document.getElementById('security-modal').style.display = 'none';
+
+        } catch (err) {
+            console.error(err);
+            showNotification("ERROR AL PROCESAR SOLICITUD", "error");
+        }
+    }
+
     function changePassword() {
         const email = document.getElementById('login-email').value;
         if(email && email.includes('@')) {
@@ -1756,7 +1813,8 @@
     function changeLanguage(lang) { showNotification("Idioma cambiado: " + lang.toUpperCase()); }
     function contactAdmin() {
         const name = document.getElementById('profile-name').innerText;
-        window.open(`https://wa.me/584129431568?text=Hola, soy ${name}. Solicito verificación.`);
+        const msg = `Hola, soy ${name}. Solicito verificación.`;
+        window.open(`https://wa.me/584244019899?text=${encodeURIComponent(msg)}`);
     }
     function logout() {
         if(window.AndroidApp) window.AndroidApp.logoutUser();

@@ -302,6 +302,21 @@ fun WebScreen(
                 addJavascriptInterface(webInterface, "AndroidApp")
                 
                 webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                        val url = request?.url?.toString() ?: return false
+                        if (url.startsWith("whatsapp://") || url.contains("wa.me") || url.contains("api.whatsapp.com")) {
+                            try {
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse(url))
+                                context.startActivity(intent)
+                                return true
+                            } catch (e: Exception) {
+                                // Si no tiene WhatsApp instalado, permitimos que cargue la web (o podrías mostrar un error)
+                                return false
+                            }
+                        }
+                        return false
+                    }
+
                     override fun onPageFinished(view: WebView?, url: String?) {
                         super.onPageFinished(view, url)
                         
