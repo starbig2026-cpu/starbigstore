@@ -234,7 +234,8 @@
     <div class="search-bar hero-search">
         <i data-lucide="search" style="color:#666; width:18px;"></i>
         <label for="main-search" style="display:none;">Buscar</label>
-        <input type="text" id="main-search" placeholder="BUSCAR COLECCIÓN..." oninput="filterBySearch(this.value)">
+        <input type="text" id="main-search" placeholder="BUSCAR COLECCIÓN..." oninput="filterBySearch(this.value)" onfocus="showSuggestions(this.value)" onblur="setTimeout(() => hideSuggestions(), 200)">
+        <div id="search-suggestions" class="search-suggestions"></div>
     </div>
     <span class="tag">Nueva Temporada 2026</span>
     <h1>Estilo & Poder <br><span>Sin Límites</span></h1>
@@ -446,6 +447,12 @@
                 </div>
 
                 <button onclick="checkAccess()" class="btn-primary" style="padding: 12px 30px; font-size: 0.85rem; border-radius: 50px; width: fit-content; align-self: center; flex: none; height: auto; min-height: 45px;">COMPRAR AHORA</button>
+
+                <div id="related-products-container" style="margin-top: 30px; border-top: 1px solid rgba(197, 160, 89, 0.1); padding-top: 20px;">
+                    <p style="color: #c5a059; font-size: 0.7rem; font-weight: 800; margin-bottom: 15px; letter-spacing: 2px; text-align: center;">TAMBIÉN TE PUEDE GUSTAR</p>
+                    <div id="related-products-list" style="display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px;"></div>
+                </div>
+
                 <p style="text-align: center; margin-top: 15px; color: #555; font-size: 0.7rem; letter-spacing: 2px; font-weight: 800;">STARBIG STORE | BOUTIQUE EXCLUSIVA</p>
             </div>
         </div>
@@ -901,6 +908,25 @@
         document.getElementById('detail-credit').innerText = p.allowCredit ? "APTO PARA CRÉDITO" : "SOLO PAGO CONTADO";
         document.getElementById('detail-credit').style.color = p.allowCredit ? "#c5a059" : "#ff4444";
 
+        // Cargar productos relacionados (misma categoría, excluyendo el actual)
+        const related = allProducts.filter(x => x.category === p.category && x.id !== p.id).slice(0, 4);
+        const relatedList = document.getElementById('related-products-list');
+        relatedList.innerHTML = "";
+
+        if (related.length > 0) {
+            document.getElementById('related-products-container').style.display = 'block';
+            related.forEach(rp => {
+                relatedList.innerHTML += `
+                    <div onclick="openProductDetail('${rp.id}')" style="min-width: 100px; cursor: pointer; background: rgba(255,255,255,0.03); border-radius: 10px; padding: 8px; border: 1px solid rgba(197, 160, 89, 0.1);">
+                        <img src="${fixDriveUrl(getImageUrl(rp))}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px; margin-bottom: 5px;">
+                        <div style="font-size: 8px; color: white; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${rp.name.toUpperCase()}</div>
+                        <div style="font-size: 8px; color: #c5a059;">$${rp.priceUsd}</div>
+                    </div>`;
+            });
+        } else {
+            document.getElementById('related-products-container').style.display = 'none';
+        }
+
         document.getElementById('product-detail-modal').style.display = 'block';
         lucide.createIcons();
     }
@@ -916,8 +942,62 @@
     }
 
     function filterBySearch(val) {
-        const filtered = allProducts.filter(p => p.name.toLowerCase().includes(val.toLowerCase()));
+        const query = val.toLowerCase().trim();
+        const filtered = allProducts.filter(p =>
+            p.name.toLowerCase().includes(query) ||
+            (p.category && p.category.toLowerCase().includes(query)) ||
+            (p.description && p.description.toLowerCase().includes(query)) ||
+            (p.collection && p.collection.toLowerCase().includes(query))
+        );
         renderProducts(filtered);
+        showSuggestions(val);
+    }
+
+    function showSuggestions(val) {
+        const container = document.getElementById('search-suggestions');
+        const query = val.toLowerCase().trim();
+
+        if (query.length < 1) {
+            container.style.display = 'none';
+            return;
+        }
+
+        const suggestions = [];
+        const cats = [...new Set(allProducts.map(p => p.category))];
+        cats.forEach(c => {
+            if (c && c.toLowerCase().includes(query)) suggestions.push({ text: c, type: 'category' });
+        });
+
+        allProducts.forEach(p => {
+            if (p.name.toLowerCase().includes(query)) suggestions.push({ text: p.name, type: 'product', id: p.id });
+        });
+
+        if (suggestions.length > 0) {
+            container.innerHTML = "";
+            suggestions.slice(0, 8).forEach(s => {
+                const div = document.createElement('div');
+                div.className = "suggestion-item";
+                const icon = s.type === 'category' ? 'layers' : 'package';
+                div.innerHTML = `<i data-lucide="${icon}"></i> ${s.text.toUpperCase()}`;
+                div.onclick = () => {
+                    document.getElementById('main-search').value = s.text;
+                    if (s.type === 'product') openProductDetail(s.id);
+                    else filterBySearch(s.text);
+                    container.style.display = 'none';
+                };
+                container.appendChild(div);
+            });
+            container.style.display = 'block';
+            lucide.createIcons();
+        } else {
+            container.style.display = 'none';
+        }
+    }
+
+    function hideSuggestions() {
+        setTimeout(() => {
+            document.getElementById('search-suggestions').style.display = 'none';
+        }, 300);
     }
 
     function checkAccess() {

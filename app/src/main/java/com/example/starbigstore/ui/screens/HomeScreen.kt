@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -54,6 +55,31 @@ fun HomeScreen(
     
     // Flag para navegar después de que el diálogo se cierre
     var pendingLoginNavigation by remember { mutableStateOf(false) }
+
+    var searchQuery by remember { mutableStateOf("") }
+    
+    val filteredProducts = remember(products, searchQuery) {
+        if (searchQuery.isEmpty()) products
+        else {
+            val query = searchQuery.lowercase().trim()
+            products.filter { 
+                it.name.lowercase().contains(query) || 
+                it.category.lowercase().contains(query) ||
+                it.description.lowercase().contains(query) ||
+                it.collection.lowercase().contains(query)
+            }
+        }
+    }
+
+    val searchSuggestions = remember(products, searchQuery) {
+        if (searchQuery.isEmpty()) emptyList<String>()
+        else {
+            val query = searchQuery.lowercase().trim()
+            val names = products.map { it.name }.filter { it.lowercase().contains(query) }
+            val categories = products.map { it.category }.distinct().filter { it.lowercase().contains(query) }
+            (categories + names).take(5)
+        }
+    }
 
     val db = FirebaseFirestore.getInstance()
     val auth = FirebaseAuth.getInstance()
@@ -110,13 +136,90 @@ fun HomeScreen(
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        Text(
-            text = "Catálogo Premium",
-            style = MaterialTheme.typography.headlineSmall,
-            color = Color.White,
-            modifier = Modifier.padding(16.dp),
-            fontWeight = FontWeight.Black
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "Catálogo Premium",
+                style = MaterialTheme.typography.headlineSmall,
+                color = Color.White,
+                fontWeight = FontWeight.Black
+            )
+        }
+
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            placeholder = { Text("Buscar perfume, tecnología...", color = Color.White.copy(0.4f), fontSize = 12.sp) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            shape = RoundedCornerShape(50.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Color(0xFFC5A059),
+                unfocusedBorderColor = Color.White.copy(0.1f),
+                cursorColor = Color(0xFFC5A059),
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White
+            ),
+            singleLine = true,
+            leadingIcon = {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = null,
+                    tint = Color.White.copy(0.4f)
+                )
+            },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(Icons.Default.Close, null, tint = Color.White)
+                    }
+                }
+            }
         )
+
+        if (searchSuggestions.isNotEmpty()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A20)),
+                shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
+                border = BorderStroke(1.dp, Color(0xFFC5A059).copy(0.2f))
+            ) {
+                Column {
+                    searchSuggestions.forEach { suggestion ->
+                        TextButton(
+                            onClick = { searchQuery = suggestion },
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Search,
+                                    null,
+                                    tint = Color(0xFFC5A059).copy(0.5f),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    suggestion.uppercase(),
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
         
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
@@ -125,7 +228,7 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            items(products) { product ->
+            items(filteredProducts) { product ->
                 ProductCard(product = product, onClick = { selectedProduct = product })
             }
         }
@@ -134,6 +237,7 @@ fun HomeScreen(
     if (selectedProduct != null) {
         ProductDetailDialog(
             product = selectedProduct!!,
+            allProducts = products,
             bcvRate = bcvRate,
             userStatus = userStatus,
             onGuestClick = {
@@ -144,6 +248,7 @@ fun HomeScreen(
                 productForQuantity = selectedProduct
                 selectedProduct = null
             },
+            onProductClick = { selectedProduct = it },
             onDismiss = { selectedProduct = null }
         )
     }
@@ -320,8 +425,21 @@ fun QuantitySelectorDialog(
 }
 
 @Composable
-fun ProductDetailDialog(product: Product, bcvRate: Double, userStatus: String, onGuestClick: () -> Unit, onBuyClick: () -> Unit, onDismiss: () -> Unit) {
+fun ProductDetailDialog(
+    product: Product,
+    allProducts: List<Product>,
+    bcvRate: Double,
+    userStatus: String,
+    onGuestClick: () -> Unit,
+    onBuyClick: () -> Unit,
+    onProductClick: (Product) -> Unit,
+    onDismiss: () -> Unit
+) {
     val context = LocalContext.current
+    val relatedProducts = remember(product, allProducts) {
+        allProducts.filter { it.category == product.category && it.id != product.id }.take(4)
+    }
+
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
@@ -446,6 +564,65 @@ fun ProductDetailDialog(product: Product, bcvRate: Double, userStatus: String, o
                     ) {
                         Text("COMPRAR AHORA", color = Color.Black, fontWeight = FontWeight.Bold)
                     }
+
+                    if (relatedProducts.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(30.dp))
+                        HorizontalDivider(color = Color(0xFFC5A059).copy(0.1f), thickness = 1.dp)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            "TAMBIÉN TE PUEDE GUSTAR",
+                            color = Color(0xFFC5A059),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            relatedProducts.forEach { rp ->
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .background(Color.White.copy(0.03f), RoundedCornerShape(12.dp))
+                                        .padding(8.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Card(
+                                        onClick = { onProductClick(rp) },
+                                        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+                                    ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            AsyncImage(
+                                                model = fixDriveUrl(rp.imageUrl),
+                                                contentDescription = null,
+                                                modifier = Modifier.size(60.dp).clip(RoundedCornerShape(8.dp)),
+                                                contentScale = ContentScale.Crop
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                rp.name.uppercase(),
+                                                color = Color.White,
+                                                fontSize = 8.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1,
+                                                textAlign = TextAlign.Center
+                                            )
+                                            Text(
+                                                "$${rp.priceUsd}",
+                                                color = Color(0xFFC5A059),
+                                                fontSize = 8.sp,
+                                                fontWeight = FontWeight.Black
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
                 }
                 
                 IconButton(
