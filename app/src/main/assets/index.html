@@ -5,7 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Starbig Store | Boutique</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/croppie/2.6.5/croppie.min.css" />
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/croppie/2.6.5/croppie.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
@@ -610,7 +612,23 @@
     </div>
 </div>
 
-<!-- MODAL EDITAR PERFIL -->
+<!-- MODAL RECORTAR FOTO -->
+<div id="crop-modal" class="modal" style="background:rgba(0,0,0,0.95); z-index:9999;">
+    <div class="modal-content" style="max-width: 450px; text-align: center; padding-top: 60px;">
+        <h2 style="color:white; margin-bottom:10px; font-weight: 900;">AJUSTAR PERFIL</h2>
+        <p style="color:#888; font-size:0.7rem; margin-bottom:20px;">ARRASTRA Y ACERCA PARA CENTRAR TU FOTO</p>
+
+        <div id="crop-container" style="width: 100%; height: 300px; margin-bottom: 20px; background:#000;"></div>
+
+        <div style="display:flex; gap:10px; margin-bottom:20px;">
+            <button onclick="croppieInstance.rotate(-90)" class="btn-secondary" style="flex:1; padding:10px; font-size:0.7rem;"><i data-lucide="rotate-ccw"></i></button>
+            <button onclick="croppieInstance.rotate(90)" class="btn-secondary" style="flex:1; padding:10px; font-size:0.7rem;"><i data-lucide="rotate-cw"></i></button>
+        </div>
+
+        <button onclick="saveCroppedPhoto()" class="btn-primary full-width" style="height:50px; margin-bottom: 10px;">ESTABLECER FOTO</button>
+        <button onclick="document.getElementById('crop-modal').style.display='none'; if(croppieInstance) croppieInstance.destroy();" class="btn-secondary full-width">CANCELAR</button>
+    </div>
+</div>
 <div id="edit-profile-overlay" class="modal" style="background:rgba(0,0,0,0.8); z-index:7000;">
     <div class="modal-content" style="background:#121216; border:1px solid #C5A059; max-width: 450px;">
         <h2 style="color:white; margin-bottom:20px; font-weight: 900; letter-spacing: 1px;">EDITAR PERFIL</h2>
@@ -1972,55 +1990,90 @@
         }
     }
 
+    let croppieInstance = null;
+
     async function changePhoto() {
         const fileInput = document.createElement('input');
         fileInput.type = 'file';
         fileInput.accept = 'image/*';
-        fileInput.onchange = async (e) => {
+        fileInput.onchange = (e) => {
             const file = e.target.files[0];
             if(file) {
-                // Notificación inmediata desde JS
-                showNotification("PROCESANDO IMAGEN...", "success");
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    document.getElementById('crop-modal').style.display = 'block';
+                    if (croppieInstance) croppieInstance.destroy();
 
-                const base64 = await getBase64(file);
-                if(window.AndroidApp) {
-                    window.AndroidApp.updateUserPhoto(base64);
-                } else {
-                    // Soporte para web pura (opcional)
-                    const user = auth.currentUser;
-                    if(user) {
-                        try {
-                            const response = await fetch(googleSheetsUrl, {
-                                method: 'POST',
-                                body: JSON.stringify({
-                                    action: "updatePhoto",
-                                    sheetName: "USUARIOS",
-                                    email: user.email,
-                                    photoBase64: base64,
-                                    fileName: `PERFIL_${Date.now()}_${user.email.split('@')[0]}.jpg`,
-                                    folderName: "PERFILES_USUARIOS"
-                                })
-                            });
-                            const resData = await response.json();
-                            if(resData.photoUrl) {
-                                // Actualizar Firestore localmente
-                                const snap = await db.collection("registros_clientes").where("email", "==", user.email).get();
-                                if(!snap.empty) {
-                                    await snap.docs[0].ref.update({ photoUrl: resData.photoUrl });
-                                    showNotification("✅ FOTO ACTUALIZADA");
-                                    // Actualizar UI sin recargar
-                                    document.getElementById('profile-img-large').src = fixDriveUrl(resData.photoUrl);
-                                    document.getElementById('user-photo-nav').src = fixDriveUrl(resData.photoUrl);
-                                }
-                            }
-                        } catch(err) {
-                            showNotification("ERROR AL ACTUALIZAR", "error");
-                        }
-                    }
-                }
+                    const el = document.getElementById('crop-container');
+                    croppieInstance = new Croppie(el, {
+                        viewport: { width: 220, height: 220, type: 'circle' },
+                        boundary: { width: 300, height: 300 },
+                        showZoomer: true,
+                        enableOrientation: true,
+                        mouseWheelZoom: 'ctrl'
+                    });
+                    croppieInstance.bind({
+                        url: event.target.result
+                    });
+                    lucide.createIcons();
+                };
+                reader.readAsDataURL(file);
             }
         };
         fileInput.click();
+    }
+
+    async function saveCroppedPhoto() {
+        if(!croppieInstance) return;
+
+        showNotification("PROCESANDO IMAGEN...", "success");
+
+        const base64Full = await croppieInstance.result({
+            type: 'base64',
+            size: { width: 500, height: 500 },
+            format: 'jpeg',
+            quality: 0.8,
+            circle: false
+        });
+
+        const base64 = base64Full.split(',')[1];
+
+        if(window.AndroidApp) {
+            window.AndroidApp.updateUserPhoto(base64);
+        } else {
+            const user = auth.currentUser;
+            if(user) {
+                try {
+                    const response = await fetch(googleSheetsUrl, {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            action: "updatePhoto",
+                            sheetName: "USUARIOS",
+                            email: user.email,
+                            photoBase64: base64,
+                            fileName: `PERFIL_${Date.now()}_${user.email.split('@')[0]}.jpg`,
+                            folderName: "PERFILES_USUARIOS"
+                        })
+                    });
+                    const resData = await response.json();
+                    if(resData.photoUrl) {
+                        const snap = await db.collection("registros_clientes").where("email", "==", user.email).get();
+                        if(!snap.empty) {
+                            await snap.docs[0].ref.update({ photoUrl: resData.photoUrl });
+                            showNotification("✅ FOTO ACTUALIZADA");
+                            document.getElementById('profile-img-large').src = fixDriveUrl(resData.photoUrl);
+                            document.getElementById('user-photo-nav').src = fixDriveUrl(resData.photoUrl);
+                        }
+                    }
+                } catch(err) {
+                    showNotification("ERROR AL ACTUALIZAR", "error");
+                }
+            }
+        }
+
+        document.getElementById('crop-modal').style.display = 'none';
+        croppieInstance.destroy();
+        croppieInstance = null;
     }
 
     function openSecurity() {
@@ -2548,6 +2601,54 @@
         showNotification("Cargando calendario de pagos...");
     }
 
+    async function checkLateFees(credits) {
+        if (!currentUserData || !credits.length) return;
+        const now = new Date();
+        let pointsModified = false;
+        let currentPoints = currentUserData.points || 0;
+        for (let credit of credits) {
+            if (credit.status !== "active_credit") continue;
+            const t = credit.timestamp;
+            let purchaseDate = (t && t.toDate) ? t.toDate() : new Date(t);
+            if (isNaN(purchaseDate.getTime())) continue;
+            const numCuotas = credit.numCuotas || Math.min(12, 2 + Math.floor((credit.userPointsAtPurchase || 0) / 550));
+            const paid = credit.installmentsPaid || 0;
+            const penalized = credit.penalizedInstallments || [];
+            let creditModified = false;
+            let tempRemainingDebt = (credit.remainingDebt !== undefined) ? credit.remainingDebt : (parseFloat(credit.totalBss.replace(" BSS", "")) * 0.75);
+            for(let i = paid + 1; i <= numCuotas; i++) {
+                if (penalized.includes(i)) continue;
+                const dueDate = new Date(purchaseDate);
+                dueDate.setDate(dueDate.getDate() + (i * 16));
+                if (now > dueDate) {
+                    const penaltyUsd = 4;
+                    const penaltyBss = penaltyUsd * tasaBcv;
+                    tempRemainingDebt += penaltyBss;
+                    const pointsToDeduct = Math.floor(currentPoints * 0.35);
+                    currentPoints -= pointsToDeduct;
+                    pointsModified = true;
+                    penalized.push(i);
+                    creditModified = true;
+                    showNotification(`⚠️ MORA APLICADA A CUOTA ${i}: +$${penaltyUsd} Y -35% PUNTOS`, "error");
+                } else {
+                    break;
+                }
+            }
+            if (creditModified) {
+                await db.collection("pedidos").doc(credit.id).update({
+                    remainingDebt: tempRemainingDebt,
+                    penalizedInstallments: penalized
+                });
+            }
+        }
+        if (pointsModified && currentUserData.docId) {
+            await db.collection("registros_clientes").doc(currentUserData.docId).update({ points: Math.max(0, currentPoints) });
+            currentUserData.points = Math.max(0, currentPoints);
+            const pointsEl = document.getElementById('user-points');
+            if(pointsEl) pointsEl.innerText = currentUserData.points;
+        }
+    }
+
     function loadUserCredits() {
         // Obtenemos pedidos con pago a crédito confirmados
         db.collection("pedidos")
@@ -2561,6 +2662,7 @@
                         userCredits.push({...data, id: doc.id});
                     }
                 });
+                checkLateFees(userCredits);
                 renderCalendar();
                 renderCreditsList();
             });

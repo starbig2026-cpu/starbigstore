@@ -1,0 +1,30 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Stylized Logo 'LD' Approximation -->
+    <!-- L shape -->
+    <path
+        android:fillColor="#C5A059"
+        android:pathData="M30,35 L38,35 L38,70 L60,70 L60,78 L30,78 Z" />
+
+    <!-- D shape -->
+    <path
+        android:fillColor="#C5A059"
+        android:pathData="M45,35 L65,35 C75,35 83,43 83,56 C83,69 75,77 65,77 L45,77 Z M53,43 L53,69 L65,69 C70,69 75,65 75,56 C75,47 70,43 65,43 Z" />
+
+    <!-- Central 8-pointed Star (as in the image) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,25 L56,45 L76,47 L56,49 L54,69 L52,49 L32,47 L52,45 Z" />
+    <path
+        android:fillColor="#C5A059"
+        android:pathData="M54,32 L55,45 L68,47 L55,49 L54,62 L53,49 L40,47 L53,45 Z" />
+
+    <!-- Small spark details -->
+    <path android:fillColor="#C5A059" android:pathData="M65,38 L66,41 L69,42 L66,43 L65,46 L64,43 L61,42 L64,41 Z" />
+    <path android:fillColor="#C5A059" android:pathData="M43,58 L44,61 L47,62 L44,63 L43,66 L42,63 L39,62 L42,61 Z" />
+
+</vector>
