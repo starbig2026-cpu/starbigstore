@@ -145,14 +145,15 @@ class WebAppInterface(
     }
 
     fun fetchUserData(email: String) {
+        val cleanEmail = email.trim().lowercase(Locale.ROOT)
         FirebaseFirestore.getInstance().collection("registros_clientes")
-            .whereEqualTo("email", email.trim()).get().addOnSuccessListener { docs ->
+            .whereEqualTo("email", cleanEmail).get().addOnSuccessListener { docs ->
                 if (!docs.isEmpty) {
                     val u = docs.documents[0]
                     val points = u.getLong("points") ?: 0
                     val status = u.getString("status") ?: "unverified"
                     val userData = (u.data ?: emptyMap<String, Any>()).toMutableMap()
-                    userData["docId"] = u.id // Incluimos el ID para actualizaciones desde JS
+                    userData["docId"] = u.id 
                     val userDataJson = org.json.JSONObject(userData as Map<*, *>).toString()
                     val safeName = (u.getString("name") ?: "").replace("'", "\\'")
                     webView.post { 
@@ -160,7 +161,7 @@ class WebAppInterface(
                             (function() {
                                 const userData = $userDataJson;
                                 if(window.updateUserProfile) {
-                                    window.updateUserProfile('$safeName', '$email', '${u.getString("photoUrl")}', '$status', $points, userData);
+                                    window.updateUserProfile('$safeName', '$cleanEmail', '${u.getString("photoUrl")}', '$status', $points, userData);
                                 }
                             })();
                         """.trimIndent(), null)

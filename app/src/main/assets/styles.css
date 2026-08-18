@@ -19,6 +19,8 @@ body::before {
 .logo { font-family: 'Playfair Display', serif; font-weight: 800; font-size: 1.6rem; letter-spacing: 3px; color: #fff; text-transform: uppercase; cursor: pointer; }
 .logo span { color: #c5a059; font-weight: 400; }
 
+.nav-icons { display: flex; align-items: center; gap: 15px; }
+
 .icon-btn {
   background: transparent; border: 1px solid rgba(197, 160, 89, 0.3); color: #fff;
   width: 42px; height: 42px; border-radius: 50%; cursor: pointer;

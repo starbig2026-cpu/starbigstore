@@ -154,11 +154,11 @@ fun HomeScreen(
             bcvRate = bcvRate,
             userPoints = userPoints,
             onDismiss = { productForQuantity = null },
-            onConfirm = { qty, method ->
+            onConfirm = { qty, method, initialPerc ->
                 val id = productForQuantity?.id ?: ""
                 val name = productForQuantity?.name ?: ""
                 productForQuantity = null
-                onAddToCart(id, qty, method)
+                onAddToCart(id, qty, "$method - Inicial $initialPerc%")
                 Toast.makeText(context, "✅ ${qty}x $name ($method) AGREGADO AL CARRITO", Toast.LENGTH_LONG).show()
             }
         )
@@ -171,19 +171,21 @@ fun QuantitySelectorDialog(
     bcvRate: Double,
     userPoints: Int,
     onDismiss: () -> Unit,
-    onConfirm: (Int, String) -> Unit
+    onConfirm: (Int, String, Int) -> Unit
 ) {
     var quantity by remember { mutableIntStateOf(1) }
     var isCredit by remember { mutableStateOf(false) }
+    var initialPercent by remember { mutableIntStateOf(25) }
     
     val totalCashBss = product.priceUsd * quantity * bcvRate
     val totalCreditBss = totalCashBss * 1.1
-    val initialPayBss = totalCreditBss * 0.25
+    val initialPayBss = totalCreditBss * (initialPercent / 100f)
     val remainingBss = totalCreditBss - initialPayBss
     
     val extraCuotas = userPoints / 550
     val numCuotas = (2 + extraCuotas).coerceAtMost(12)
     val installmentVal = remainingBss / numCuotas
+    val installmentPerc = if (numCuotas > 0) ((remainingBss / totalCreditBss) / numCuotas) * 100 else 0f
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -246,6 +248,25 @@ fun QuantitySelectorDialog(
                             )
                         ) { Text("CRÉDITO", fontSize = 10.sp, fontWeight = FontWeight.Bold) }
                     }
+
+                    if (isCredit) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("PORCENTAJE DE INICIAL", color = Color.White.copy(0.5f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            listOf(25, 40, 60, 100).forEach { perc ->
+                                Button(
+                                    onClick = { initialPercent = perc },
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(0.dp),
+                                    shape = RoundedCornerShape(4.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if(initialPercent == perc) Color(0xFFC5A059) else Color(0xFF1A1A20),
+                                        contentColor = if(initialPercent == perc) Color.Black else Color.White.copy(0.4f)
+                                    )
+                                ) { Text("$perc%", fontSize = 9.sp, fontWeight = FontWeight.Black) }
+                            }
+                        }
+                    }
                 }
                 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -268,12 +289,15 @@ fun QuantitySelectorDialog(
                                     Text("${totalCreditBss.toInt()} BSS", color = Color(0xFFC5A059), fontWeight = FontWeight.Black)
                                 }
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("INICIAL (25%):", color = Color.White.copy(0.6f), fontSize = 9.sp)
+                                    Text("INICIAL ($initialPercent%):", color = Color.White.copy(0.6f), fontSize = 9.sp)
                                     Text("${initialPayBss.toInt()} BSS", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 10.sp)
                                 }
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("$numCuotas CUOTAS DE:", color = Color.White.copy(0.6f), fontSize = 9.sp)
-                                    Text("${installmentVal.toInt()} BSS", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                                if (initialPercent < 100) {
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        val percStr = java.lang.String.format(java.util.Locale.US, "%.1f", installmentPerc)
+                                        Text("$numCuotas CUOTAS ($percStr% c/u):", color = Color.White.copy(0.6f), fontSize = 9.sp)
+                                        Text("${installmentVal.toInt()} BSS", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                                    }
                                 }
                             }
                         }
@@ -283,7 +307,7 @@ fun QuantitySelectorDialog(
                 Spacer(modifier = Modifier.height(24.dp))
                 
                 Button(
-                    onClick = { onConfirm(quantity, if(isCredit) "CRÉDITO" else "CONTADO") },
+                    onClick = { onConfirm(quantity, if(isCredit) "CRÉDITO" else "CONTADO", if(isCredit) initialPercent else 100) },
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059)),
                     shape = RoundedCornerShape(8.dp)

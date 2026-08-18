@@ -158,12 +158,12 @@
                 <p style="color:#C5A059; font-size: 0.6rem; font-weight: 800; margin-bottom: 15px; letter-spacing: 2px; text-align:center;">REPORTAR PAGO REALIZADO</p>
 
                 <div class="input-group">
-                    <label>Referencia / ID Transacción</label>
+                    <label for="report-ref">Referencia / ID Transacción</label>
                     <input type="text" id="report-ref" placeholder="Solo números para Pago Móvil" style="background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; width:100%; font-size:12px;">
                 </div>
 
                 <div class="input-group">
-                    <label>Banco Emisor</label>
+                    <label for="report-bank">Banco Emisor</label>
                     <select id="report-bank" style="background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; width:100%; font-size:12px;">
                         <option value="">Seleccione Banco</option>
                         <option value="Banesco">Banesco</option>
@@ -181,7 +181,7 @@
                 </div>
 
                 <div class="input-group">
-                    <label>Fecha de Pago</label>
+                    <label for="report-date-calendar">Fecha de Pago</label>
                     <div style="display:flex; gap:5px; margin-bottom:5px;">
                         <button onclick="setReportDate('today')" style="flex:1; background:#1a1a24; color:white; border:1px solid #333; padding:8px; font-size:10px; cursor:pointer;">HOY</button>
                         <button onclick="setReportDate('yesterday')" style="flex:1; background:#1a1a24; color:white; border:1px solid #333; padding:8px; font-size:10px; cursor:pointer;">AYER</button>
@@ -192,26 +192,22 @@
                 </div>
 
                 <div class="input-group">
-                    <label>Número de Teléfono / Cuenta</label>
+                    <label for="report-phone">Número de Teléfono / Cuenta</label>
                     <input type="tel" id="report-phone" placeholder="Desde el que pagó" style="background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; width:100%; font-size:12px;">
                 </div>
 
                 <div style="display:flex; gap:10px;">
                     <div class="input-group" style="flex:1;">
-                        <label>Monto Pagado</label>
+                        <label for="report-amount">Monto Pagado</label>
                         <div style="display:flex; gap:5px;">
                             <input type="number" id="report-amount" step="0.01" placeholder="0.00" style="background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; width:100%; font-size:12px;">
                             <button onclick="document.getElementById('report-amount').readOnly=false; document.getElementById('report-amount').focus();" style="background:#1a1a24; color:#C5A059; border:1px solid #333; padding:5px; font-size:8px; cursor:pointer;">OTRO MONTO</button>
                         </div>
                     </div>
-                    <div id="report-installments-box" class="input-group" style="flex:1; display:none;">
-                        <label>Cuotas</label>
-                        <input type="number" id="report-installments" value="1" min="1" style="background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; width:100%; font-size:12px;">
-                    </div>
                 </div>
 
                 <div class="input-group">
-                    <label>Capture de Pago</label>
+                    <label for="report-capture">Capture de Pago</label>
                     <input type="file" id="report-capture" accept="image/*" style="width:100%; font-size:10px;">
                 </div>
 
@@ -329,19 +325,19 @@
 
             <div style="background:#121216; padding:20px; border:0.5px solid #c5a05933;">
                 <div class="input-group">
-                    <label>DATOS ZELLE</label>
+                    <label for="set-pay-zelle">DATOS ZELLE</label>
                     <textarea id="set-pay-zelle" style="width:100%; height:80px; background:#08080a; color:white; border:1px solid #c5a05933; padding:10px; font-size:11px; resize:none;"></textarea>
                 </div>
                 <div class="input-group">
-                    <label>DATOS BINANCE</label>
+                    <label for="set-pay-binance">DATOS BINANCE</label>
                     <textarea id="set-pay-binance" style="width:100%; height:80px; background:#08080a; color:white; border:1px solid #c5a05933; padding:10px; font-size:11px; resize:none;"></textarea>
                 </div>
                 <div class="input-group">
-                    <label>DATOS ZINLI</label>
+                    <label for="set-pay-zinli">DATOS ZINLI</label>
                     <textarea id="set-pay-zinli" style="width:100%; height:80px; background:#08080a; color:white; border:1px solid #c5a05933; padding:10px; font-size:11px; resize:none;"></textarea>
                 </div>
                 <div class="input-group">
-                    <label>DATOS PAGO MÓVIL</label>
+                    <label for="set-pay-pagomovil">DATOS PAGO MÓVIL</label>
                     <textarea id="set-pay-pagomovil" style="width:100%; height:80px; background:#08080a; color:white; border:1px solid #c5a05933; padding:10px; font-size:11px; resize:none;"></textarea>
                 </div>
                 <button onclick="savePaymentSettings()" class="btn-primary full-width" style="margin-top:10px;">GUARDAR CONFIGURACIÓN</button>
@@ -480,6 +476,16 @@
             </div>
         </div>
 
+        <div id="initial-percent-selector" style="display: none; margin-bottom: 20px;">
+            <label style="color: #888; font-size: 0.6rem; font-weight: 800; display: block; margin-bottom: 10px; letter-spacing: 2px;">PORCENTAJE DE INICIAL</label>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px;">
+                <button class="perc-btn" onclick="setInitialPercent(25)" id="perc-25" style="background:#c5a059; color:#000; border:none; padding:8px; font-size:10px; font-weight:800; border-radius:4px; cursor:pointer;">25%</button>
+                <button class="perc-btn" onclick="setInitialPercent(40)" id="perc-40" style="background:transparent; color:#888; border:1px solid #444; padding:8px; font-size:10px; font-weight:800; border-radius:4px; cursor:pointer;">40%</button>
+                <button class="perc-btn" onclick="setInitialPercent(60)" id="perc-60" style="background:transparent; color:#888; border:1px solid #444; padding:8px; font-size:10px; font-weight:800; border-radius:4px; cursor:pointer;">60%</button>
+                <button class="perc-btn" onclick="setInitialPercent(100)" id="perc-100" style="background:transparent; color:#888; border:1px solid #444; padding:8px; font-size:10px; font-weight:800; border-radius:4px; cursor:pointer;">100%</button>
+            </div>
+        </div>
+
         <div id="qty-price-display" style="background: rgba(255,255,255,0.03); padding: 15px; border-radius: 10px; margin-bottom: 25px; border: 1px solid rgba(197,160,89,0.1);">
             <div id="qty-cash-details">
                 <div style="display: flex; justify-content: space-between;">
@@ -493,11 +499,11 @@
                     <span id="qty-total-credit" style="color: #c5a059; font-weight: 900; font-size: 1rem;">0.00 BSS</span>
                 </div>
                 <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                    <span style="color: #aaa; font-size: 0.65rem;">INICIAL (25%):</span>
+                    <span style="color: #aaa; font-size: 0.65rem;">INICIAL (<span id="qty-initial-perc-label">25</span>%):</span>
                     <span id="qty-initial-pay" style="color: #fff; font-weight: 800; font-size: 0.8rem;">0.00 BSS</span>
                 </div>
-                <div style="display: flex; justify-content: space-between;">
-                    <span style="color: #aaa; font-size: 0.65rem;"><span id="qty-num-installments">2</span> CUOTAS DE:</span>
+                <div id="qty-installment-row" style="display: flex; justify-content: space-between;">
+                    <span style="color: #aaa; font-size: 0.65rem;"><span id="qty-num-installments">2</span> CUOTAS (<span id="qty-inst-perc-label">37.5</span>% c/u):</span>
                     <span id="qty-installment-val" style="color: #fff; font-weight: 800; font-size: 0.8rem;">0.00 BSS</span>
                 </div>
             </div>
@@ -547,18 +553,18 @@
 </div>
 
 <!-- MODAL MIS CRÉDITOS Y CALENDARIO -->
-<div id="credits-modal" class="modal" style="background:rgba(0,0,0,0.9); z-index:8600;">
-    <div class="modal-content" style="max-width: 500px; padding: 40px 20px;">
+<div id="credits-modal" class="modal" style="background:rgba(13, 13, 17, 0.98); z-index:9900;">
+    <div class="modal-content" style="max-width: 500px; padding: 60px 25px;">
         <span class="close-modal" onclick="document.getElementById('credits-modal').style.display='none'">&times;</span>
         <h2 style="color:white; margin-bottom:10px; font-family: 'Playfair Display', serif;">MIS <span>PAGOS</span></h2>
         <p style="color:#888; font-size: 0.7rem; margin-bottom: 25px; letter-spacing: 1px;">CALENDARIO DE COBRANZAS STARBIG</p>
 
         <!-- CALENDARIO VISUAL -->
-        <div id="calendar-container" style="background: #1a1a24; border-radius: 15px; padding: 15px; margin-bottom: 25px; border: 1px solid rgba(197, 160, 89, 0.2);">
+        <div id="calendar-container" style="background: #1a1a24; border-radius: 15px; padding: 15px; margin-bottom: 20px; border: 1px solid rgba(197, 160, 89, 0.2);">
             <div id="calendar-header" style="display: flex; justify-content: space-between; color: white; font-weight: 800; margin-bottom: 15px; font-size: 0.9rem;">
-                <button onclick="changeMonth(-1)" style="background:none; border:none; color:#C5A059; cursor:pointer;">&lt;</button>
-                <span id="calendar-month-year">AGOSTO 2026</span>
-                <button onclick="changeMonth(1)" style="background:none; border:none; color:#C5A059; cursor:pointer;">&gt;</button>
+                <button onclick="changeMonth(-1)" style="background:none; border:none; color:#C5A059; cursor:pointer; font-size: 1.2rem;">&lt;</button>
+                <span id="calendar-month-year">...</span>
+                <button onclick="changeMonth(1)" style="background:none; border:none; color:#C5A059; cursor:pointer; font-size: 1.2rem;">&gt;</button>
             </div>
             <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; font-size: 0.6rem; color: #666; font-weight: 800; margin-bottom: 10px;">
                 <span>DOM</span><span>LUN</span><span>MAR</span><span>MIE</span><span>JUE</span><span>VIE</span><span>SAB</span>
@@ -567,6 +573,9 @@
                 <!-- Se llena con JS -->
             </div>
         </div>
+
+        <!-- INFO DEL DÍA SELECCIONADO (Sin notificaciones flotantes) -->
+        <div id="calendar-day-info" style="background: rgba(197, 160, 89, 0.05); border: 1px dashed rgba(197, 160, 89, 0.3); padding: 15px; border-radius: 12px; margin-bottom: 20px; display: none;"></div>
 
         <!-- LISTA DE DEUDAS -->
         <div id="active-credits-list" style="margin-bottom: 25px;">
@@ -584,14 +593,16 @@
         <h2 style="color:white; margin-bottom:10px; font-weight: 900;">ABONAR A DEUDA</h2>
         <p id="debt-pay-title" style="color:#C5A059; font-size: 0.8rem; margin-bottom: 25px;"></p>
 
-        <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 25px;">
-            <button onclick="setDebtPayAmount('installment')" class="btn-primary full-width" style="background:rgba(197, 160, 89, 0.1); color:#C5A059; border:1px solid #C5A059;">ADELANTAR CUOTA: <span id="debt-val-inst">0</span> BSS</button>
-            <button onclick="setDebtPayAmount('full')" class="btn-primary full-width">LIQUIDAR TODO: <span id="debt-val-full">0</span> BSS</button>
-            <button onclick="setDebtPayAmount('other')" class="btn-secondary full-width">OTRO MONTO</button>
+        <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 15px;">
+            <button id="btn-debt-inst" onclick="setDebtPayAmount('installment')" class="btn-primary full-width" style="background:rgba(197, 160, 89, 0.1); color:#C5A059; border:1px solid #C5A059;">ADELANTAR CUOTA: <span id="debt-val-inst">0</span> BSS</button>
+            <button id="btn-debt-full" onclick="setDebtPayAmount('full')" class="btn-primary full-width">LIQUIDAR TODO: <span id="debt-val-full">0</span> BSS</button>
+            <button id="btn-debt-other" onclick="setDebtPayAmount('other')" class="btn-secondary full-width">OTRO MONTO</button>
         </div>
 
+        <div id="debt-selection-details" style="color: #888; font-size: 0.7rem; margin-bottom: 20px; min-height: 20px;"></div>
+
         <div id="debt-other-monto-box" style="display: none; margin-bottom: 20px;">
-            <label style="color: #888; font-size: 0.6rem; font-weight: 800; display: block; margin-bottom: 8px;">MONTO A PAGAR (BSS)</label>
+            <label for="debt-custom-amount" style="color: #888; font-size: 0.6rem; font-weight: 800; display: block; margin-bottom: 8px;">MONTO A PAGAR (BSS)</label>
             <input type="number" id="debt-custom-amount" step="0.01" placeholder="0.00" style="width: 100%; background: #000; border: 1px solid #C5A05933; color: white; padding: 12px; text-align: center; font-size: 1.2rem; font-weight: 800;">
         </div>
 
@@ -657,6 +668,7 @@
     let cart = [];
     let currentViewingProduct = null;
     let selectedPaymentMethod = 'cash';
+    let selectedInitialPercent = 25;
     let paymentSettings = {
         zelle: "Cargando...", binance: "Cargando...",
         zinli: "Cargando...", pagomovil: "Cargando..."
@@ -665,6 +677,9 @@
     let calendarDate = new Date();
     let userCredits = [];
     let currentPayingDebt = null;
+
+    let pendingOrderData = null;
+    let isNewOrderCheckout = false;
 
     lucide.createIcons();
     listenToTasa();
@@ -677,15 +692,61 @@
         if(navCartBtn) navCartBtn.style.display = 'none';
     }
 
+    let userListener = null;
+    let cartListener = null;
+    let currentCartEmail = null;
+
+    async function saveCartToFirestore() {
+        const email = auth.currentUser?.email || currentUserData?.email;
+        if (email) {
+            const lowerEmail = email.trim().toLowerCase();
+            try {
+                await db.collection("carritos").doc(lowerEmail).set({
+                    items: cart,
+                    lastUpdate: Date.now()
+                });
+            } catch (e) {
+                console.error("Error saving cart to Firestore:", e);
+            }
+        }
+    }
+
+    function startCartListener(email) {
+        if (!email) return;
+        const lowerEmail = email.trim().toLowerCase();
+        if (currentCartEmail === lowerEmail) return;
+
+        if (cartListener) cartListener();
+        currentCartEmail = lowerEmail;
+        cartListener = db.collection("carritos").doc(lowerEmail).onSnapshot(doc => {
+            if (doc.exists) {
+                const remoteCart = doc.data().items || [];
+                // Solo actualizamos si hay cambios para evitar bucles
+                if (JSON.stringify(cart) !== JSON.stringify(remoteCart)) {
+                    cart = remoteCart;
+                    updateCartUI();
+                }
+            }
+        }, err => console.error("Cart listener error:", err));
+    }
+
     auth.onAuthStateChanged(user => {
         if (user) {
-            db.collection("registros_clientes").where("email", "==", user.email).get().then(docs => {
-                if (!docs.empty) {
-                    const doc = docs.docs[0];
-                    const u = doc.data();
-                    window.updateUserProfile(u.name, user.email, u.photoUrl, u.status, u.points || 0, { ...u, docId: doc.id });
-                }
-            });
+            // Escucha en tiempo real de los datos del perfil (Puntos, Status, etc)
+            if (userListener) userListener();
+            userListener = db.collection("registros_clientes").where("email", "==", user.email)
+                .onSnapshot(snap => {
+                    if (!snap.empty) {
+                        const doc = snap.docs[0];
+                        const u = doc.data();
+                        window.updateUserProfile(u.name, user.email, u.photoUrl, u.status, u.points || 0, { ...u, docId: doc.id });
+                    }
+                });
+
+            startCartListener(user.email);
+        } else {
+            if (userListener) { userListener(); userListener = null; }
+            if (cartListener) { cartListener(); cartListener = null; }
         }
     });
 
@@ -851,6 +912,7 @@
                 document.getElementById('buy-quantity').value = 1;
 
                 selectedPaymentMethod = 'cash'; // Reset a contado por defecto
+                selectedInitialPercent = 25; // Reset percent
 
                 const selector = document.getElementById('payment-method-selector');
                 if(currentViewingProduct.allowCredit) {
@@ -867,17 +929,35 @@
         }
     }
 
+    function setInitialPercent(perc) {
+        selectedInitialPercent = perc;
+        document.querySelectorAll('.perc-btn').forEach(btn => {
+            btn.style.background = 'transparent';
+            btn.style.color = '#888';
+            btn.style.border = '1px solid #444';
+        });
+        const active = document.getElementById('perc-' + perc);
+        active.style.background = '#c5a059';
+        active.style.color = '#000';
+        active.style.border = 'none';
+        updateQtyPrice();
+    }
+
     function setPaymentMethod(method) {
         selectedPaymentMethod = method;
         const btnCash = document.getElementById('btn-pay-cash');
         const btnCredit = document.getElementById('btn-pay-credit');
+        const percSelector = document.getElementById('initial-percent-selector');
 
         if(method === 'cash') {
             btnCash.style.background = '#c5a059'; btnCash.style.color = '#000'; btnCash.style.borderColor = '#c5a059';
             btnCredit.style.background = 'transparent'; btnCredit.style.color = '#888'; btnCredit.style.borderColor = '#444';
+            percSelector.style.display = 'none';
         } else {
             btnCredit.style.background = '#c5a059'; btnCredit.style.color = '#000'; btnCredit.style.borderColor = '#c5a059';
             btnCash.style.background = 'transparent'; btnCash.style.color = '#888'; btnCash.style.borderColor = '#444';
+            percSelector.style.display = 'block';
+            setInitialPercent(selectedInitialPercent);
         }
         updateQtyPrice();
     }
@@ -898,18 +978,27 @@
             creditDetails.style.display = 'block';
 
             const totalCredit = totalBss * 1.1;
-            const initialPay = totalCredit * 0.25;
+            const initialPay = totalCredit * (selectedInitialPercent / 100);
             const remaining = totalCredit - initialPay;
 
             const userPoints = currentUserData?.points || 0;
             const extraCuotas = Math.floor(userPoints / 550);
             const numCuotas = Math.min(12, 2 + extraCuotas);
             const installmentVal = remaining / numCuotas;
+            const installmentPerc = ((remaining / totalCredit) / numCuotas) * 100;
 
             document.getElementById('qty-total-credit').innerText = totalCredit.toFixed(2) + " BSS";
+            document.getElementById('qty-initial-perc-label').innerText = selectedInitialPercent;
             document.getElementById('qty-initial-pay').innerText = initialPay.toFixed(2) + " BSS";
-            document.getElementById('qty-num-installments').innerText = numCuotas;
-            document.getElementById('qty-installment-val').innerText = installmentVal.toFixed(2) + " BSS";
+
+            if (selectedInitialPercent === 100) {
+                document.getElementById('qty-installment-row').style.display = 'none';
+            } else {
+                document.getElementById('qty-installment-row').style.display = 'flex';
+                document.getElementById('qty-num-installments').innerText = numCuotas;
+                document.getElementById('qty-inst-perc-label').innerText = installmentPerc.toFixed(1);
+                document.getElementById('qty-installment-val').innerText = installmentVal.toFixed(2) + " BSS";
+            }
         } else {
             cashDetails.style.display = 'block';
             creditDetails.style.display = 'none';
@@ -930,11 +1019,15 @@
             const cartItem = {
                 ...currentViewingProduct,
                 buyQty: qty,
-                paymentMethod: selectedPaymentMethod
+                paymentMethod: selectedPaymentMethod,
+                initialPercent: selectedPaymentMethod === 'credit' ? selectedInitialPercent : 100
             };
 
-            // Si ya está en el carrito, sumar cantidad (si el método es igual)
-            const existingIndex = cart.findIndex(item => item.id === currentViewingProduct.id && item.paymentMethod === selectedPaymentMethod);
+            const existingIndex = cart.findIndex(item =>
+                item.id === currentViewingProduct.id &&
+                item.paymentMethod === selectedPaymentMethod &&
+                (selectedPaymentMethod === 'cash' || item.initialPercent === selectedInitialPercent)
+            );
             if(existingIndex > -1) {
                 cart[existingIndex].buyQty += qty;
             } else {
@@ -942,6 +1035,7 @@
             }
 
             updateCartUI();
+            saveCartToFirestore(); // Sincronizar con Firebase
             showNotification(`✅ ${qty} x ${currentViewingProduct.name.toUpperCase()} AGREGADO`);
             document.getElementById('quantity-modal').style.display = 'none';
             closeProductDetail();
@@ -950,13 +1044,21 @@
 
     // FUNCIÓN PARA RECIBIR PEDIDOS DESDE EL CATÁLOGO NATIVO DE LA APP
     window.addToCartFromNative = function(productId, qty, paymentMethod) {
+        // Asegurarse de que los productos estén cargados
+        if (allProducts.length === 0) {
+            setTimeout(() => window.addToCartFromNative(productId, qty, paymentMethod), 500);
+            return;
+        }
+
         const p = allProducts.find(x => x.id === productId);
         if (p) {
             const method = paymentMethod.toLowerCase().includes('crédito') ? 'credit' : 'cash';
             const cartItem = {
                 ...p,
                 buyQty: qty,
-                paymentMethod: method
+                paymentMethod: method,
+                initialPercent: method === 'credit' ? 25 : 100,
+                isRewardApplied: false
             };
 
             const existingIndex = cart.findIndex(item => item.id === productId && item.paymentMethod === method);
@@ -966,6 +1068,7 @@
                 cart.push(cartItem);
             }
             updateCartUI();
+            saveCartToFirestore(); // Sincronizar
             showNotification(`✅ ${qty}x ${p.name.toUpperCase()} AGREGADO AL CARRITO`);
         }
     };
@@ -982,12 +1085,20 @@
 
     function toggleCart() {
         const modal = document.getElementById('cart-modal');
-        modal.style.display = modal.style.display === 'block' ? 'none' : 'block';
-        if(modal.style.display === 'block') renderCart();
+        const isOpening = modal.style.display !== 'block';
+        modal.style.display = isOpening ? 'block' : 'none';
+
+        if (isOpening) {
+            // Forzar resincronización si hay sesión
+            const email = auth.currentUser?.email || currentUserData?.email;
+            if(email) startCartListener(email);
+            renderCart();
+        }
     }
 
     function closeCart() {
-        document.getElementById('cart-modal').style.display = 'none';
+        const modal = document.getElementById('cart-modal');
+        if(modal) modal.style.display = 'none';
     }
 
     function renderCart() {
@@ -1030,7 +1141,9 @@
                         <img src="${fixDriveUrl(getImageUrl(item))}" style="width:60px; height:60px; object-fit:cover; border-radius:10px;">
                         <div style="flex:1;">
                             <div style="color:white; font-size:0.9rem; font-weight:800;">${item.name.toUpperCase()}</div>
-                            <div style="color:#c5a059; font-size:0.7rem; font-weight:800; margin-bottom: 2px;">${item.paymentMethod === 'credit' ? 'CRÉDITO (+10%)' : 'CONTADO'}</div>
+                            <div style="color:#c5a059; font-size:0.7rem; font-weight:800; margin-bottom: 2px;">
+                                ${item.paymentMethod === 'credit' ? `CRÉDITO (+10%) - Inicial ${item.initialPercent}%` : 'CONTADO'}
+                            </div>
                             <div style="color:#888; font-size:0.8rem;">$${itemPrice.toFixed(2)} x ${item.buyQty}</div>
                             ${rewardText}
                             ${canApplyReward ? `<button onclick="applyStarbigReward(${index})" style="background:#c5a059; border:none; color:black; font-size:0.6rem; font-weight:800; padding:4px 8px; border-radius:4px; margin-top:5px; cursor:pointer;">CANJEAR 2500 PUNTOS</button>` : ''}
@@ -1053,6 +1166,7 @@
         if(cart[index]) {
             cart[index].isRewardApplied = true;
             updateCartUI();
+            saveCartToFirestore();
             showNotification("🎁 RECOMPENSA APLICADA AL ARTÍCULO");
         }
     }
@@ -1061,6 +1175,7 @@
         if(cart[index]) {
             cart[index].isRewardApplied = false;
             updateCartUI();
+            saveCartToFirestore();
             showNotification("RECOMPENSA REMOVIDA", "error");
         }
     }
@@ -1068,12 +1183,13 @@
     function removeFromCart(index) {
         cart.splice(index, 1);
         updateCartUI();
+        saveCartToFirestore();
     }
 
     async function checkout() {
         if(cart.length === 0) return;
 
-        showNotification("PROCESANDO PEDIDO...");
+        showNotification("PREPARANDO PEDIDO...");
 
         const orderId = "ORD_" + Date.now();
         const itemsList = cart.map(i => `${i.buyQty}x ${i.name} (${i.paymentMethod.toUpperCase()})`).join(', ');
@@ -1084,7 +1200,6 @@
         currentOrderHasCredit = cart.some(item => item.paymentMethod === 'credit');
 
         // Lógica de Puntos Starbig
-        let pointsToAdd = 0;
         let pointsToSubtract = 0;
         let usedRewardNow = false;
         cart.forEach(item => {
@@ -1092,54 +1207,39 @@
                 pointsToSubtract += 2500;
                 usedRewardNow = true;
             }
-            if(item.paymentMethod === 'cash') pointsToAdd += 25;
-            // Los puntos de crédito (10) se suman al pagar la cuota antes de 16 días (se gestiona en Admin)
         });
 
-        try {
-            // Guardar pedido para registro
-            await db.collection("pedidos").doc(orderId).set({
-                orderId,
-                customerEmail: currentUserData.email,
-                customerName: currentUserData.name,
-                items: cart,
-                totalUsd,
-                totalBss: totalBssText,
-                pointsUsed: pointsToSubtract,
-                userPointsAtPurchase: currentUserData.points || 0, // Guardamos puntos para cálculo de cuotas futuro
-                status: "pending",
-                timestamp: Date.now()
-            });
+        const userPoints = currentUserData?.points || 0;
+        const extraCuotas = Math.floor(userPoints / 550);
+        const numCuotas = Math.min(12, 2 + extraCuotas);
 
-            currentOrderId = orderId; // Guardamos para el reporte de pago
+        // Preparamos la data pero NO guardamos en Firebase todavía
+        pendingOrderData = {
+            orderId,
+            customerEmail: currentUserData.email,
+            customerName: currentUserData.name,
+            items: JSON.parse(JSON.stringify(cart)), // Clonamos el carrito actual
+            totalUsd,
+            totalBss: totalBssText,
+            pointsUsed: pointsToSubtract,
+            usedRewardNow: usedRewardNow,
+            userPointsAtPurchase: userPoints,
+            numCuotas: numCuotas,
+            hasCredit: currentOrderHasCredit,
+            installmentsPaid: 0,
+            status: "pending",
+            timestamp: Date.now()
+        };
 
-            // Solo restamos puntos si usó recompensa y actualizamos fecha de beneficio mensual
-            if(pointsToSubtract > 0 && currentUserData.docId) {
-                const newPoints = (currentUserData.points || 0) - pointsToSubtract;
-                const updateData = { points: Math.max(0, newPoints) };
+        currentOrderId = orderId;
+        isNewOrderCheckout = true;
 
-                if(usedRewardNow) {
-                    updateData.lastRewardDate = Date.now();
-                    currentUserData.lastRewardDate = updateData.lastRewardDate;
-                }
-
-                await db.collection("registros_clientes").doc(currentUserData.docId).update(updateData);
-                currentUserData.points = Math.max(0, newPoints);
-                document.getElementById('user-points').innerText = currentUserData.points;
-
-                showNotification(`-${pointsToSubtract} ESTRELLAS STARBIG POR CANJE DE PREMIOS`, "error");
-            }
-        } catch(e) { console.error("Error saving order:", e); }
-
-        const message = `🛍️ NUEVO PEDIDO STARBIG STORE\n\nOrden: ${orderId}\nCliente: ${currentUserData?.name}\nItems: ${itemsList}\nTotal: ${totalUsd} (${totalBssText})\n\nPor favor, contacte para concretar el pago.`;
+        const message = `🛍️ NUEVO PEDIDO STARBIG STORE\n\nOrden: ${orderId}\nCliente: ${currentUserData?.name}\nItems: ${itemsList}\nTotal: ${totalUsd} (${totalBssText})\n\nPor favor, reporte su pago para procesar la orden.`;
 
         // Abrimos el selector de contacto para que elija a qué número enviar el pedido
         openContactChoice(message);
 
-        cart = [];
-        updateCartUI();
-        toggleCart();
-        showNotification("✅ PEDIDO ENVIADO POR WHATSAPP");
+        showNotification("✅ SELECCIONE MÉTODO DE PAGO");
     }
 
     // ADMIN WEB LOGIC
@@ -1518,7 +1618,44 @@
                 }
             }
 
-            await orderRef.update({ status: "paid" });
+            // LÓGICA DE CRÉDITO Y ABONOS
+            if (hasCredit) {
+                if (order.status === "pending" || (order.status === "awaiting_verification" && (order.installmentsPaid || 0) === 0)) {
+                    // Es el pago inicial
+                    const totalBss = parseFloat(order.totalBss.replace(" BSS", "")) || 0;
+                    const initial = totalBss * 0.25;
+                    await orderRef.update({
+                        status: "active_credit",
+                        remainingDebt: totalBss - initial,
+                        installmentsPaid: 0,
+                        paymentReport: null,
+                        hasCredit: true
+                    });
+                } else if (order.status === "awaiting_verification") {
+                    // Es un abono a cuota
+                    const amountPaid = parseFloat(order.paymentReport.amount) || 0;
+                    const totalBss = parseFloat(order.totalBss.replace(" BSS", "")) || 0;
+                    const initial = totalBss * 0.25;
+
+                    const extraCuotas = Math.floor((order.userPointsAtPurchase || 0) / 550);
+                    const numCuotas = order.numCuotas || Math.min(12, 2 + extraCuotas);
+                    const installmentVal = (totalBss - initial) / numCuotas;
+
+                    let newRemaining = (order.remainingDebt !== undefined ? order.remainingDebt : (totalBss - initial)) - amountPaid;
+                    let installmentsCovered = Math.max(1, Math.floor(amountPaid / (installmentVal * 0.95)));
+                    let newPaid = (order.installmentsPaid || 0) + installmentsCovered;
+
+                    await orderRef.update({
+                        remainingDebt: Math.max(0, newRemaining),
+                        installmentsPaid: newPaid,
+                        status: newRemaining <= 0 ? "paid" : "active_credit",
+                        paymentReport: null
+                    });
+                }
+            } else {
+                await orderRef.update({ status: "paid" });
+            }
+
             showNotification("✅ PAGO CONFIRMADO");
         } catch(e) {
             console.error(e);
@@ -1673,6 +1810,8 @@
         showNotification("Autenticando...");
 
         if(window.AndroidApp) {
+            // Intentamos loguear en JS TAMBIÉN para que el WebView tenga su propia sesión Firebase
+            auth.signInWithEmailAndPassword(email, pass).catch(err => console.error("JS Auth Sync Error:", err));
             window.AndroidApp.loginUser(email, pass);
         } else {
             auth.signInWithEmailAndPassword(email, pass).then(cred => {
@@ -1704,6 +1843,11 @@
     window.updateUserProfile = function(name, email, photoUrl, status, points = 0, fullData = null) {
         userStatus = status;
         if(fullData) currentUserData = { ...fullData, email, photoUrl, status, points };
+
+        // Asegurar que la escucha del carrito esté activa (especialmente para la App)
+        if (email) {
+            startCartListener(email);
+        }
 
         const nameEl = document.getElementById('profile-name');
         if(nameEl) nameEl.innerText = name;
@@ -2263,7 +2407,6 @@
         summary.innerHTML = summaryHtml;
         amountInput.readOnly = true;
 
-        document.getElementById('report-installments-box').style.display = hasCredit ? 'block' : 'none';
         lucide.createIcons();
     }
 
@@ -2293,7 +2436,6 @@
         const bank = document.getElementById('report-bank').value;
         const phone = document.getElementById('report-phone').value;
         const amount = document.getElementById('report-amount').value;
-        const inst = document.getElementById('report-installments').value;
         const fileInput = document.getElementById('report-capture');
         const file = fileInput.files[0];
 
@@ -2308,6 +2450,30 @@
             let capture64 = file ? await getBase64(file) : null;
             const finalDate = document.getElementById('report-date-calendar').value || selectedReportDate;
 
+            // Si es un pedido nuevo desde el carrito, lo guardamos ahora en Firebase
+            if (isNewOrderCheckout && pendingOrderData) {
+                await db.collection("pedidos").doc(currentOrderId).set(pendingOrderData);
+
+                // Restar puntos si usó recompensa
+                if(pendingOrderData.pointsUsed > 0 && currentUserData.docId) {
+                    const newPoints = (currentUserData.points || 0) - pendingOrderData.pointsUsed;
+                    const updateData = { points: Math.max(0, newPoints) };
+                    if(pendingOrderData.usedRewardNow) {
+                        updateData.lastRewardDate = Date.now();
+                        currentUserData.lastRewardDate = updateData.lastRewardDate;
+                    }
+                    await db.collection("registros_clientes").doc(currentUserData.docId).update(updateData);
+                    currentUserData.points = Math.max(0, newPoints);
+                    document.getElementById('user-points').innerText = currentUserData.points;
+                }
+
+                // Limpiar carrito solo después de reportar pago exitosamente
+                cart = [];
+                updateCartUI();
+                saveCartToFirestore();
+                if(document.getElementById('cart-modal').style.display === 'block') toggleCart();
+            }
+
             await db.collection("pedidos").doc(currentOrderId).update({
                 paymentReport: {
                     reference: ref,
@@ -2315,7 +2481,6 @@
                     date: finalDate,
                     phone: phone,
                     amount: amount,
-                    installments: inst,
                     captureBase64: capture64,
                     timestamp: Date.now()
                 },
@@ -2328,7 +2493,9 @@
             contactWhatsapp('+584244019899', msg);
 
             document.getElementById('contact-choice-modal').style.display = 'none';
-            showNotification("✅ REPORTE ENVIADO CORRECTAMENTE");
+            isNewOrderCheckout = false;
+            pendingOrderData = null;
+            showNotification("✅ ORDEN Y REPORTE ENVIADOS CORRECTAMENTE");
         } catch(e) {
             console.error(e);
             showNotification("Error al enviar reporte", "error");
@@ -2371,17 +2538,21 @@
     }
 
     // --- LÓGICA DE CRÉDITOS Y CALENDARIO ---
-    async function openMyCredits() {
-        if(!currentUserData) return;
+    function openMyCredits() {
+        if(!currentUserData) {
+            showNotification("Cargando datos de perfil...", "error");
+            return;
+        }
         document.getElementById('credits-modal').style.display = 'block';
         loadUserCredits();
+        showNotification("Cargando calendario de pagos...");
     }
 
     function loadUserCredits() {
         // Obtenemos pedidos con pago a crédito confirmados
         db.collection("pedidos")
             .where("customerEmail", "==", currentUserData.email)
-            .where("status", "==", "paid")
+            .where("status", "in", ["paid", "active_credit"])
             .onSnapshot(snap => {
                 userCredits = [];
                 snap.forEach(doc => {
@@ -2403,6 +2574,8 @@
     function renderCalendar() {
         const header = document.getElementById('calendar-month-year');
         const grid = document.getElementById('calendar-days');
+        const infoBox = document.getElementById('calendar-day-info');
+        if(infoBox) infoBox.style.display = 'none'; // Ocultar info al cambiar de mes
         const months = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
 
         header.innerText = `${months[calendarDate.getMonth()]} ${calendarDate.getFullYear()}`;
@@ -2411,35 +2584,77 @@
         const firstDay = new Date(calendarDate.getFullYear(), calendarDate.getMonth(), 1).getDay();
         const daysInMonth = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 0).getDate();
 
-        // Citas de cobro (cada 16 días desde la compra)
-        const dueDates = [];
+        // Mapeo de días a créditos para interactividad
+        const dayCredits = {};
         userCredits.forEach(credit => {
-            const purchaseDate = new Date(credit.timestamp);
-            // Calculamos el número de cuotas (basado en la misma lógica del checkout)
-            const extraCuotas = Math.floor((credit.userPointsAtPurchase || 0) / 550);
-            const numCuotas = Math.min(12, 2 + extraCuotas);
+            const t = credit.timestamp;
+            const purchaseDate = (t && t.toDate) ? t.toDate() : new Date(t);
+            if (isNaN(purchaseDate.getTime())) return;
+
+            const numCuotas = credit.numCuotas || Math.min(12, 2 + Math.floor((credit.userPointsAtPurchase || 0) / 550));
+            const paid = credit.installmentsPaid || 0;
 
             for(let i=1; i<=numCuotas; i++) {
+                if (i <= paid) continue;
+
                 const d = new Date(purchaseDate);
                 d.setDate(d.getDate() + (i * 16));
                 if(d.getMonth() === calendarDate.getMonth() && d.getFullYear() === calendarDate.getFullYear()) {
-                    dueDates.push(d.getDate());
+                    const day = d.getDate();
+                    if(!dayCredits[day]) dayCredits[day] = [];
+
+                    const totalBss = parseFloat(credit.totalBss.replace(" BSS", "")) || 0;
+                    const installmentVal = (totalBss * 0.75) / numCuotas; // 0.75 porque la inicial es 25%
+
+                    dayCredits[day].push({
+                        orderId: credit.orderId,
+                        installment: installmentVal,
+                        item: credit.items[0]?.name || "Producto"
+                    });
                 }
             }
         });
 
         for(let i=0; i<firstDay; i++) { grid.innerHTML += '<div></div>'; }
         for(let d=1; d<=daysInMonth; d++) {
-            const isDue = dueDates.includes(d);
+            const creditsToday = dayCredits[d];
+            const isDue = !!creditsToday;
             const isToday = d === new Date().getDate() && calendarDate.getMonth() === new Date().getMonth() && calendarDate.getFullYear() === new Date().getFullYear();
 
+            const creditsJson = JSON.stringify(creditsToday || null).replace(/"/g, '&quot;');
+
             grid.innerHTML += `
-                <div style="padding: 8px; font-size: 0.7rem; border-radius: 5px;
+                <div onclick="showDateDetails(${d}, ${creditsJson})"
+                    style="padding: 8px; font-size: 0.7rem; border-radius: 5px; cursor: pointer;
                     ${isDue ? 'background:#C5A059; color:black; font-weight:900;' : 'color:#fff;'}
                     ${isToday ? 'border: 1px solid #C5A059;' : ''}">
                     ${d}
                 </div>`;
         }
+    }
+
+    function showDateDetails(day, credits) {
+        const infoBox = document.getElementById('calendar-day-info');
+        infoBox.style.display = 'block';
+
+        if(!credits || credits.length === 0) {
+            infoBox.innerHTML = `<div style="color:#888; font-size:0.7rem; text-align:center; font-weight:800;">📅 DÍA ${day}: SIN PAGOS PROGRAMADOS</div>`;
+            return;
+        }
+
+        let html = `<div style="color:#C5A059; font-weight:900; font-size:0.75rem; margin-bottom:12px; text-align:center; letter-spacing:1px;">COBROS PARA EL DÍA ${day}</div>`;
+        credits.forEach(c => {
+            html += `
+                <div style="background:rgba(255,255,255,0.02); padding:10px; border-radius:8px; margin-bottom:8px; border:1px solid rgba(255,255,255,0.05);">
+                    <div style="color:white; font-size:0.75rem; font-weight:800; margin-bottom:3px;">${c.item.toUpperCase()}</div>
+                    <div style="display:flex; justify-content:space-between; font-size:0.65rem;">
+                        <span style="color:#666;">ORDEN: ${c.orderId}</span>
+                        <span style="color:#C5A059; font-weight:900;">${c.installment.toFixed(2)} BSS</span>
+                    </div>
+                </div>`;
+        });
+        infoBox.innerHTML = html;
+        infoBox.scrollIntoView({behavior: 'smooth', block: 'nearest'});
     }
 
     function renderCreditsList() {
@@ -2482,23 +2697,53 @@
         document.getElementById('debt-val-inst').innerText = installment.toFixed(2);
         document.getElementById('debt-val-full').innerText = remaining.toFixed(2);
         document.getElementById('debt-other-monto-box').style.display = 'none';
+        document.getElementById('debt-selection-details').innerText = "";
+
+        // Reset button styles
+        const btns = ['btn-debt-inst', 'btn-debt-full', 'btn-debt-other'];
+        btns.forEach(b => {
+            const el = document.getElementById(b);
+            if(b === 'btn-debt-other') {
+                el.style.background = 'transparent'; el.style.color = '#888'; el.style.border = '1px solid #444';
+            } else {
+                el.style.background = 'rgba(197, 160, 89, 0.1)'; el.style.color = '#C5A059'; el.style.border = '1px solid #C5A059';
+            }
+        });
+
         document.getElementById('debt-pay-modal').style.display = 'block';
     }
 
     function setDebtPayAmount(type) {
         const input = document.getElementById('debt-custom-amount');
         const box = document.getElementById('debt-other-monto-box');
+        const details = document.getElementById('debt-selection-details');
+
+        const btnInst = document.getElementById('btn-debt-inst');
+        const btnFull = document.getElementById('btn-debt-full');
+        const btnOther = document.getElementById('btn-debt-other');
+
+        // Reset Styles
+        [btnInst, btnFull].forEach(b => {
+            b.style.background = 'rgba(197, 160, 89, 0.1)'; b.style.color = '#C5A059';
+        });
+        btnOther.style.background = 'transparent'; btnOther.style.color = '#888'; btnOther.style.border = '1px solid #444';
 
         if(type === 'installment') {
             input.value = currentPayingDebt.installment.toFixed(2);
             box.style.display = 'none';
+            btnInst.style.background = '#C5A059'; btnInst.style.color = '#000';
+            details.innerText = "Esta opción adelantará la próxima cuota programada, reduciendo tus compromisos inmediatos.";
         } else if(type === 'full') {
-            input.value = currentPayingDebt.remaining;
+            input.value = currentPayingDebt.remaining.toFixed(2);
             box.style.display = 'none';
+            btnFull.style.background = '#C5A059'; btnFull.style.color = '#000';
+            details.innerText = "Liquidarás el total de la deuda de esta orden. ¡Tu crédito quedará liberado!";
         } else {
             box.style.display = 'block';
             input.value = "";
             input.focus();
+            btnOther.style.background = '#C5A059'; btnOther.style.color = '#000'; btnOther.style.border = 'none';
+            details.innerText = "Ingresa un monto personalizado para abonar a tu deuda.";
         }
     }
 
@@ -2515,6 +2760,7 @@
         // Pero primero guardamos una referencia temporal para el abono
         currentOrderId = currentPayingDebt.id; // Para que el formulario de reporte sepa a qué orden pertenece
         currentOrderTotalBss = amount; // Sugerimos este monto en el reporte
+        isNewOrderCheckout = false; // Importante resetear esto para abonos
 
         document.getElementById('debt-pay-modal').style.display = 'none';
         document.getElementById('credits-modal').style.display = 'none';
