@@ -12,29 +12,40 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.starbigstore.ui.screens.AdminScreen
 import com.example.starbigstore.ui.screens.HomeScreen
 import com.example.starbigstore.ui.screens.WebScreen
 import com.example.starbigstore.ui.theme.StarbigStoreTheme
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -68,6 +79,29 @@ class MainActivity : FragmentActivity() {
                 var shouldShowAuth by remember { mutableStateOf(false) }
                 var shouldShowCart by remember { mutableStateOf(false) }
                 var addToCartCommand by remember { mutableStateOf<Triple<String, Int, String>?>(null) }
+                
+                var newsList by remember { mutableStateOf(listOf<String>()) }
+                var showNewsOverlay by remember { mutableStateOf(false) }
+                var hasShownNews by remember { mutableStateOf(false) }
+
+                LaunchedEffect(Unit) {
+                    // Usamos snapshotListener para tiempo real y filtramos duplicados
+                    db.collection("novedades").orderBy("timestamp", Query.Direction.DESCENDING)
+                        .addSnapshotListener { snapshot, _ ->
+                            if (snapshot != null) {
+                                // Usamos distinct() para asegurar que no haya URLs repetidas
+                                val list = snapshot.documents.mapNotNull { it.getString("imageUrl") }.distinct()
+                                if (list.isNotEmpty()) {
+                                    newsList = list
+                                    // Solo mostramos el overlay automáticamente la primera vez que carga
+                                    if (!hasShownNews) {
+                                        showNewsOverlay = true
+                                        hasShownNews = true
+                                    }
+                                }
+                            }
+                        }
+                }
                 
                 val pickMedia = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
                     uri?.let { filePathCallback?.onReceiveValue(arrayOf(it)) } ?: filePathCallback?.onReceiveValue(null)
@@ -177,6 +211,13 @@ class MainActivity : FragmentActivity() {
                         }
                     }
                 }
+
+                if (showNewsOverlay && newsList.isNotEmpty()) {
+                    NewsOverlay(
+                        images = newsList,
+                        onDismiss = { showNewsOverlay = false }
+                    )
+                }
             }
         }
     }
@@ -192,4 +233,85 @@ class MainActivity : FragmentActivity() {
         val promptInfo = BiometricPrompt.PromptInfo.Builder().setTitle("Starbig Auth").setSubtitle("Usa tu huella").setNegativeButtonText("Cancelar").build()
         biometricPrompt.authenticate(promptInfo)
     }
+}
+
+@Composable
+fun NewsOverlay(images: List<String>, onDismiss: () -> Unit) {
+    var currentIndex by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(images) {
+        if (images.size > 1) {
+            while (true) {
+                delay(5000)
+                currentIndex = (currentIndex + 1) % images.size
+            }
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.95f)
+                .wrapContentHeight()
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.Black)
+                .border(2.dp, Color(0xFFC5A059), RoundedCornerShape(16.dp))
+        ) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(fixDriveUrl(images[currentIndex]))
+                    .crossfade(true)
+                    .build(),
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(0.8f) // Flyers are usually portrait
+                    .clickable { onDismiss() },
+                contentScale = ContentScale.Fit,
+                error = painterResource(id = R.drawable.main_bg_app)
+            )
+
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+                    .background(Color.Black.copy(0.5f), RoundedCornerShape(50.dp))
+            ) {
+                Icon(Icons.Default.Close, contentDescription = "Cerrar", tint = Color.White)
+            }
+
+            if (images.size > 1) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    images.forEachIndexed { index, _ ->
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(RoundedCornerShape(50.dp))
+                                .background(if (index == currentIndex) Color(0xFFC5A059) else Color.White.copy(0.3f))
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun fixDriveUrl(url: String?): String {
+    if (url.isNullOrBlank() || url.contains("subiendo")) return "https://via.placeholder.com/200?text=STARBIG"
+    if (url.contains("firebasestorage.googleapis.com") || url.contains("appspot.com")) return url
+
+    val id = when {
+        url.contains("id=") -> url.split("id=").getOrNull(1)?.split("&")?.getOrNull(0)
+        url.contains("file/d/") -> url.split("file/d/").getOrNull(1)?.split("/")?.getOrNull(0)
+        url.length > 20 && !url.contains("/") && !url.contains(".") -> url
+        else -> null
+    }
+
+    return id?.let { "https://drive.google.com/thumbnail?id=$it&sz=w1000" } ?: url
 }

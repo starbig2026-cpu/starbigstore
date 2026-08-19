@@ -256,6 +256,13 @@
     </div>
 </section>
 
+<section id="main-news-section" class="products" style="display:none; padding-bottom:0;">
+    <h2 class="section-title">Últimas <span>Novedades</span></h2>
+    <div id="main-news-grid" style="display:flex; gap:15px; overflow-x:auto; padding:20px 0; scrollbar-width: none;">
+        <!-- Flyers dinámicos aquí -->
+    </div>
+</section>
+
 <section class="products" id="products-section">
     <h2 class="section-title">Lo Más <span>Deseado</span></h2>
     <div id="products-grid" class="product-grid">
@@ -287,6 +294,7 @@
             <div id="adm-tab-users" class="tab-btn active" onclick="switchAdminTab('users')">SOLICITUDES</div>
             <div id="adm-tab-db" class="tab-btn" onclick="switchAdminTab('db')">BASE DE DATOS</div>
             <div id="adm-tab-inv" class="tab-btn" onclick="switchAdminTab('inventory')">INVENTARIO</div>
+            <div id="adm-tab-news" class="tab-btn" onclick="switchAdminTab('news')">NOVEDADES</div>
             <div id="adm-tab-sales" class="tab-btn" onclick="switchAdminTab('sales')">COBRANZAS</div>
             <div id="adm-tab-pay" class="tab-btn" onclick="switchAdminTab('payments')">PAGOS</div>
         </div>
@@ -315,6 +323,15 @@
 
             <div id="admin-inventory-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px;"></div>
         </div>
+
+        <div id="admin-content-news" class="admin-panel-section" style="display:none;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3 style="color:white; letter-spacing: 2px; font-weight: 900; font-size: 14px;">NOVEDADES Y FLYERS</h3>
+                <button onclick="document.getElementById('add-news-overlay').style.display='block'" style="background:#C5A059; border:none; padding:10px 20px; border-radius:0; font-weight:900; cursor:pointer; font-size: 10px; letter-spacing: 1px;">+ NUEVA NOVEDAD</button>
+            </div>
+            <div id="admin-news-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px;"></div>
+        </div>
+
         <div id="admin-content-sales" class="admin-panel-section" style="display:none;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                 <h3 style="color:white; letter-spacing: 2px; font-weight: 900; font-size: 14px;">HISTORIAL DE COBRANZAS</h3>
@@ -408,6 +425,30 @@
 
         <button id="ap-save-btn" onclick="saveProductWeb()" class="btn-primary full-width">GUARDAR PRODUCTO</button>
         <button onclick="document.getElementById('add-prod-overlay').style.display='none'" class="btn-secondary full-width" style="margin-top:10px;">CANCELAR</button>
+    </div>
+</div>
+
+<!-- MODAL AÑADIR NOVEDAD (ADMIN WEB) -->
+<div id="add-news-overlay" class="modal" style="background:rgba(0,0,0,0.8); z-index:6000;">
+    <div class="modal-content" style="background:#121216; border:1px solid #C5A059; max-width: 500px;">
+        <h2 style="color:white; margin-bottom:20px; font-weight: 900;">NUEVA NOVEDAD</h2>
+        <div id="an-preview" style="width:100%; height:250px; background:#000; margin-bottom:15px; display:flex; justify-content:center; align-items:center; border:1px dashed #C5A059; overflow:hidden; cursor:pointer;" onclick="document.getElementById('an-img').click()">
+            <span style="color:#C5A059; font-size:12px;">+ SELECCIONAR FLYER</span>
+        </div>
+        <input type="file" id="an-img" onchange="previewNewsImage(this)" style="display:none;" accept="image/*">
+        <button id="an-save-btn" onclick="saveNewsWeb()" class="btn-primary full-width">PUBLICAR NOVEDAD</button>
+        <button onclick="document.getElementById('add-news-overlay').style.display='none'" class="btn-secondary full-width" style="margin-top:10px;">CANCELAR</button>
+    </div>
+</div>
+
+<!-- OVERLAY NOVEDADES PANTALLA PRINCIPAL -->
+<div id="news-overlay" class="modal" style="background:rgba(0,0,0,0.9); z-index:9999; display:none; justify-content:center; align-items:center;">
+    <div style="position:relative; width:90%; max-width:500px;">
+        <span onclick="closeNewsOverlay()" style="position:absolute; top:-40px; right:0; color:white; font-size:30px; cursor:pointer;">&times;</span>
+        <div id="news-content-slider" style="width:100%; border:2px solid #C5A059; border-radius:15px; overflow:hidden; background:black;">
+            <!-- Imagen de novedad -->
+        </div>
+        <div id="news-dots" style="display:flex; justify-content:center; gap:8px; margin-top:15px;"></div>
     </div>
 </div>
 
@@ -683,6 +724,8 @@
 
     let tasaBcv = 36.5;
     let allProducts = [];
+    let allNews = [];
+    let shownNews = false;
     let userStatus = "guest";
     let currentUserData = null;
     let onlineHistory = Array(20).fill(1);
@@ -709,6 +752,7 @@
     lucide.createIcons();
     listenToTasa();
     listenToPaymentSettings();
+    listenToNews();
     startTrafficMonitor();
 
     // Ocultar botón de carrito en navbar si estamos dentro de la App (porque ya tiene su barra inferior)
@@ -1340,7 +1384,13 @@
         showNotification("✅ SELECCIONE MÉTODO DE PAGO");
     }
 
-    // ADMIN WEB LOGIC
+    function openAdmin() {
+        // Ocultar novedades al abrir admin
+        closeNewsOverlay();
+        document.getElementById('admin-overlay').style.display = 'block';
+        loadAdminUsers(); loadAdminInventory();
+    }
+
     let clicks = 0;
     function handleLogoClick() {
         clicks++;
@@ -1349,8 +1399,7 @@
             else {
                 const pin = prompt("PIN ADMIN:");
                 if(pin === "1358L") {
-                    document.getElementById('admin-overlay').style.display = 'block';
-                    loadAdminUsers(); loadAdminInventory();
+                    openAdmin();
                 }
             }
         }
@@ -1361,17 +1410,22 @@
         document.getElementById('admin-content-users').style.display = tab === 'users' ? 'block' : 'none';
         document.getElementById('admin-content-db').style.display = tab === 'db' ? 'block' : 'none';
         document.getElementById('admin-content-inventory').style.display = tab === 'inventory' ? 'block' : 'none';
+        document.getElementById('admin-content-news').style.display = tab === 'news' ? 'block' : 'none';
         document.getElementById('admin-content-sales').style.display = tab === 'sales' ? 'block' : 'none';
-        document.getElementById('admin-content-payments').style.display = tab === 'payments' ? 'block' : 'none';
+
+        const payPanel = document.getElementById('admin-content-payments');
+        if (payPanel) payPanel.style.display = tab === 'payments' ? 'block' : 'none';
+
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
 
         const tabIdMap = {
             'users': 'adm-tab-users', 'db': 'adm-tab-db',
-            'inventory': 'adm-tab-inv', 'sales': 'adm-tab-sales',
-            'payments': 'adm-tab-pay'
+            'inventory': 'adm-tab-inv', 'news': 'adm-tab-news',
+            'sales': 'adm-tab-sales', 'payments': 'adm-tab-pay'
         };
         document.getElementById(tabIdMap[tab]).classList.add('active');
 
+        if(tab === 'news') loadAdminNews();
         if(tab === 'sales') loadAdminSales();
         if(tab === 'payments') loadAdminPayments();
     }
@@ -2653,10 +2707,182 @@
         window.open(`https://wa.me/${number.replace('+', '')}?text=${encodeURIComponent(msg)}`);
     }
 
-    function contactAdmin() {
-        const name = document.getElementById('profile-name').innerText;
-        const msg = `Hola, soy ${name}. Solicito verificación.`;
-        openContactChoice(msg);
+    function listenToNews() {
+        db.collection("novedades").orderBy("timestamp", "desc").onSnapshot(snap => {
+            allNews = [];
+            snap.forEach(doc => {
+                const data = doc.data();
+                if (data.imageUrl && data.imageUrl.length > 5) {
+                    allNews.push({...data, id: doc.id});
+                }
+            });
+
+            renderMainNews();
+
+            if(!shownNews && allNews.length > 0) {
+                // Solo mostrar overlay si NO estamos en la App nativa (que tiene su propio overlay)
+                if(!window.AndroidApp) {
+                    setTimeout(showNewsOverlay, 2000);
+                }
+                shownNews = true;
+            } else if (allNews.length === 0) {
+                closeNewsOverlay();
+                const mainNewsSec = document.getElementById('main-news-section');
+                if(mainNewsSec) mainNewsSec.style.display = 'none';
+            }
+        });
+    }
+
+    function renderMainNews() {
+        const container = document.getElementById('main-news-grid');
+        const section = document.getElementById('main-news-section');
+        if(!container || !section) return;
+
+        if(allNews.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+
+        section.style.display = 'block';
+        container.innerHTML = "";
+        allNews.forEach(news => {
+            const imgUrl = fixDriveUrl(getImageUrl(news));
+            const card = document.createElement('div');
+            card.style.cssText = "min-width: 280px; height: 400px; background: #000; border: 1px solid rgba(197, 160, 89, 0.2); border-radius: 15px; overflow: hidden; cursor: pointer; transition: 0.3s; flex-shrink: 0;";
+            card.innerHTML = `<img src="${imgUrl}" style="width: 100%; height: 100%; object-fit: cover;" referrerpolicy="no-referrer">`;
+            card.onclick = () => expandImage(news.imageUrl);
+            card.onmouseenter = () => card.style.borderColor = "#c5a059";
+            card.onmouseleave = () => card.style.borderColor = "rgba(197, 160, 89, 0.2)";
+            container.appendChild(card);
+        });
+    }
+
+    function showNewsOverlay() {
+        // No mostrar novedades si el panel de administración está abierto
+        if(document.getElementById('admin-overlay').style.display === 'block') return;
+        if(allNews.length === 0) return;
+
+        const overlay = document.getElementById('news-overlay');
+        const content = document.getElementById('news-content-slider');
+        const dots = document.getElementById('news-dots');
+
+        overlay.style.display = 'flex';
+
+        let current = 0;
+        const render = (idx) => {
+            if (!allNews[idx]) return;
+            const imgUrl = fixDriveUrl(allNews[idx].imageUrl);
+
+            // Usamos un div con imagen de fondo para mejor control visual y evitar saltos de layout
+            content.innerHTML = `
+                <div style="width:100%; min-height:350px; background: #000 url('${imgUrl}') no-repeat center center; background-size: contain; position:relative;">
+                    <img src="${imgUrl}" style="opacity:0; width:100%; height:auto; display:block;" onerror="this.parentElement.style.backgroundImage='url(https://via.placeholder.com/500x700?text=STARBIG+STORE)'">
+                </div>
+            `;
+
+            dots.innerHTML = allNews.map((_, i) => `
+                <div onclick="renderNewsByIndex(${i})" style="width:10px; height:10px; border-radius:50%; background:${i===idx?'#C5A059':'#444'}; cursor:pointer; transition:0.3s; border:1px solid rgba(255,255,255,0.1);"></div>
+            `).join('');
+        };
+
+        window.renderNewsByIndex = (idx) => { current = idx; render(idx); };
+
+        render(0);
+        if(allNews.length > 1) {
+            const interval = setInterval(() => {
+                if(overlay.style.display === 'none') { clearInterval(interval); return; }
+                current = (current + 1) % allNews.length;
+                render(current);
+            }, 6000);
+        }
+    }
+
+    function closeNewsOverlay() {
+        document.getElementById('news-overlay').style.display = 'none';
+    }
+
+    function previewNewsImage(input) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('an-preview').innerHTML = `<img src="${e.target.result}" style="width:100%; height:100%; object-fit:contain;">`;
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    async function saveNewsWeb() {
+        const btn = document.getElementById('an-save-btn');
+        const file = document.getElementById('an-img').files[0];
+        if(!file) { alert("Seleccione una imagen"); return; }
+
+        btn.disabled = true; btn.innerText = "PROCESANDO IMAGEN...";
+        try {
+            const photo64 = await getBase64(file);
+            const fileName = `NEWS_${Date.now()}.jpg`;
+
+            const sheetsPayload = {
+                action: "addProduct",
+                sheetName: "NOVEDADES",
+                photoBase64: photo64,
+                fileName: fileName,
+                folderName: "NOVEDADES_STARBIG",
+                data: {
+                    fecha: new Date().toLocaleString(),
+                    nombre: "FLYER NOVEDAD",
+                    precio: 0,
+                    descripcion: "Flyer promocional"
+                }
+            };
+
+            const response = await fetch(googleSheetsUrl, {
+                method: 'POST',
+                body: JSON.stringify(sheetsPayload)
+            });
+
+            const resData = await response.json();
+            const finalUrl = resData.imageUrl || "";
+
+            if(finalUrl) {
+                await db.collection("novedades").add({
+                    imageUrl: finalUrl,
+                    timestamp: Date.now()
+                });
+                showNotification("✅ NOVEDAD PUBLICADA");
+            } else {
+                throw new Error("No se pudo obtener el link de la imagen");
+            }
+
+            document.getElementById('add-news-overlay').style.display = 'none';
+            document.getElementById('an-preview').innerHTML = '<span style="color:#C5A059; font-size:12px;">+ SELECCIONAR FLYER</span>';
+        } catch(e) {
+            console.error("Error al publicar novedad:", e);
+            showNotification("Error al publicar: " + e.message, "error");
+        } finally {
+            btn.disabled = false; btn.innerText = "PUBLICAR NOVEDAD";
+        }
+    }
+
+    function loadAdminNews() {
+        const list = document.getElementById('admin-news-list');
+        list.innerHTML = "";
+        allNews.forEach(news => {
+            const card = document.createElement('div');
+            card.style = "background:#121216; padding:10px; border:0.5px solid #ffffff11; margin-bottom:10px;";
+            card.innerHTML = `
+                <img src="${fixDriveUrl(news.imageUrl)}" style="width:100%; height:150px; object-fit:contain; background:black;">
+                <div style="display:flex; justify-content:flex-end; margin-top:10px;">
+                    <button class="delete-news-btn" style="background:none; border:none; color:#ff4444; cursor:pointer;"><i data-lucide="trash-2"></i></button>
+                </div>`;
+            card.querySelector('.delete-news-btn').onclick = async () => {
+                if(confirm("¿Eliminar esta novedad?")) {
+                    await db.collection("novedades").doc(news.id).delete();
+                    showNotification("Novedad eliminada");
+                }
+            };
+            list.appendChild(card);
+        });
+        lucide.createIcons();
     }
 
     function forgotEmail() {

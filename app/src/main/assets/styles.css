@@ -202,7 +202,34 @@ body::before {
   border-color: #c5a059;
 }
 
+/* NOVEDADES ADMIN */
+.delete-news-btn {
+    transition: 0.3s;
+    opacity: 0.6;
+}
+.delete-news-btn:hover {
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+#admin-news-list div {
+    border-radius: 10px;
+    overflow: hidden;
+    transition: 0.3s;
+}
+
+#admin-news-list div:hover {
+    border-color: #c5a059 !important;
+}
+
+#news-dots div {
+    transition: 0.3s;
+}
+
 #admin-cat-filters::-webkit-scrollbar { height: 4px; }
 #admin-cat-filters::-webkit-scrollbar-track { background: #08080a; }
 #admin-cat-filters::-webkit-scrollbar-thumb { background: #c5a05933; }
 #admin-cat-filters::-webkit-scrollbar-thumb:hover { background: #c5a059; }
+
+#main-news-grid::-webkit-scrollbar { display: none; }
+#main-news-grid { -ms-overflow-style: none; scrollbar-width: none; }

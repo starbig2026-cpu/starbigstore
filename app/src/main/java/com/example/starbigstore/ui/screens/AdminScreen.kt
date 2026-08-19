@@ -43,9 +43,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.util.Date
 import java.util.UUID
 
 private const val GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/AKfycbzTKwRkgCmy_m42ZeKjPbczOMr0YHmRKiSmrHPCSEdKixHzI9MG3fhEfEU3pChr45exvw/exec"
+
+data class News(
+    val id: String = "",
+    val imageUrl: String = "",
+    val timestamp: Long = 0
+)
 
 data class CustomerRegistration(
     val id: String = "",
@@ -153,12 +160,17 @@ fun AdminListContent() {
     var registrations by remember { mutableStateOf(listOf<CustomerRegistration>()) }
     var products by remember { mutableStateOf(listOf<Product>()) }
     var orders by remember { mutableStateOf(listOf<Order>()) }
+    var newsList by remember { mutableStateOf(listOf<News>()) }
     var bcvRate by remember { mutableDoubleStateOf(36.5) }
     var paymentSettings by remember { mutableStateOf(mapOf("zelle" to "", "binance" to "", "zinli" to "", "pagomovil" to "")) }
     var isLoading by remember { mutableStateOf(false) }
     var expandedImageUrl by remember { mutableStateOf<String?>(null) }
     var showAddProductDialog by remember { mutableStateOf(false) }
+    var showAddNewsDialog by remember { mutableStateOf(false) }
     var productToEdit by remember { mutableStateOf<Product?>(null) }
+    var productToDelete by remember { mutableStateOf<Product?>(null) }
+    var customerToDelete by remember { mutableStateOf<CustomerRegistration?>(null) }
+    var newsToDelete by remember { mutableStateOf<News?>(null) }
     var showRateDialog by remember { mutableStateOf(false) }
     val db = FirebaseFirestore.getInstance()
     val context = LocalContext.current
@@ -269,6 +281,17 @@ fun AdminListContent() {
                 }
             }
 
+        db.collection("novedades").orderBy("timestamp", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null) newsList = snapshot.documents.map { doc ->
+                    News(
+                        id = doc.id,
+                        imageUrl = doc.getString("imageUrl") ?: "",
+                        timestamp = doc.getLong("timestamp") ?: 0
+                    )
+                }
+            }
+
         db.collection("config").document("tasa_bcv").addSnapshotListener { snapshot, _ ->
             if (snapshot != null && snapshot.exists()) bcvRate = snapshot.getDouble("valor") ?: 36.5
         }
@@ -303,6 +326,7 @@ fun AdminListContent() {
             ) {
                 AdminNavButton("DB", Icons.Default.Storage, selectedTab == 0, Modifier.width(80.dp)) { selectedTab = 0 }
                 AdminNavButton("STOCK", Icons.Default.Inventory, selectedTab == 1, Modifier.width(80.dp)) { selectedTab = 1 }
+                AdminNavButton("NOVEDAD", Icons.Default.Campaign, selectedTab == 5, Modifier.width(80.dp)) { selectedTab = 5 }
                 AdminNavButton("COBROS", Icons.Default.MonetizationOn, selectedTab == 4, Modifier.width(80.dp)) { selectedTab = 4 }
                 AdminNavButton("PAGOS", Icons.Default.Payments, selectedTab == 3, Modifier.width(80.dp)) { selectedTab = 3 }
                 AdminNavButton("SOLIC.", Icons.Default.Group, selectedTab == 2, Modifier.width(80.dp)) { selectedTab = 2 }
@@ -316,15 +340,15 @@ fun AdminListContent() {
                         val actives = registrations.filter { it.status == "active" }
                         if (actives.isEmpty()) InfoSection("No hay usuarios activos")
                         else LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                            items(actives) { reg -> CustomerAdminCard(reg, {}, { deleteCustomer(reg, db) }, { expandedImageUrl = it }) }
+                            items(actives) { reg -> CustomerAdminCard(reg, {}, { customerToDelete = reg }, { expandedImageUrl = it }) }
                         }
                     }
-                    1 -> InventorySection(products, bcvRate, { showAddProductDialog = true }, { showRateDialog = true }, { syncBcv() }, { deleteProduct(it, db) }, { productToEdit = it })
+                    1 -> InventorySection(products, bcvRate, { showAddProductDialog = true }, { showRateDialog = true }, { syncBcv() }, { productToDelete = it }, { productToEdit = it })
                     2 -> {
                         val pendings = registrations.filter { it.status == "unverified" }
                         if (pendings.isEmpty()) InfoSection("No hay solicitudes")
                         else LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                            items(pendings) { reg -> CustomerAdminCard(reg, { approveCustomer(reg, db) }, { deleteCustomer(reg, db) }, { expandedImageUrl = it }) }
+                            items(pendings) { reg -> CustomerAdminCard(reg, { approveCustomer(reg, db) }, { customerToDelete = reg }, { expandedImageUrl = it }) }
                         }
                     }
                     3 -> PaymentSettingsSection(paymentSettings) { updatedSettings ->
@@ -343,6 +367,12 @@ fun AdminListContent() {
                         onRejectPayment = { rejectOrderPayment(it, db, showModernToast) },
                         onDeleteSale = { deleteOrder(it, db, showModernToast) },
                         onClearHistory = { clearCompletedOrders(db, showModernToast) },
+                        onImageClick = { expandedImageUrl = it }
+                    )
+                    5 -> NewsAdminSection(
+                        newsList = newsList,
+                        onAddNews = { showAddNewsDialog = true },
+                        onDeleteNews = { newsToDelete = it },
                         onImageClick = { expandedImageUrl = it }
                     )
                 }
@@ -382,111 +412,227 @@ fun AdminListContent() {
         }
 
         if (showAddProductDialog || productToEdit != null) {
-            val oldCategory = productToEdit?.category
-            val oldName = productToEdit?.name
-            val isEdit = productToEdit != null
-
-            AddProductDialog(productToEdit, { showAddProductDialog = false; productToEdit = null }, { newProd, uri ->
-                isLoading = true
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        var url = newProd.imageUrl
-                        if (uri != null) {
-                            val storage = FirebaseStorage.getInstance()
-                            val ref = storage.reference.child("productos/${UUID.randomUUID()}.jpg")
-                            try {
-                                ref.putFile(uri).await()
-                                // Reintento corto para asegurar que el objeto se propague en Google Cloud
-                                var downloadUri: Uri? = null
-                                repeat(3) {
-                                    try {
-                                        downloadUri = ref.downloadUrl.await()
-                                        if (downloadUri != null) return@repeat
-                                    } catch (_: Exception) {
-                                        delay(1000)
-                                    }
-                                }
-                                url = downloadUri?.toString() ?: ""
-                            } catch (_: Exception) {
-                                android.util.Log.e("Admin", "Error subiendo imagen")
-                            }
-                        }
-                        
-                        val finalProd = newProd.copy(imageUrl = url)
-                        val docId = if (isEdit) {
-                            db.collection("productos").document(productToEdit!!.id).set(finalProd).await()
-                            productToEdit!!.id
-                        } else {
-                            db.collection("productos").add(finalProd).await().id
-                        }
-                        
-                        // Convertir a Base64 para Google Drive (Sheets)
-                        val base64 = uri?.let { u ->
-                            try {
-                                context.contentResolver.openInputStream(u)?.use { it.readBytes() }?.let { 
+            AddProductDialog(
+                editingProduct = productToEdit,
+                onDismiss = {
+                    showAddProductDialog = false
+                    productToEdit = null
+                },
+                onConfirm = { product, uri ->
+                    isLoading = true
+                    CoroutineScope(Dispatchers.IO).launch {
+                        try {
+                            val base64 = uri?.let { u ->
+                                context.contentResolver.openInputStream(u)?.use { it.readBytes() }?.let {
                                     android.util.Base64.encodeToString(it, android.util.Base64.NO_WRAP)
                                 }
-                            } catch (_: Exception) { null }
-                        }
-
-                        // Sincronizar en segundo plano y obtener link de Drive
-                        CoroutineScope(Dispatchers.IO).launch {
-                            try {
-                                val normalizedCategory = java.text.Normalizer.normalize(finalProd.category, java.text.Normalizer.Form.NFD)
-                                    .replace("[\\u0300-\\u036f]+".toRegex(), "")
-                                    .uppercase()
-
-                                val json = org.json.JSONObject().apply {
-                                    put("action", "addProduct")
-                                    put("sheetName", normalizedCategory)
-
-                                    if (isEdit) {
-                                        val normOldCat = if (oldCategory != null) java.text.Normalizer.normalize(oldCategory, java.text.Normalizer.Form.NFD)
-                                            .replace("[\\u0300-\\u036f]+".toRegex(), "")
-                                            .uppercase() else null
-                                        put("oldCategory", normOldCat)
-                                        put("oldName", oldName)
-                                    }
-
-                                    put("photoBase64", base64)
-                                    put("fileName", "PROD_${System.currentTimeMillis()}_${finalProd.name.replace(" ", "_")}.jpg")
-                                    put("folderName", "PRODUCTOS_STARBIG")
-                                    put("data", org.json.JSONObject().apply {
-                                        put("fecha", java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date()))
-                                        put("nombre", finalProd.name); put("precio", finalProd.priceUsd); put("stock", finalProd.stock)
-                                        put("coleccion", finalProd.collection); put("descripcion", finalProd.description)
-                                        put("credito", if(finalProd.allowCredit) "SÍ" else "NO"); put("imagen", url)
-                                    })
-                                }
-                                val response = OkHttpClient().newCall(Request.Builder().url(GOOGLE_SHEETS_URL).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
-                                val respBody = response.body?.string()
-                                if (respBody != null) {
-                                    val resJson = org.json.JSONObject(respBody)
-                                    val driveUrl = resJson.optString("imageUrl")
-                                    if (driveUrl.isNotEmpty()) {
-                                        // Actualizamos Firebase con el link de Drive que sí funciona
-                                        db.collection("productos").document(docId).update("imageUrl", driveUrl)
-                                    }
-                                }
-                            } catch (_: Exception) {
-                                android.util.Log.e("AdminSync", "Error sincronizando link de Drive")
                             }
-                        }
 
-                        CoroutineScope(Dispatchers.Main).launch { 
-                            isLoading = false
-                            showAddProductDialog = false
-                            productToEdit = null
-                            showModernToast("✅ GUARDADO CON ÉXITO", false)
-                        }
-                    } catch (_: Exception) {
-                        CoroutineScope(Dispatchers.Main).launch { 
-                            isLoading = false
-                            showModernToast("❌ ERROR AL GUARDAR", true)
+                            val editing = productToEdit
+                            val oldCategory = editing?.category?.let {
+                                java.text.Normalizer.normalize(it, java.text.Normalizer.Form.NFD)
+                                    .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
+                                    .uppercase()
+                            }
+                            val oldName = editing?.name
+
+                            val normalizedCat = java.text.Normalizer.normalize(product.category, java.text.Normalizer.Form.NFD)
+                                .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
+                                .uppercase()
+
+                            val json = org.json.JSONObject().apply {
+                                put("action", "addProduct")
+                                put("sheetName", normalizedCat)
+                                if (editing != null) {
+                                    put("oldCategory", oldCategory)
+                                    put("oldName", oldName)
+                                }
+                                put("photoBase64", base64 ?: "")
+                                put("fileName", "PROD_${System.currentTimeMillis()}.jpg")
+                                put("folderName", "PRODUCTOS_STARBIG")
+                                put("data", org.json.JSONObject().apply {
+                                    put("fecha", java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date()))
+                                    put("nombre", product.name)
+                                    put("precio", product.priceUsd)
+                                    put("stock", product.stock)
+                                    put("coleccion", product.collection)
+                                    put("descripcion", product.description)
+                                    put("credito", if(product.allowCredit) "SÍ" else "NO")
+                                    put("imagen", if(base64 == null) product.imageUrl else "")
+                                })
+                            }
+
+                            val response = OkHttpClient().newCall(Request.Builder().url(GOOGLE_SHEETS_URL).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
+                            val respBody = response.body?.string()
+                            
+                            val driveUrl = if (respBody != null && respBody.startsWith("{")) {
+                                org.json.JSONObject(respBody).optString("imageUrl")
+                            } else ""
+
+                            val finalProductMap = hashMapOf(
+                                "name" to product.name,
+                                "priceUsd" to product.priceUsd,
+                                "stock" to product.stock,
+                                "category" to product.category,
+                                "collection" to product.collection,
+                                "description" to product.description,
+                                "allowCredit" to product.allowCredit,
+                                "imageUrl" to if (driveUrl.isNotEmpty()) driveUrl else product.imageUrl,
+                                "timestamp" to System.currentTimeMillis()
+                            )
+                            
+                            if (editing != null) {
+                                db.collection("productos").document(editing.id).update(finalProductMap as Map<String, Any>).await()
+                            } else {
+                                db.collection("productos").add(finalProductMap).await()
+                            }
+
+                            CoroutineScope(Dispatchers.Main).launch {
+                                isLoading = false
+                                showAddProductDialog = false
+                                productToEdit = null
+                                showModernToast("✅ PRODUCTO GUARDADO", false)
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("AdminProduct", "Error: ${e.message}")
+                            CoroutineScope(Dispatchers.Main).launch {
+                                isLoading = false
+                                showModernToast("❌ ERROR AL GUARDAR", true)
+                            }
                         }
                     }
                 }
-            })
+            )
+        }
+
+        if (productToDelete != null) {
+            AlertDialog(
+                onDismissRequest = { productToDelete = null },
+                containerColor = Color(0xFF121216),
+                title = { Text("¿ELIMINAR PRODUCTO?", color = Color.White, fontWeight = FontWeight.Black) },
+                text = { Text("Esta acción eliminará ${productToDelete?.name?.uppercase()} permanentemente de Firebase y Excel.", color = Color.White.copy(0.7f)) },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val p = productToDelete!!
+                            productToDelete = null
+                            deleteProduct(p, db)
+                            showModernToast("✅ PRODUCTO ELIMINADO", false)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                    ) { Text("ELIMINAR", color = Color.White) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { productToDelete = null }) { Text("CANCELAR", color = Color.White.copy(0.6f)) }
+                }
+            )
+        }
+
+        if (showAddNewsDialog) {
+            AddNewsDialog(
+                onDismiss = { showAddNewsDialog = false },
+                onConfirm = { uri ->
+                    isLoading = true
+                    CoroutineScope(Dispatchers.IO).launch {
+                        try {
+                            // Convertimos la imagen a Base64 para subirla a Google Drive
+                            val base64 = try {
+                                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }?.let {
+                                    android.util.Base64.encodeToString(it, android.util.Base64.NO_WRAP)
+                                }
+                            } catch (_: Exception) { null }
+
+                            if (base64 == null) throw Exception("Error al procesar imagen")
+
+                            // Sincronizar con Google Drive para obtener un link permanente funcional
+                            val json = org.json.JSONObject().apply {
+                                put("action", "addProduct") // Usamos addProduct porque tu script ya maneja subida a Drive aquí
+                                put("sheetName", "NOVEDADES")
+                                put("photoBase64", base64)
+                                put("fileName", "NEWS_${System.currentTimeMillis()}.jpg")
+                                put("folderName", "NOVEDADES_STARBIG")
+                                put("data", org.json.JSONObject().apply {
+                                    put("fecha", java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date()))
+                                    put("nombre", "FLYER APP")
+                                    put("precio", 0)
+                                })
+                            }
+
+                            val response = OkHttpClient().newCall(Request.Builder().url(GOOGLE_SHEETS_URL).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
+                            val respBody = response.body?.string()
+                            
+                            if (respBody != null) {
+                                val resJson = org.json.JSONObject(respBody)
+                                val driveUrl = resJson.optString("imageUrl")
+                                
+                                if (driveUrl.isNotEmpty()) {
+                                    // Guardamos en Firestore con el link de Drive funcional
+                                    val news = News(imageUrl = driveUrl, timestamp = Date().time)
+                                    db.collection("novedades").add(news).await()
+
+                                    CoroutineScope(Dispatchers.Main).launch {
+                                        isLoading = false
+                                        showAddNewsDialog = false
+                                        showModernToast("✅ NOVEDAD PUBLICADA", false)
+                                    }
+                                } else throw Exception("Link de Drive vacío")
+                            } else throw Exception("Sin respuesta del servidor")
+
+                        } catch (e: Exception) {
+                            android.util.Log.e("AdminNews", "Error: ${e.message}")
+                            CoroutineScope(Dispatchers.Main).launch {
+                                isLoading = false
+                                showModernToast("❌ ERROR AL PUBLICAR", true)
+                            }
+                        }
+                    }
+                }
+            )
+        }
+
+        if (customerToDelete != null) {
+            AlertDialog(
+                onDismissRequest = { customerToDelete = null },
+                containerColor = Color(0xFF121216),
+                title = { Text("¿ELIMINAR USUARIO?", color = Color.White, fontWeight = FontWeight.Black) },
+                text = { Text("Esta acción eliminará a ${customerToDelete?.name?.uppercase()} de todas las bases de datos.", color = Color.White.copy(0.7f)) },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val c = customerToDelete!!
+                            customerToDelete = null
+                            deleteCustomer(c, db)
+                            showModernToast("✅ USUARIO ELIMINADO", false)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                    ) { Text("ELIMINAR", color = Color.White) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { customerToDelete = null }) { Text("CANCELAR", color = Color.White.copy(0.6f)) }
+                }
+            )
+        }
+
+        if (newsToDelete != null) {
+            AlertDialog(
+                onDismissRequest = { newsToDelete = null },
+                containerColor = Color(0xFF121216),
+                title = { Text("¿ELIMINAR NOVEDAD?", color = Color.White, fontWeight = FontWeight.Black) },
+                text = { Text("¿Seguro que desea eliminar este flyer promocional?", color = Color.White.copy(0.7f)) },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val n = newsToDelete!!
+                            newsToDelete = null
+                            deleteNews(n, db, showModernToast)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                    ) { Text("ELIMINAR", color = Color.White) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { newsToDelete = null }) { Text("CANCELAR", color = Color.White.copy(0.6f)) }
+                }
+            )
         }
 
         if (showRateDialog) {
@@ -1111,4 +1257,94 @@ fun fixDriveUrl(url: String?): String {
     }
 
     return id?.let { "https://drive.google.com/thumbnail?id=$it&sz=w1000" } ?: url
+}
+
+@Composable
+fun NewsAdminSection(
+    newsList: List<News>,
+    onAddNews: () -> Unit,
+    onDeleteNews: (News) -> Unit,
+    onImageClick: (String) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("NOVEDADES & FLYERS", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black)
+            IconButton(onClick = onAddNews) { Icon(Icons.Default.Add, null, tint = Color(0xFFC5A059)) }
+        }
+        
+        if (newsList.isEmpty()) {
+            InfoSection("No hay novedades publicadas")
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
+                items(newsList) { news ->
+                    NewsAdminCard(news, onDeleteNews, onImageClick)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun NewsAdminCard(news: News, onDelete: (News) -> Unit, onImageClick: (String) -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(0.dp), border = BorderStroke(0.5.dp, Color(0xFFC5A059).copy(alpha = 0.2f))) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Box(modifier = Modifier.fillMaxWidth().height(200.dp).background(Color.Black).clickable { onImageClick(news.imageUrl) }) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(fixDriveUrl(news.imageUrl))
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit,
+                    error = painterResource(R.drawable.logo_admin)
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                IconButton(onClick = { onDelete(news) }) {
+                    Icon(Icons.Default.Delete, null, tint = Color.Red.copy(0.6f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AddNewsDialog(onDismiss: () -> Unit, onConfirm: (Uri) -> Unit) {
+    var uri by remember { mutableStateOf<Uri?>(null) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri = it }
+
+    AlertDialog(onDismissRequest = onDismiss, containerColor = Color(0xFF121216), shape = RoundedCornerShape(0.dp),
+        title = { Text("NUEVA NOVEDAD", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(modifier = Modifier.fillMaxWidth().height(250.dp).background(Color.Black).clickable { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, contentAlignment = Alignment.Center) {
+                    if(uri != null) AsyncImage(model = uri, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                    else Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.AddPhotoAlternate, null, tint = Color(0xFFC5A059), modifier = Modifier.size(48.dp))
+                        Text("SELECCIONAR FLYER", color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        },
+        confirmButton = { 
+            Button(
+                onClick = { uri?.let { onConfirm(it) } }, 
+                enabled = uri != null,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059))
+            ) { 
+                Text("PUBLICAR", color = Color.Black) 
+            } 
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("CANCELAR", color = Color.White.copy(0.6f)) }
+        }
+    )
+}
+
+private fun deleteNews(news: News, db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) {
+    db.collection("novedades").document(news.id).delete().addOnSuccessListener {
+        showToast("Novedad eliminada", false)
+    }
 }
