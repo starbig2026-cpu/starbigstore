@@ -33,6 +33,7 @@ class WebAppInterface(
     fun registerUser(firstName: String, lastName: String, email: String, phone: String, address: String, photoBase64: String, idCardBase64: String, pass: String) {
         val db = FirebaseFirestore.getInstance()
         val auth = FirebaseAuth.getInstance()
+        val cleanEmail = email.trim().lowercase(Locale.ROOT)
 
         webView.post {
             webView.evaluateJavascript("showNotification('🚀 CREANDO PERFIL PREMIUM...', 'success')", null)
@@ -42,7 +43,7 @@ class WebAppInterface(
             try {
                 // 1. Crear usuario en Firebase Auth
                 try {
-                    auth.createUserWithEmailAndPassword(email.trim(), pass).await()
+                    auth.createUserWithEmailAndPassword(cleanEmail, pass).await()
                 } catch (e: Exception) {
                     if (e.localizedMessage?.contains("already in use") == true) {
                         // Si ya existe en Auth pero no en Firestore, permitimos continuar para recrear el perfil
@@ -57,7 +58,7 @@ class WebAppInterface(
                     "firstName" to firstName,
                     "lastName" to lastName,
                     "name" to "$firstName $lastName",
-                    "email" to email.trim(),
+                    "email" to cleanEmail,
                     "phone" to phone,
                     "address" to address,
                     "status" to "unverified",
@@ -79,14 +80,14 @@ class WebAppInterface(
                     put("sheetName", "USUARIOS")
                     put("firstName", firstName)
                     put("lastName", lastName)
-                    put("email", email.trim())
+                    put("email", cleanEmail)
                     put("phone", phone)
                     put("address", address)
                     put("status", "unverified")
                     put("photoBase64", photoBase64)
                     put("idCardBase64", idCardBase64)
-                    put("photoName", "PERFIL_${System.currentTimeMillis()}_${email.trim().split("@")[0]}.jpg")
-                    put("idCardName", "ID_${System.currentTimeMillis()}_${email.trim().split("@")[0]}.jpg")
+                    put("photoName", "PERFIL_${System.currentTimeMillis()}_${cleanEmail.split("@")[0]}.jpg")
+                    put("idCardName", "ID_${System.currentTimeMillis()}_${cleanEmail.split("@")[0]}.jpg")
                     put("folderName", "REGISTROS_NUEVOS")
                     put("date", java.text.SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(Date()))
                 }
@@ -158,18 +159,31 @@ class WebAppInterface(
                     val safeName = (u.getString("name") ?: "").replace("'", "\\'")
                     webView.post { 
                         webView.evaluateJavascript("""
-                            (function() {
-                                const userData = $userDataJson;
-                                if(window.updateUserProfile) {
-                                    window.updateUserProfile('$safeName', '$cleanEmail', '${u.getString("photoUrl")}', '$status', $points, userData);
-                                }
-                            })();
+                            if(window.updateUserProfile) {
+                                window.updateUserProfile('$safeName', '$cleanEmail', '${u.getString("photoUrl")}', '$status', $points, $userDataJson);
+                            }
                         """.trimIndent(), null)
                     }
                 } else {
-                    webView.post {
-                        webView.evaluateJavascript("if(window.showNotification) showNotification('PERFIL NO ENCONTRADO EN BASE DE DATOS', 'error')", null)
-                    }
+                    // Reintento con el correo original por si hay mayúsculas en la DB
+                    FirebaseFirestore.getInstance().collection("registros_clientes")
+                        .whereEqualTo("email", email.trim()).get().addOnSuccessListener { docs2 ->
+                            if(!docs2.isEmpty) {
+                                val u = docs2.documents[0]
+                                // ... manejar igual que arriba si es necesario o simplemente informar
+                                fetchUserData(email.trim()) // Recursión controlada una sola vez
+                            } else {
+                                webView.post {
+                                    webView.evaluateJavascript("showNotification('PERFIL NO ENCONTRADO EN DB', 'error')", null)
+                                }
+                            }
+                        }
+                }
+            }
+            .addOnFailureListener { e ->
+                webView.post {
+                    val errorType = e.localizedMessage ?: "DESCONOCIDO"
+                    webView.evaluateJavascript("showNotification('ERROR DB: ${errorType.take(20)}', 'error')", null)
                 }
             }
     }

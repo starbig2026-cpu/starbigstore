@@ -801,18 +801,31 @@
 
     auth.onAuthStateChanged(user => {
         if (user) {
-            // Escucha en tiempo real de los datos del perfil (Puntos, Status, etc)
+            const cleanEmail = user.email.toLowerCase();
             if (userListener) userListener();
-            userListener = db.collection("registros_clientes").where("email", "==", user.email)
+            userListener = db.collection("registros_clientes").where("email", "==", cleanEmail)
                 .onSnapshot(snap => {
                     if (!snap.empty) {
                         const doc = snap.docs[0];
                         const u = doc.data();
-                        window.updateUserProfile(u.name, user.email, u.photoUrl, u.status, u.points || 0, { ...u, docId: doc.id });
+                        window.updateUserProfile(u.name, cleanEmail, u.photoUrl, u.status, u.points || 0, { ...u, docId: doc.id });
+                    } else {
+                        // Reintento por si el correo no estaba en minúsculas en la DB antigua
+                        db.collection("registros_clientes").where("email", "==", user.email).get().then(s => {
+                            if(!s.empty) {
+                                const d = s.docs[0];
+                                window.updateUserProfile(d.data().name, user.email, d.data().photoUrl, d.data().status, d.data().points || 0, { ...d.data(), docId: d.id });
+                            } else {
+                                showNotification("PERFIL NO ENCONTRADO", "error");
+                            }
+                        });
                     }
+                }, err => {
+                    console.error("Firestore Listener Error:", err);
+                    showNotification("ERROR DB: " + err.code, "error");
                 });
 
-            startCartListener(user.email);
+            startCartListener(cleanEmail);
         } else {
             if (userListener) { userListener(); userListener = null; }
             if (cartListener) { cartListener(); cartListener = null; }
@@ -1956,38 +1969,28 @@
 
     document.getElementById('login-form').onsubmit = (e) => {
         e.preventDefault();
-        const email = document.getElementById('login-email').value.trim();
+        const emailInput = document.getElementById('login-email').value.trim();
+        const email = emailInput.toLowerCase();
         const pass = document.getElementById('login-pass').value;
 
         showNotification("Autenticando...");
 
         if(window.AndroidApp) {
-            // Intentamos loguear en JS TAMBIÉN para que el WebView tenga su propia sesión Firebase
-            auth.signInWithEmailAndPassword(email, pass).catch(err => console.error("JS Auth Sync Error:", err));
-            window.AndroidApp.loginUser(email, pass);
+            window.AndroidApp.loginUser(emailInput, pass);
         } else {
             auth.signInWithEmailAndPassword(email, pass).then(cred => {
-                db.collection("registros_clientes").where("email", "==", email).get().then(docs => {
-                    if(!docs.empty) {
-                        const u = docs.docs[0].data();
-                        window.updateUserProfile(u.name, email, u.photoUrl, u.status, u.points || 0, u);
-                        showNotification("Bienvenido, " + u.name);
-                        setTimeout(closeAuth, 1000);
-                    }
-                });
+                // No hacemos la consulta aquí, dejamos que onAuthStateChanged se encargue
+                // para evitar doble consulta y conflictos de permisos.
+                showNotification("Sesión iniciada, cargando perfil...");
             }).catch(err => {
                 console.error("Auth Error:", err);
                 let msg = err.message;
-                let code = err.code || "";
-
-                if(code === "auth/wrong-password" || code === "auth/user-not-found" || code === "auth/invalid-credential" || msg.includes("invalid-login-credentials")) {
-                    msg = "CORREO O CONTRASEÑA INCORRECTOS";
-                } else if (code === "auth/invalid-email") {
-                    msg = "FORMATO DE CORREO INVÁLIDO";
-                } else {
-                    msg = "ERROR: " + (code || msg).toUpperCase();
+                if (err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
+                    msg = "CONTRASEÑA INCORRECTA";
+                } else if (err.code === "auth/user-not-found") {
+                    msg = "USUARIO NO REGISTRADO";
                 }
-                showNotification(msg, "error");
+                showNotification(msg.toUpperCase(), "error");
             });
         }
     };
@@ -2295,7 +2298,7 @@
             const id64 = await getBase64(document.getElementById('reg-id-card').files[0]);
             const name = document.getElementById('reg-name').value.trim();
             const lastname = document.getElementById('reg-lastname').value.trim();
-            const email = document.getElementById('reg-email').value.trim();
+            const email = document.getElementById('reg-email').value.trim().toLowerCase();
 
             const fullPhone = document.getElementById('reg-phone-code').value + document.getElementById('reg-phone').value.trim();
             const country = document.getElementById('reg-country').value;
