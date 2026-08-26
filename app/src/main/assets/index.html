@@ -80,6 +80,10 @@
                     </div>
                 </div>
                 <div class="input-group">
+                    <label for="reg-id-number">Número de Cédula / ID</label>
+                    <input type="text" id="reg-id-number" placeholder="Ej: V-12345678" required style="width: 100%; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px;">
+                </div>
+                <div class="input-group">
                     <label for="reg-country">Ubicación</label>
                     <select id="reg-country" onchange="updateStates(this.value)" style="width: 100%; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; margin-bottom: 5px;" required>
                         <option value="">Seleccione País</option>
@@ -113,7 +117,8 @@
                 <button onclick="changePhoto()" class="menu-item-btn"><i data-lucide="camera"></i> CAMBIAR FOTO</button>
                 <button onclick="openSecurity()" class="menu-item-btn"><i data-lucide="lock"></i> SEGURIDAD</button>
                 <button onclick="viewPoints()" class="menu-item-btn"><i data-lucide="award"></i> PUNTOS: <span id="user-points">0</span></button>
-                <button onclick="openMyCredits()" class="menu-item-btn" style="grid-column: span 2; background: rgba(197, 160, 89, 0.1); border-color: #c5a059;"><i data-lucide="calendar"></i> MI CALENDARIO DE PAGOS / DEUDAS</button>
+                <button onclick="openMyCredits()" class="menu-item-btn" style="grid-column: span 1; background: rgba(197, 160, 89, 0.1); border-color: #c5a059;"><i data-lucide="calendar"></i> MIS PAGOS</button>
+                <button onclick="openCreditStatus()" class="menu-item-btn" style="grid-column: span 1; background: rgba(197, 160, 89, 0.1); border-color: #c5a059;"><i data-lucide="file-text"></i> STATUS CRÉDITO</button>
             </div>
 
             <button id="whatsapp-verify-btn" onclick="openContactChoice()" class="btn-primary full-width" style="background:#25D366; margin-top:25px; display:none;">WHATSAPP VERIFICACIÓN</button>
@@ -242,7 +247,7 @@
     <p>Adquiere lo último en perfumes y tecnología con nuestro sistema de crédito exclusivo.</p>
     <div class="hero-btns">
         <button onclick="document.getElementById('products-section').scrollIntoView({behavior:'smooth'})" class="btn-primary">VER CATÁLOGO</button>
-        <button onclick="checkAccess()" class="btn-secondary">SOLICITAR CRÉDITO</button>
+        <button onclick="openCreditTerms()" class="btn-secondary">SOLICITAR CRÉDITO</button>
     </div>
 </section>
 
@@ -253,6 +258,7 @@
         <div class="cat-card" onclick="filterByCategory('Tecnología')"><i data-lucide="smartphone"></i> Tecnología</div>
         <div class="cat-card" onclick="filterByCategory('Ropa')"><i data-lucide="shirt"></i> Ropa</div>
         <div class="cat-card" onclick="filterByCategory('Calzado')"><i data-lucide="footprints"></i> Calzado</div>
+        <div class="cat-card" onclick="filterByCategory('Belleza')"><i data-lucide="heart"></i> Belleza</div>
     </div>
 </section>
 
@@ -296,6 +302,7 @@
             <div id="adm-tab-inv" class="tab-btn" onclick="switchAdminTab('inventory')">INVENTARIO</div>
             <div id="adm-tab-news" class="tab-btn" onclick="switchAdminTab('news')">NOVEDADES</div>
             <div id="adm-tab-sales" class="tab-btn" onclick="switchAdminTab('sales')">COBRANZAS</div>
+            <div id="adm-tab-credits" class="tab-btn" onclick="switchAdminTab('credits')">CRÉDITOS</div>
             <div id="adm-tab-pay" class="tab-btn" onclick="switchAdminTab('payments')">PAGOS</div>
         </div>
 
@@ -362,6 +369,11 @@
                 </div>
                 <button onclick="savePaymentSettings()" class="btn-primary full-width" style="margin-top:10px;">GUARDAR CONFIGURACIÓN</button>
             </div>
+        </div>
+
+        <div id="admin-content-credits" class="admin-panel-section" style="display:none;">
+            <h3 style="color:white; margin-bottom:20px; font-weight:900; font-size:14px; letter-spacing:2px;">SOLICITUDES DE CRÉDITO</h3>
+            <div id="admin-credits-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;"></div>
         </div>
     </div>
 </div>
@@ -653,7 +665,22 @@
 
         <div id="debt-other-monto-box" style="display: none; margin-bottom: 20px;">
             <label for="debt-custom-amount" style="color: #888; font-size: 0.6rem; font-weight: 800; display: block; margin-bottom: 8px;">MONTO A PAGAR (BSS)</label>
-            <input type="number" id="debt-custom-amount" step="0.01" placeholder="0.00" style="width: 100%; background: #000; border: 1px solid #C5A05933; color: white; padding: 12px; text-align: center; font-size: 1.2rem; font-weight: 800;">
+            <input type="number" id="debt-custom-amount" step="0.01" placeholder="0.00" oninput="updateDebtPercentages(this.value)" style="width: 100%; background: #000; border: 1px solid #C5A05933; color: white; padding: 12px; text-align: center; font-size: 1.2rem; font-weight: 800;">
+        </div>
+
+        <!-- INDICADORES DE PORCENTAJE -->
+        <div id="debt-perc-display" style="display:none; background:rgba(197,160,89,0.05); padding:15px; border-radius:10px; margin-bottom:20px; border:1px solid rgba(197,160,89,0.1);">
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                <span style="color:#888; font-size:0.7rem; font-weight:800;">ESTÁS PAGANDO:</span>
+                <span id="debt-perc-paying" style="color:#C5A059; font-weight:900; font-size:0.8rem;">0%</span>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+                <span style="color:#888; font-size:0.7rem; font-weight:800;">DEUDA RESTANTE:</span>
+                <span id="debt-perc-remaining" style="color:#fff; font-weight:900; font-size:0.8rem;">100%</span>
+            </div>
+            <div style="margin-top:10px; height:4px; background:#222; border-radius:10px; overflow:hidden;">
+                <div id="debt-perc-bar" style="height:100%; background:#C5A059; width:0%; transition:0.5s;"></div>
+            </div>
         </div>
 
         <button onclick="confirmDebtPayment()" class="btn-primary full-width" style="height: 55px;">REPORTAR PAGO</button>
@@ -712,6 +739,162 @@
 
         <button id="btn-save-profile" onclick="saveProfileChanges()" class="btn-primary full-width">GUARDAR CAMBIOS</button>
         <button onclick="document.getElementById('edit-profile-overlay').style.display='none'" class="btn-secondary full-width" style="margin-top:10px;">CANCELAR</button>
+    </div>
+</div>
+
+<!-- MODAL TÉRMINOS DE CRÉDITO -->
+<div id="credit-terms-modal" class="modal" style="background:rgba(0,0,0,0.95); z-index:9999;">
+    <div class="modal-content" style="max-width: 500px; padding: 60px 25px; text-align: left; border: 1px solid #c5a059;">
+        <h2 style="color:white; margin-bottom:20px; font-family: 'Playfair Display', serif; border-bottom: 2px solid #c5a059; padding-bottom: 10px;">TÉRMINOS DE <span>CRÉDITO</span></h2>
+
+        <div style="background: rgba(255,255,255,0.03); padding: 20px; border-radius: 12px; margin-bottom: 25px; font-size: 0.85rem; color: #ccc; line-height: 1.6;">
+            <p style="margin-bottom: 15px;">● <strong>ELEGIBILIDAD:</strong> Los créditos serán otorgados únicamente a clientes con al menos <strong>10 compras aprobadas y canceladas</strong> sin ninguna fecha de retraso.</p>
+            <p style="margin-bottom: 15px;">● <strong>MONTOS:</strong> Se otorgan créditos desde <strong>5$ (a tasa BCV)</strong> en adelante.</p>
+            <p style="margin-bottom: 15px;">● <strong>INTERESES:</strong> <br>
+                1. Incremento de interés de <strong>10% SEMANAL</strong>.<br>
+                2. O elegir fecha límite de pago con un <strong>INCREMENTO ÚNICO DEL 30%</strong> sobre el monto total.
+            </p>
+            <p style="margin-bottom: 15px;">● <strong>LÍNEA DE CRÉDITO:</strong> Cada pago total de un crédito le aumentará su línea de crédito en <strong>10$ adicionales</strong>.</p>
+            <p style="margin-bottom: 15px;">● <strong>GARANTÍA:</strong> Si la deuda es mayor a <strong>100$</strong>, el cliente debe colocar un objeto de valor similar como garantía bajo acuerdo directo.</p>
+
+            <div style="background: rgba(255, 0, 0, 0.1); border: 2px solid #ff4444; padding: 15px; border-radius: 10px; margin-top: 20px;">
+                <p style="color: #ff4444; font-weight: 900; font-size: 0.9rem; text-align: center; letter-spacing: 1px;">ADVERTENCIA LEGAL:</p>
+                <p style="color: #fff; font-weight: 800; font-size: 0.8rem; text-align: center; margin-top: 10px;">
+                    SI EL CLIENTE NO CANCELA EN UN PERIODO DE 28 DÍAS HÁBILES + 5 DÍAS DE PRÓRROGA AL MENOS EL 50% DE LA DEUDA, TENDRÁ CARGOS LEGALES Y SE PRESENTARÁ UNA DENUNCIA PÚBLICA.
+                </p>
+            </div>
+        </div>
+
+        <button onclick="document.getElementById('credit-terms-modal').style.display='none'; checkCreditAccess();" class="btn-primary full-width" style="height: 55px; letter-spacing: 2px;">ACEPTO LOS TÉRMINOS</button>
+        <button onclick="document.getElementById('credit-terms-modal').style.display='none'" class="btn-secondary full-width" style="margin-top: 15px; border: none; color: #666;">CANCELAR</button>
+    </div>
+</div>
+
+<!-- MODAL SOLICITUD DE CRÉDITO -->
+<div id="credit-request-modal" class="modal" style="background:rgba(13, 13, 17, 0.98); z-index:9950;">
+    <div class="modal-content" style="max-width: 500px; padding: 60px 25px;">
+        <span class="close-modal" onclick="document.getElementById('credit-request-modal').style.display='none'">&times;</span>
+        <h2 style="color:white; margin-bottom:10px; font-family: 'Playfair Display', serif;">SOLICITAR <span>CRÉDITO</span></h2>
+        <p style="color:#888; font-size: 0.7rem; margin-bottom: 25px; letter-spacing: 1px;">MÁXIMO 50$ (SUJETO A VERIFICACIÓN)</p>
+
+        <form id="credit-request-form">
+            <div class="input-group">
+                <label>Datos de Usuario</label>
+                <div style="background: rgba(255,255,255,0.03); padding: 15px; border-radius: 8px; border: 1px solid rgba(197,160,89,0.1);">
+                    <div style="font-size: 0.7rem; color: #aaa;">NOMBRE: <span id="cr-user-name" style="color: white; font-weight: 800;">...</span></div>
+                    <div style="font-size: 0.7rem; color: #aaa; margin-top: 5px;">CÉDULA: <span id="cr-user-id" style="color: white; font-weight: 800;">...</span></div>
+                    <div style="font-size: 0.7rem; color: #aaa; margin-top: 5px;">TELÉFONO: <span id="cr-user-phone" style="color: white; font-weight: 800;">...</span></div>
+                </div>
+            </div>
+
+            <div class="input-group">
+                <label for="cr-reason">Motivo del Crédito</label>
+                <textarea id="cr-reason" placeholder="Describa brevemente para qué necesita el crédito..." required style="width:100%; height:80px; background:#08080a; color:white; border:1px solid #c5a05933; padding:10px; font-size:11px; resize:none;"></textarea>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <div class="input-group" style="flex: 1;">
+                    <label for="cr-bank">Banco</label>
+                    <select id="cr-bank" required style="width:100%; background:#08080a; color:white; border:1px solid #c5a05933; padding:10px; font-size:11px;">
+                        <option value="">Seleccione Banco</option>
+                        <option value="Banco de Venezuela (0102)">Banco de Venezuela (0102)</option>
+                        <option value="Banesco (0134)">Banesco (0134)</option>
+                        <option value="Mercantil (0105)">Mercantil (0105)</option>
+                        <option value="Provincial (0108)">Provincial (0108)</option>
+                        <option value="Bancamiga (0172)">Bancamiga (0172)</option>
+                        <option value="BNC (0191)">BNC (0191)</option>
+                        <option value="Banplus (0174)">Banplus (0174)</option>
+                        <option value="Bicentenario (0175)">Bicentenario (0175)</option>
+                        <option value="Tesoro (0163)">Banco del Tesoro (0163)</option>
+                        <option value="Exterior (0114)">Banco Exterior (0114)</option>
+                        <option value="Activo (0171)">Banco Activo (0171)</option>
+                        <option value="BFC (0151)">BFC (0151)</option>
+                        <option value="Caroní (0115)">Banco Caroní (0115)</option>
+                        <option value="DELSUR (0157)">DELSUR (0157)</option>
+                        <option value="100% Banco (0156)">100% Banco (0156)</option>
+                        <option value="Sofitasa (0137)">Sofitasa (0137)</option>
+                        <option value="Plaza (0138)">Banco Plaza (0138)</option>
+                        <option value="Venezolano de Crédito (0104)">Venezolano de Crédito (0104)</option>
+                        <option value="Bancrecer (0168)">Bancrecer (0168)</option>
+                        <option value="Mi Banco (0169)">Mi Banco (0169)</option>
+                        <option value="BANFANB (0177)">BANFANB (0177)</option>
+                        <option value="Agrícola (0166)">Banco Agrícola (0166)</option>
+                    </select>
+                </div>
+                <div class="input-group" style="flex: 1;">
+                    <label for="cr-account">Cuenta Bancaria / Pago Móvil</label>
+                    <input type="tel" id="cr-account" placeholder="Nro de cuenta o TLF" maxlength="21" oninput="this.value = this.value.replace(/[^0-9]/g, '')" required style="width:100%; background:#08080a; color:white; border:1px solid #c5a05933; padding:10px; font-size:11px;">
+                </div>
+            </div>
+
+            <div class="input-group">
+                <label for="cr-plan">Plan de Pago</label>
+                <select id="cr-plan" required onchange="toggleCreditPlanDetails(this.value)" style="width:100%; background:#08080a; color:white; border:1px solid #c5a05933; padding:10px; font-size:11px;">
+                    <option value="">Seleccione Plan</option>
+                    <option value="weekly_4">Dividir en 4 pagos semanales (Monto + 10% Semanal)</option>
+                    <option value="weekly_interest">Pagar solo incremento semanal (10%)</option>
+                    <option value="full_30_days">Pago único con incremento 30% (Máx 30 días)</option>
+                </select>
+            </div>
+
+            <div id="cr-plan-date-container" class="input-group" style="display: none;">
+                <label for="cr-due-date">Fecha Límite de Pago (Máx 30 días)</label>
+                <input type="date" id="cr-due-date" style="width:100%; background:#08080a; color:white; border:1px solid #c5a05933; padding:10px; font-size:11px;">
+            </div>
+
+            <div class="input-group">
+                <label for="cr-amount-usd">Monto en Dólares (Máx 50$)</label>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="number" id="cr-amount-usd" value="5" min="5" max="50" oninput="updateCreditBssPreview(this.value)" style="width: 100px; background: #000; border: 1px solid #c5a059; color: white; padding: 12px; font-size: 1.2rem; font-weight: 800; text-align: center;">
+                    <div style="flex: 1; background: rgba(197, 160, 89, 0.1); border: 1px dashed #c5a059; padding: 10px; border-radius: 8px; text-align: center;">
+                        <div style="font-size: 0.6rem; color: #888;">TOTAL A RECIBIR (TASSA BCV)</div>
+                        <div id="cr-bss-preview" style="color: #c5a059; font-weight: 900; font-size: 0.9rem;">0.00 BSS</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="cr-plan-summary" style="margin-top: 15px; padding: 15px; background: rgba(197,160,89,0.05); border: 1px solid #c5a05933; border-radius: 8px; display: none;">
+                <!-- Se llena dinámicamente -->
+            </div>
+
+            <button type="submit" class="btn-primary full-width" style="height: 55px; margin-top: 10px;">ENVIAR SOLICITUD</button>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL STATUS DE CRÉDITO -->
+<div id="credit-status-modal" class="modal" style="background:rgba(13, 13, 17, 0.98); z-index:9960;">
+    <div class="modal-content" style="max-width: 500px; padding: 60px 25px;">
+        <span class="close-modal" onclick="document.getElementById('credit-status-modal').style.display='none'">&times;</span>
+        <h2 style="color:white; margin-bottom:10px; font-family: 'Playfair Display', serif;">ESTATUS DE <span>SOLICITUD</span></h2>
+
+        <div id="credit-status-container" style="margin-top: 30px;">
+            <!-- Se llena con JS -->
+        </div>
+
+        <button onclick="document.getElementById('credit-status-modal').style.display='none'" class="btn-secondary full-width" style="margin-top: 30px;">CERRAR</button>
+    </div>
+</div>
+
+<!-- MODAL CONFIRMACIÓN POST-ENVÍO CRÉDITO -->
+<div id="credit-confirmation-modal" class="modal" style="background:rgba(0,0,0,0.98); z-index:9999;">
+    <div class="modal-content" style="max-width: 500px; padding: 80px 25px; text-align: center; border: 2px solid #ff4444; border-radius: 20px;">
+        <i data-lucide="shield-alert" style="width: 60px; height: 60px; color: #ff4444; margin-bottom: 20px;"></i>
+        <h2 style="color:white; margin-bottom:20px; font-family: 'Playfair Display', serif; letter-spacing: 2px;">¡SOLICITUD <span>PROCESADA!</span></h2>
+
+        <div style="background: rgba(255, 0, 0, 0.05); padding: 25px; border-radius: 15px; margin-bottom: 30px; border: 1px solid rgba(255, 68, 68, 0.3);">
+            <p style="color: #fff; font-weight: 800; font-size: 1rem; line-height: 1.6; letter-spacing: 0.5px;">
+                USTED HA SOLICITADO Y ACEPTADO LOS TÉRMINOS Y CONDICIONES.
+            </p>
+            <p style="color: #ccc; font-weight: 400; font-size: 0.9rem; margin-top: 15px; line-height: 1.6;">
+                ESPERAMOS QUE SU RESPONSABILIDAD SEA <strong style="color: #25D366;">100% FIABLE</strong>.
+            </p>
+            <p style="color: #ff4444; font-weight: 900; font-size: 0.85rem; margin-top: 20px; text-transform: uppercase; letter-spacing: 1px;">
+                DE NO SER ASÍ, NOS OTORGA TODO EL DERECHO AL RECLAMO Y COBRO DE LOS BIENES SOLICITADOS.
+            </p>
+        </div>
+
+        <button onclick="document.getElementById('credit-confirmation-modal').style.display='none'" class="btn-primary full-width" style="height: 55px; background: #C5A059; border: none; font-weight: 900;">ENTENDIDO</button>
     </div>
 </div>
 
@@ -1057,6 +1240,10 @@
         }, 300);
     }
 
+    function openCreditTerms() {
+        document.getElementById('credit-terms-modal').style.display = 'block';
+    }
+
     function checkAccess() {
         if(userStatus === "unverified") showNotification("⚠️ Cuenta en revisión.", "error");
         else if(userStatus === "guest") openAuth();
@@ -1082,6 +1269,12 @@
                 document.getElementById('quantity-modal').style.display = 'block';
             }
         }
+    }
+
+    function checkCreditAccess() {
+        if(userStatus === "unverified") showNotification("⚠️ Cuenta en revisión.", "error");
+        else if(userStatus === "guest") openAuth();
+        else openCreditRequestForm();
     }
 
     function setInitialPercent(perc) {
@@ -1425,6 +1618,7 @@
         document.getElementById('admin-content-inventory').style.display = tab === 'inventory' ? 'block' : 'none';
         document.getElementById('admin-content-news').style.display = tab === 'news' ? 'block' : 'none';
         document.getElementById('admin-content-sales').style.display = tab === 'sales' ? 'block' : 'none';
+        document.getElementById('admin-content-credits').style.display = tab === 'credits' ? 'block' : 'none';
 
         const payPanel = document.getElementById('admin-content-payments');
         if (payPanel) payPanel.style.display = tab === 'payments' ? 'block' : 'none';
@@ -1434,13 +1628,76 @@
         const tabIdMap = {
             'users': 'adm-tab-users', 'db': 'adm-tab-db',
             'inventory': 'adm-tab-inv', 'news': 'adm-tab-news',
-            'sales': 'adm-tab-sales', 'payments': 'adm-tab-pay'
+            'sales': 'adm-tab-sales', 'payments': 'adm-tab-pay',
+            'credits': 'adm-tab-credits'
         };
         document.getElementById(tabIdMap[tab]).classList.add('active');
 
         if(tab === 'news') loadAdminNews();
         if(tab === 'sales') loadAdminSales();
         if(tab === 'payments') loadAdminPayments();
+        if(tab === 'credits') loadAdminCreditRequests();
+    }
+
+    function loadAdminCreditRequests() {
+        db.collection("solicitudes_credito").orderBy("timestamp", "desc").onSnapshot(snap => {
+            const list = document.getElementById('admin-credits-list');
+            list.innerHTML = "";
+            snap.forEach(doc => {
+                const req = doc.data();
+                const date = new Date(req.timestamp).toLocaleString();
+                const card = document.createElement('div');
+                card.style = "background:#121216; padding:15px; border:0.5px solid #c5a05944; color:white; margin-bottom:15px;";
+
+                card.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                        <span style="color:#888; font-size:10px;">${date}</span>
+                        <span style="background:${req.status === 'pending' ? '#c5a059' : (req.status === 'approved' ? '#25D366' : '#ff4444')}; color:black; font-size:8px; font-weight:900; padding:2px 6px; border-radius:4px;">${req.status.toUpperCase()}</span>
+                    </div>
+                    <div style="font-weight:bold; font-size:14px; margin-bottom:5px;">${req.customerName.toUpperCase()}</div>
+                    <div style="color:#c5a059; font-size:11px; margin-bottom:10px;">C.I: ${req.idNumber} | TLF: ${req.phone}</div>
+
+                    <div style="background:rgba(255,255,255,0.03); padding:10px; border-radius:8px; margin-bottom:15px; font-size:11px;">
+                        <div style="color:#c5a059; font-weight:800; font-size:9px; margin-bottom:5px;">MOTIVO:</div>
+                        ${req.reason}
+                        <div style="margin-top:8px; border-top:1px solid #ffffff11; padding-top:8px;">
+                            <strong>BANCO:</strong> ${req.bank}<br>
+                            <strong>CUENTA:</strong> ${req.account}
+                        </div>
+                    </div>
+
+                    <div style="font-size:16px; font-weight:900; color:#c5a059; margin-bottom:20px;">$${req.amountUsd} (${req.amountBss} BSS)</div>
+
+                    ${req.status === 'pending' ? `
+                        <div class="input-group">
+                            <label style="font-size:8px;">COMENTARIO ADMIN</label>
+                            <input type="text" id="note-${doc.id}" style="background:#000; border:1px solid #333; color:white; padding:8px; width:100%; font-size:11px;">
+                        </div>
+                        <div style="display:flex; gap:10px;">
+                            <button onclick="updateCreditRequestWeb('${doc.id}', 'approved')" style="flex:1; background:#25D366; color:black; border:none; padding:10px; font-weight:900; cursor:pointer;">APROBAR</button>
+                            <button onclick="updateCreditRequestWeb('${doc.id}', 'denied')" style="flex:1; background:#ff4444; color:white; border:none; padding:10px; font-weight:900; cursor:pointer;">DENEGAR</button>
+                        </div>
+                    ` : `
+                        <div style="font-size:10px; color:#666; font-style:italic;"><strong>NOTA:</strong> ${req.adminComment || 'Sin comentarios'}</div>
+                    `}
+                `;
+                list.appendChild(card);
+            });
+        });
+    }
+
+    async function updateCreditRequestWeb(id, status) {
+        const comment = document.getElementById('note-' + id).value;
+        try {
+            await db.collection("solicitudes_credito").doc(id).update({
+                status: status,
+                adminComment: comment,
+                processedTimestamp: Date.now()
+            });
+            showNotification(`SOLICITUD ${status.toUpperCase()} CON ÉXITO`);
+        } catch(e) {
+            showNotification("Error al procesar solicitud", "error");
+        }
     }
 
     function loadAdminPayments() {
@@ -1927,11 +2184,18 @@
     }
 
     async function showNotification(message, type = 'success') {
+        // Si estamos en la App, usamos Toasts nativos que no estorban la navegación
+        if (window.AndroidApp && window.AndroidApp.showToast) {
+            window.AndroidApp.showToast(message.toUpperCase());
+            return;
+        }
+
         let container = document.getElementById('notification-container');
         if(!container) {
             container = document.createElement('div');
             container.id = 'notification-container';
-            container.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 10px; pointer-events: none;';
+            // Ahora en la parte inferior central para no tapar el menú superior
+            container.style.cssText = 'position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 10000; display: flex; flex-direction: column-reverse; gap: 8px; pointer-events: none; width: 90%; max-width: 320px;';
             document.body.appendChild(container);
         }
 
@@ -1940,31 +2204,29 @@
         toast.style.cssText = `
             background: rgba(13, 13, 17, 0.95);
             color: #fff;
-            padding: 16px 24px;
-            border-left: 4px solid ${color};
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            font-size: 0.85rem;
-            font-weight: 600;
+            padding: 10px 15px;
+            border: 1px solid ${color}44;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-align: center;
             letter-spacing: 0.5px;
-            min-width: 280px;
-            transform: translateX(120%);
-            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transform: translateY(100px);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             backdrop-filter: blur(10px);
-            border-radius: 4px;
+            border-radius: 8px;
             pointer-events: auto;
         `;
-        toast.innerHTML = `<div style="display:flex; align-items:center; gap:12px;">
-            <div style="width:8px; height:8px; border-radius:50%; background:${color};"></div>
-            <span>${message.toUpperCase()}</span>
-        </div>`;
+        toast.innerText = message.toUpperCase();
 
         container.appendChild(toast);
-        setTimeout(() => toast.style.transform = 'translateX(0)', 100);
+        setTimeout(() => toast.style.transform = 'translateY(0)', 50);
 
         setTimeout(() => {
-            toast.style.transform = 'translateX(120%)';
-            setTimeout(() => toast.remove(), 500);
-        }, 4000);
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateY(20px)';
+            setTimeout(() => toast.remove(), 400);
+        }, 2500); // Tiempo reducido
     }
 
     document.getElementById('login-form').onsubmit = (e) => {
@@ -1975,24 +2237,23 @@
 
         showNotification("Autenticando...");
 
-        if(window.AndroidApp) {
-            window.AndroidApp.loginUser(emailInput, pass);
-        } else {
-            auth.signInWithEmailAndPassword(email, pass).then(cred => {
-                // No hacemos la consulta aquí, dejamos que onAuthStateChanged se encargue
-                // para evitar doble consulta y conflictos de permisos.
-                showNotification("Sesión iniciada, cargando perfil...");
-            }).catch(err => {
-                console.error("Auth Error:", err);
-                let msg = err.message;
-                if (err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
-                    msg = "CONTRASEÑA INCORRECTA";
-                } else if (err.code === "auth/user-not-found") {
-                    msg = "USUARIO NO REGISTRADO";
-                }
-                showNotification(msg.toUpperCase(), "error");
-            });
-        }
+        // Iniciamos sesión en JS (necesario para permisos de Firestore en el WebView)
+        auth.signInWithEmailAndPassword(email, pass).then(cred => {
+            if(window.AndroidApp) {
+                // Si estamos en la App, también notificamos al sistema nativo
+                window.AndroidApp.loginUser(emailInput, pass);
+            }
+            showNotification("Sesión sincronizada...");
+        }).catch(err => {
+            console.error("Auth Error:", err);
+            let msg = "ERROR DE AUTENTICACIÓN";
+            if (err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
+                msg = "CONTRASEÑA INCORRECTA";
+            } else if (err.code === "auth/user-not-found") {
+                msg = "USUARIO NO REGISTRADO";
+            }
+            showNotification(msg, "error");
+        });
     };
 
     window.updateUserProfile = function(name, email, photoUrl, status, points = 0, fullData = null) {
@@ -2041,9 +2302,198 @@
         const tabsCont = document.getElementById('auth-tabs-container');
         if(tabsCont) tabsCont.style.display = 'none';
 
+        // Actualizar datos del formulario de crédito si se abre
+        const crName = document.getElementById('cr-user-name');
+        if(crName) crName.innerText = name;
+        const crId = document.getElementById('cr-user-id');
+        if(crId) crId.innerText = fullData?.idNumber || "No registrado";
+        const crPhone = document.getElementById('cr-user-phone');
+        if(crPhone) crPhone.innerText = fullData?.phone || "No registrado";
+
         closeAuth();
         if(window.lucide) lucide.createIcons();
     };
+
+    function updateCreditBssPreview(val) {
+        const usd = parseFloat(val) || 0;
+        const bss = usd * tasaBcv;
+        document.getElementById('cr-bss-preview').innerText = bss.toFixed(2) + " BSS";
+        updateCreditPlanSummary();
+    }
+
+    function toggleCreditPlanDetails(plan) {
+        const dateContainer = document.getElementById('cr-plan-date-container');
+        const dateInput = document.getElementById('cr-due-date');
+
+        if (plan === 'full_30_days') {
+            dateContainer.style.display = 'block';
+            const today = new Date();
+            const maxDate = new Date();
+            maxDate.setDate(today.getDate() + 30);
+
+            // Función para formatear fecha local a YYYY-MM-DD sin desfase de zona horaria
+            const formatDate = (date) => {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            };
+
+            dateInput.min = formatDate(today);
+            dateInput.max = formatDate(maxDate);
+            dateInput.required = true;
+        } else {
+            dateContainer.style.display = 'none';
+            dateInput.required = false;
+        }
+        updateCreditPlanSummary();
+    }
+
+    function updateCreditPlanSummary() {
+        const plan = document.getElementById('cr-plan').value;
+        const amountUsd = parseFloat(document.getElementById('cr-amount-usd').value) || 0;
+        const summary = document.getElementById('cr-plan-summary');
+
+        if (!plan || amountUsd < 5) {
+            summary.style.display = 'none';
+            return;
+        }
+
+        summary.style.display = 'block';
+        let html = '<div style="color:#C5A059; font-weight:800; font-size:10px; margin-bottom:10px;">RESUMEN DEL PLAN ELEGIDO</div>';
+        const amountBss = amountUsd * tasaBcv;
+
+        if (plan === 'weekly_4') {
+            const weeklyWithInterest = (amountBss * 1.1) / 4;
+            html += `<div style="font-size:11px; color:white;">4 pagos de <strong>${weeklyWithInterest.toFixed(2)} BSS</strong> cada semana (Capital + 10% Int).</div>`;
+        } else if (plan === 'weekly_interest') {
+            const weeklyInterest = amountBss * 0.1;
+            html += `<div style="font-size:11px; color:white;">Pagará <strong>${weeklyInterest.toFixed(2)} BSS</strong> cada semana solo de intereses. El capital se paga al final.</div>`;
+        } else if (plan === 'full_30_days') {
+            const totalWith30 = amountBss * 1.3;
+            html += `<div style="font-size:11px; color:white;">Pago único total de <strong>${totalWith30.toFixed(2)} BSS</strong> en la fecha seleccionada (Monto + 30%).</div>`;
+        }
+
+        summary.innerHTML = html;
+    }
+
+    function openCreditRequestForm() {
+        if(userStatus === "guest") { openAuth(); return; }
+        if(userStatus === "unverified") { showNotification("⚠️ Cuenta en revisión.", "error"); return; }
+
+        if (!currentUserData) {
+            showNotification("⚠️ Cargando datos de perfil...", "error");
+            return;
+        }
+
+        document.getElementById('cr-user-name').innerText = currentUserData.name || "S/N";
+        document.getElementById('cr-user-id').innerText = currentUserData.idNumber || "FALTA NRO CÉDULA";
+        document.getElementById('cr-user-phone').innerText = currentUserData.phone || "S/P";
+        updateCreditBssPreview(document.getElementById('cr-amount-usd').value);
+
+        document.getElementById('credit-request-modal').style.display = 'block';
+    }
+
+    document.getElementById('credit-request-form').onsubmit = async (e) => {
+        e.preventDefault();
+        const btn = e.target.querySelector('button');
+
+        if (!currentUserData) {
+            showNotification("ERROR: DATOS DE USUARIO NO CARGADOS. REINTENTE.", "error");
+            return;
+        }
+
+        btn.disabled = true; btn.innerText = "ENVIANDO...";
+
+        try {
+            const reqData = {
+                customerEmail: currentUserData.email,
+                customerName: currentUserData.name,
+                idNumber: currentUserData.idNumber || "FALTA ID",
+                phone: currentUserData.phone || "FALTA TEL",
+                reason: document.getElementById('cr-reason').value,
+                bank: document.getElementById('cr-bank').value,
+                account: document.getElementById('cr-account').value,
+                plan: document.getElementById('cr-plan').value,
+                dueDate: document.getElementById('cr-due-date').value || null,
+                amountUsd: parseFloat(document.getElementById('cr-amount-usd').value),
+                amountBss: (parseFloat(document.getElementById('cr-amount-usd').value) * tasaBcv).toFixed(2),
+                status: "pending",
+                timestamp: Date.now(),
+                bcvAtRequest: tasaBcv
+            };
+
+            console.log("Enviando solicitud de crédito:", reqData);
+            await db.collection("solicitudes_credito").add(reqData);
+
+            document.getElementById('credit-request-modal').style.display = 'none';
+            e.target.reset();
+
+            // Mostrar pantalla de confirmación impactante
+            document.getElementById('credit-confirmation-modal').style.display = 'block';
+            if(window.lucide) lucide.createIcons();
+
+            showNotification("✅ SOLICITUD ENVIADA CORRECTAMENTE.");
+        } catch(err) {
+            console.error("Error al enviar solicitud:", err);
+            showNotification("ERROR AL ENVIAR: " + (err.message || "FIREBASE ERROR"), "error");
+        } finally {
+            btn.disabled = false; btn.innerText = "ENVIAR SOLICITUD";
+        }
+    };
+
+    async function openCreditStatus() {
+        if (!currentUserData || !currentUserData.email) {
+            showNotification("CARGANDO DATOS DE USUARIO...", "error");
+            return;
+        }
+
+        const container = document.getElementById('credit-status-container');
+        container.innerHTML = "<p style='color:#888; text-align:center;'>Cargando historial...</p>";
+        document.getElementById('credit-status-modal').style.display = 'block';
+
+        try {
+            const email = currentUserData.email.trim().toLowerCase();
+            console.log("Consultando créditos para:", email);
+
+            const snap = await db.collection("solicitudes_credito")
+                .where("customerEmail", "==", email)
+                .orderBy("timestamp", "desc")
+                .get();
+
+            if(snap.empty) {
+                container.innerHTML = "<p style='color:#666; text-align:center; padding: 20px;'>NO TIENES SOLICITUDES REGISTRADAS</p>";
+                return;
+            }
+
+            container.innerHTML = "";
+            snap.forEach(doc => {
+                const s = doc.data();
+                const date = new Date(s.timestamp).toLocaleDateString();
+                const color = s.status === 'pending' ? '#c5a059' : (s.status === 'approved' ? '#25D366' : '#ff4444');
+
+                container.innerHTML += `
+                    <div style="background:rgba(255,255,255,0.03); padding:15px; border-radius:12px; border:1px solid rgba(197,160,89,0.1); margin-bottom:15px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                            <span style="color:#888; font-size:0.6rem;">${date}</span>
+                            <span style="color:${color}; font-weight:800; font-size:0.7rem;">${s.status.toUpperCase()}</span>
+                        </div>
+                        <div style="color:white; font-size:0.9rem; font-weight:800;">MONTO: $${s.amountUsd} (${s.amountBss} BSS)</div>
+                        ${s.adminComment ? `<div style="margin-top:10px; padding:10px; background:rgba(0,0,0,0.3); border-radius:8px; color:#aaa; font-size:0.7rem;"><strong>NOTA:</strong> ${s.adminComment}</div>` : ''}
+                    </div>`;
+            });
+        } catch(e) {
+            console.error("Firestore Query Error:", e);
+            const errorMsg = e.message || "";
+            if (errorMsg.includes("index")) {
+                container.innerHTML = "<p style='color:#c5a059; text-align:center; font-size:10px;'>CONFIGURANDO BASE DE DATOS... REINTENTE EN 1 MINUTO.</p>";
+            } else if (errorMsg.includes("permission")) {
+                container.innerHTML = "<p style='color:#ff4444; text-align:center;'>ERROR: SIN PERMISOS. REINICIE SESIÓN.</p>";
+            } else {
+                container.innerHTML = `<p style='color:#ff4444; text-align:center;'>ERROR TÉCNICO: ${errorMsg.take(30)}</p>`;
+            }
+        }
+    }
 
     function editProfile() {
         if(!currentUserData) { showNotification("Cargando datos...", "error"); return; }
@@ -2309,9 +2759,10 @@
             const fullAddress = `${sector ? sector + ', ' : ''}${parish ? parish + ', ' : ''}${mun ? mun + ', ' : ''}${state ? state + ', ' : ''}${country}`;
 
             const pass = document.getElementById('reg-pass').value;
+            const idNumber = document.getElementById('reg-id-number').value.trim();
 
             if(window.AndroidApp) {
-                window.AndroidApp.registerUser(name, lastname, email, fullPhone, fullAddress, photo64, id64, pass);
+                window.AndroidApp.registerUser(name, lastname, email, fullPhone, fullAddress, photo64, id64, pass, idNumber);
             } else {
                 // Registro desde Navegador Puro
                 try {
@@ -2331,6 +2782,7 @@
                     email,
                     phone: fullPhone,
                     address: fullAddress,
+                    idNumber: idNumber,
                     status: "unverified", timestamp: Date.now(),
                     photoUrl: "subiendo...", idCardUrl: "subiendo..."
                 });
@@ -2343,6 +2795,7 @@
                         firstName: name, lastName: lastname,
                         email: email, phone: fullPhone,
                         address: fullAddress,
+                        idNumber: idNumber,
                         status: "unverified",
                         photoBase64: photo64,
                         idCardBase64: id64,
@@ -2959,22 +3412,77 @@
     }
 
     function loadUserCredits() {
-        // Obtenemos pedidos con pago a crédito confirmados
+        const email = currentUserData.email;
+
+        // Escuchador para Pedidos (Compras y Créditos de productos)
         db.collection("pedidos")
-            .where("customerEmail", "==", currentUserData.email)
-            .where("status", "in", ["paid", "active_credit"])
+            .where("customerEmail", "==", email)
+            .where("status", "in", ["paid", "active_credit", "pending", "awaiting_verification"])
             .onSnapshot(snap => {
-                userCredits = [];
-                snap.forEach(doc => {
-                    const data = doc.data();
-                    if(data.items.some(i => i.paymentMethod === 'credit')) {
-                        userCredits.push({...data, id: doc.id});
-                    }
-                });
-                checkLateFees(userCredits);
-                renderCalendar();
-                renderCreditsList();
+                processUserCredits(snap, "pedidos");
             });
+
+        // Escuchador para Solicitudes de Crédito (Efectivo/Transferencia)
+        db.collection("solicitudes_credito")
+            .where("customerEmail", "==", email)
+            .where("status", "==", "approved")
+            .onSnapshot(snap => {
+                processUserCredits(snap, "solicitudes");
+            });
+    }
+
+    let rawOrders = [];
+    let rawRequests = [];
+
+    function processUserCredits(snap, type) {
+        if(type === "pedidos") {
+            rawOrders = [];
+            snap.forEach(doc => rawOrders.push({...doc.data(), id: doc.id}));
+        } else {
+            rawRequests = [];
+            snap.forEach(doc => rawRequests.push({...doc.data(), id: doc.id}));
+        }
+
+        userCredits = [...rawOrders, ...rawRequests];
+
+        let hasOverdue = false;
+        let overdueCount = 0;
+        const today = new Date();
+        today.setHours(0,0,0,0);
+
+        userCredits.forEach(credit => {
+            // Lógica de alerta para pedidos activos
+            if (credit.status === "active_credit") {
+                const t = credit.timestamp;
+                const purchaseDate = (t && t.toDate) ? t.toDate() : new Date(t);
+                const numCuotas = credit.numCuotas || 2;
+                const paid = credit.installmentsPaid || 0;
+                for(let i = paid + 1; i <= numCuotas; i++) {
+                    const dueDate = new Date(purchaseDate);
+                    dueDate.setDate(dueDate.getDate() + (i * 16));
+                    if (today > dueDate) { hasOverdue = true; overdueCount++; }
+                }
+            }
+
+            // Lógica de alerta para solicitudes de crédito aprobadas (30 días)
+            if (credit.status === "approved" && credit.plan === "full_30_days") {
+                const t = credit.processedTimestamp;
+                if(t) {
+                    const approvalDate = new Date(t);
+                    const dueDate = new Date(approvalDate);
+                    dueDate.setDate(dueDate.getDate() + 30);
+                    if (today > dueDate) { hasOverdue = true; overdueCount++; }
+                }
+            }
+        });
+
+        if (hasOverdue) {
+            showNotification(`⚠️ ALERTA DE DEUDA: TIENES ${overdueCount} COMPROMISO(S) VENCIDO(S).`, "error");
+        }
+
+        checkLateFees(userCredits);
+        renderCalendar();
+        renderCreditsList();
     }
 
     function changeMonth(val) {
@@ -2997,31 +3505,83 @@
 
         // Mapeo de días a créditos para interactividad
         const dayCredits = {};
+        const today = new Date();
+        today.setHours(0,0,0,0);
+
         userCredits.forEach(credit => {
-            const t = credit.timestamp;
-            const purchaseDate = (t && t.toDate) ? t.toDate() : new Date(t);
-            if (isNaN(purchaseDate.getTime())) return;
+            const isPedido = !!credit.items;
+            const t = isPedido ? credit.timestamp : credit.processedTimestamp;
+            if(!t) return;
+            const baseDate = (t && t.toDate) ? t.toDate() : new Date(t);
+            if (isNaN(baseDate.getTime())) return;
 
-            const numCuotas = credit.numCuotas || Math.min(12, 2 + Math.floor((credit.userPointsAtPurchase || 0) / 550));
-            const paid = credit.installmentsPaid || 0;
+            if (isPedido) {
+                // LÓGICA DE PEDIDOS (ARTÍCULOS)
+                const isCredit = credit.items.some(i => i.paymentMethod === 'credit');
+                if (isCredit) {
+                    const numCuotas = credit.numCuotas || Math.min(12, 2 + Math.floor((credit.userPointsAtPurchase || 0) / 550));
+                    const paid = credit.installmentsPaid || 0;
 
-            for(let i=1; i<=numCuotas; i++) {
-                if (i <= paid) continue;
+                    for(let i=1; i<=numCuotas; i++) {
+                        if (i <= paid) continue;
+                        const d = new Date(baseDate);
+                        d.setDate(d.getDate() + (i * 16));
+                        d.setHours(0,0,0,0);
 
-                const d = new Date(purchaseDate);
-                d.setDate(d.getDate() + (i * 16));
-                if(d.getMonth() === calendarDate.getMonth() && d.getFullYear() === calendarDate.getFullYear()) {
-                    const day = d.getDate();
-                    if(!dayCredits[day]) dayCredits[day] = [];
-
-                    const totalBss = parseFloat(credit.totalBss.replace(" BSS", "")) || 0;
-                    const installmentVal = (totalBss * 0.75) / numCuotas; // 0.75 porque la inicial es 25%
-
-                    dayCredits[day].push({
-                        orderId: credit.orderId,
-                        installment: installmentVal,
-                        item: credit.items[0]?.name || "Producto"
-                    });
+                        if(d.getMonth() === calendarDate.getMonth() && d.getFullYear() === calendarDate.getFullYear()) {
+                            const day = d.getDate();
+                            if(!dayCredits[day]) dayCredits[day] = [];
+                            const totalBss = parseFloat(credit.totalBss.replace(" BSS", "")) || 0;
+                            const installmentVal = (totalBss * 0.75) / numCuotas;
+                            dayCredits[day].push({ orderId: credit.orderId, installment: installmentVal, item: credit.items[0]?.name || "Producto", isLate: d < today });
+                        }
+                    }
+                } else if (credit.status === 'pending' || credit.status === 'awaiting_verification') {
+                    if(baseDate.getMonth() === calendarDate.getMonth() && baseDate.getFullYear() === calendarDate.getFullYear()) {
+                        const day = baseDate.getDate();
+                        if(!dayCredits[day]) dayCredits[day] = [];
+                        dayCredits[day].push({ orderId: credit.orderId, installment: parseFloat(credit.totalBss.replace(" BSS", "")) || 0, item: credit.items[0]?.name || "Producto (Contado)", isLate: baseDate < today });
+                    }
+                }
+            } else {
+                // LÓGICA DE SOLICITUDES DE CRÉDITO (EFECTIVO)
+                if (credit.status === "approved") {
+                    if (credit.plan === "full_30_days") {
+                        const d = new Date(baseDate);
+                        d.setDate(d.getDate() + 30);
+                        d.setHours(0,0,0,0);
+                        if(d.getMonth() === calendarDate.getMonth() && d.getFullYear() === calendarDate.getFullYear()) {
+                            const day = d.getDate();
+                            if(!dayCredits[day]) dayCredits[day] = [];
+                            dayCredits[day].push({ orderId: "CRÉDITO", installment: parseFloat(credit.amountBss) * 1.3, item: "PAGO ÚNICO CRÉDITO (+30%)", isLate: d < today });
+                        }
+                    } else if (credit.plan === "weekly_4") {
+                        for(let i=1; i<=4; i++) {
+                            const d = new Date(baseDate);
+                            d.setDate(d.getDate() + (i * 7));
+                            d.setHours(0,0,0,0);
+                            if(d.getMonth() === calendarDate.getMonth() && d.getFullYear() === calendarDate.getFullYear()) {
+                                const day = d.getDate();
+                                if(!dayCredits[day]) dayCredits[day] = [];
+                                const total = parseFloat(credit.amountBss) * 1.1;
+                                dayCredits[day].push({ orderId: "CUOTA " + i, installment: total / 4, item: "CRÉDITO SEMANAL", isLate: d < today });
+                            }
+                        }
+                    } else if (credit.plan === "weekly_interest") {
+                        // 4 semanas de intereses + capital al final (semana 4)
+                        for(let i=1; i<=4; i++) {
+                            const d = new Date(baseDate);
+                            d.setDate(d.getDate() + (i * 7));
+                            d.setHours(0,0,0,0);
+                            if(d.getMonth() === calendarDate.getMonth() && d.getFullYear() === calendarDate.getFullYear()) {
+                                const day = d.getDate();
+                                if(!dayCredits[day]) dayCredits[day] = [];
+                                const interest = parseFloat(credit.amountBss) * 0.1;
+                                const capital = (i === 4) ? parseFloat(credit.amountBss) : 0;
+                                dayCredits[day].push({ orderId: "INTERÉS " + i, installment: interest + capital, item: "CRÉDITO (INTERÉS)", isLate: d < today });
+                            }
+                        }
+                    }
                 }
             }
         });
@@ -3030,14 +3590,18 @@
         for(let d=1; d<=daysInMonth; d++) {
             const creditsToday = dayCredits[d];
             const isDue = !!creditsToday;
+            const isLate = isDue && creditsToday.some(c => c.isLate);
             const isToday = d === new Date().getDate() && calendarDate.getMonth() === new Date().getMonth() && calendarDate.getFullYear() === new Date().getFullYear();
 
             const creditsJson = JSON.stringify(creditsToday || null).replace(/"/g, '&quot;');
 
+            let bgColor = isDue ? (isLate ? '#ff4444' : '#C5A059') : 'transparent';
+            let textColor = isDue ? (isLate ? '#fff' : '#000') : '#fff';
+
             grid.innerHTML += `
                 <div onclick="showDateDetails(${d}, ${creditsJson})"
                     style="padding: 8px; font-size: 0.7rem; border-radius: 5px; cursor: pointer;
-                    ${isDue ? 'background:#C5A059; color:black; font-weight:900;' : 'color:#fff;'}
+                    background:${bgColor}; color:${textColor}; ${isDue ? 'font-weight:900;' : ''}
                     ${isToday ? 'border: 1px solid #C5A059;' : ''}">
                     ${d}
                 </div>`;
@@ -3103,12 +3667,19 @@
     }
 
     function openDebtPay(id, installment, remaining) {
-        currentPayingDebt = { id, installment, remaining };
+        // Encontrar la deuda original para calcular porcentajes reales sobre el total de la orden
+        const order = userCredits.find(o => o.id === id);
+        const totalBss = order ? (parseFloat(order.totalBss.replace(" BSS", "")) || 0) : remaining;
+        const initialBss = totalBss * 0.25;
+        const debtPrincipal = totalBss - initialBss; // La deuda real después de la inicial
+
+        currentPayingDebt = { id, installment, remaining, debtPrincipal };
         document.getElementById('debt-pay-title').innerText = "Deuda Restante: " + remaining.toFixed(2) + " BSS";
         document.getElementById('debt-val-inst').innerText = installment.toFixed(2);
         document.getElementById('debt-val-full').innerText = remaining.toFixed(2);
         document.getElementById('debt-other-monto-box').style.display = 'none';
         document.getElementById('debt-selection-details').innerText = "";
+        document.getElementById('debt-perc-display').style.display = 'none';
 
         // Reset button styles
         const btns = ['btn-debt-inst', 'btn-debt-full', 'btn-debt-other'];
@@ -3144,18 +3715,38 @@
             box.style.display = 'none';
             btnInst.style.background = '#C5A059'; btnInst.style.color = '#000';
             details.innerText = "Esta opción adelantará la próxima cuota programada, reduciendo tus compromisos inmediatos.";
+            updateDebtPercentages(currentPayingDebt.installment);
         } else if(type === 'full') {
             input.value = currentPayingDebt.remaining.toFixed(2);
             box.style.display = 'none';
             btnFull.style.background = '#C5A059'; btnFull.style.color = '#000';
             details.innerText = "Liquidarás el total de la deuda de esta orden. ¡Tu crédito quedará liberado!";
+            updateDebtPercentages(currentPayingDebt.remaining);
         } else {
             box.style.display = 'block';
             input.value = "";
             input.focus();
             btnOther.style.background = '#C5A059'; btnOther.style.color = '#000'; btnOther.style.border = 'none';
             details.innerText = "Ingresa un monto personalizado para abonar a tu deuda.";
+            document.getElementById('debt-perc-display').style.display = 'none';
         }
+    }
+
+    function updateDebtPercentages(val) {
+        const amount = parseFloat(val) || 0;
+        if (!currentPayingDebt || amount <= 0) return;
+
+        const percDisplay = document.getElementById('debt-perc-display');
+        percDisplay.style.display = 'block';
+
+        const totalPrincipal = currentPayingDebt.remaining; // Calculamos sobre lo que resta actualmente
+        const percPaying = (amount / totalPrincipal) * 100;
+        const remainingAfter = Math.max(0, totalPrincipal - amount);
+        const percRemaining = (remainingAfter / totalPrincipal) * 100;
+
+        document.getElementById('debt-perc-paying').innerText = Math.min(100, percPaying).toFixed(1) + "%";
+        document.getElementById('debt-perc-remaining').innerText = percRemaining.toFixed(1) + "%";
+        document.getElementById('debt-perc-bar').style.width = Math.min(100, percPaying) + "%";
     }
 
     async function confirmDebtPayment() {

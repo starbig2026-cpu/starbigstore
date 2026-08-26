@@ -30,7 +30,7 @@ class WebAppInterface(
     private val googleSheetsUrl = "https://script.google.com/macros/s/AKfycbzTKwRkgCmy_m42ZeKjPbczOMr0YHmRKiSmrHPCSEdKixHzI9MG3fhEfEU3pChr45exvw/exec"
 
     @JavascriptInterface
-    fun registerUser(firstName: String, lastName: String, email: String, phone: String, address: String, photoBase64: String, idCardBase64: String, pass: String) {
+    fun registerUser(firstName: String, lastName: String, email: String, phone: String, address: String, photoBase64: String, idCardBase64: String, pass: String, idNumber: String) {
         val db = FirebaseFirestore.getInstance()
         val auth = FirebaseAuth.getInstance()
         val cleanEmail = email.trim().lowercase(Locale.ROOT)
@@ -61,6 +61,7 @@ class WebAppInterface(
                     "email" to cleanEmail,
                     "phone" to phone,
                     "address" to address,
+                    "idNumber" to idNumber,
                     "status" to "unverified",
                     "photoUrl" to "subiendo...", 
                     "idCardUrl" to "subiendo...",
@@ -83,6 +84,7 @@ class WebAppInterface(
                     put("email", cleanEmail)
                     put("phone", phone)
                     put("address", address)
+                    put("idNumber", idNumber)
                     put("status", "unverified")
                     put("photoBase64", photoBase64)
                     put("idCardBase64", idCardBase64)
@@ -159,9 +161,12 @@ class WebAppInterface(
                     val safeName = (u.getString("name") ?: "").replace("'", "\\'")
                     webView.post { 
                         webView.evaluateJavascript("""
-                            if(window.updateUserProfile) {
-                                window.updateUserProfile('$safeName', '$cleanEmail', '${u.getString("photoUrl")}', '$status', $points, $userDataJson);
-                            }
+                            (function() {
+                                const userData = $userDataJson;
+                                if(window.updateUserProfile) {
+                                    window.updateUserProfile('$safeName', '$cleanEmail', '${u.getString("photoUrl")}', '$status', $points, userData);
+                                }
+                            })();
                         """.trimIndent(), null)
                     }
                 } else {
@@ -191,6 +196,13 @@ class WebAppInterface(
     @JavascriptInterface
     fun goToAdmin() { onAdminRequest() }
     
+    @JavascriptInterface
+    fun showToast(message: String) {
+        webView.post {
+            android.widget.Toast.makeText(mContext, message, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
     @JavascriptInterface
     fun requestBiometric() { onBiometricRequest() }
 
@@ -284,6 +296,8 @@ fun WebScreen(
     onAuthTriggered: () -> Unit = {},
     triggerCart: Boolean = false,
     onCartTriggered: () -> Unit = {},
+    triggerCreditForm: Boolean = false,
+    onCreditFormTriggered: () -> Unit = {},
     currentTab: Int = 0,
     addToCartCommand: Triple<String, Int, String>? = null,
     onAddToCartProcessed: () -> Unit = {}
@@ -301,6 +315,13 @@ fun WebScreen(
         if (triggerCart && webViewInstance != null) {
             webViewInstance?.evaluateJavascript("toggleCart()", null)
             onCartTriggered()
+        }
+    }
+
+    LaunchedEffect(triggerCreditForm, webViewInstance) {
+        if (triggerCreditForm && webViewInstance != null) {
+            webViewInstance?.evaluateJavascript("openCreditTerms()", null)
+            onCreditFormTriggered()
         }
     }
 

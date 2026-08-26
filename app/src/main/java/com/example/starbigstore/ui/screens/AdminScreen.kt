@@ -54,6 +54,22 @@ data class News(
     val timestamp: Long = 0
 )
 
+data class CreditRequest(
+    val id: String = "",
+    val customerEmail: String = "",
+    val customerName: String = "",
+    val idNumber: String = "",
+    val phone: String = "",
+    val reason: String = "",
+    val bank: String = "",
+    val account: String = "",
+    val amountUsd: Double = 0.0,
+    val amountBss: String = "",
+    val status: String = "pending",
+    val timestamp: Long = 0,
+    val adminComment: String = ""
+)
+
 data class CustomerRegistration(
     val id: String = "",
     val name: String = "",
@@ -160,6 +176,7 @@ fun AdminListContent() {
     var registrations by remember { mutableStateOf(listOf<CustomerRegistration>()) }
     var products by remember { mutableStateOf(listOf<Product>()) }
     var orders by remember { mutableStateOf(listOf<Order>()) }
+    var creditRequests by remember { mutableStateOf(listOf<CreditRequest>()) }
     var newsList by remember { mutableStateOf(listOf<News>()) }
     var bcvRate by remember { mutableDoubleStateOf(36.5) }
     var paymentSettings by remember { mutableStateOf(mapOf("zelle" to "", "binance" to "", "zinli" to "", "pagomovil" to "")) }
@@ -292,6 +309,27 @@ fun AdminListContent() {
                 }
             }
 
+        db.collection("solicitudes_credito").orderBy("timestamp", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null) creditRequests = snapshot.documents.map { doc ->
+                    CreditRequest(
+                        id = doc.id,
+                        customerEmail = doc.getString("customerEmail") ?: "",
+                        customerName = doc.getString("customerName") ?: "",
+                        idNumber = doc.getString("idNumber") ?: "",
+                        phone = doc.getString("phone") ?: "",
+                        reason = doc.getString("reason") ?: "",
+                        bank = doc.getString("bank") ?: "",
+                        account = doc.getString("account") ?: "",
+                        amountUsd = doc.getDouble("amountUsd") ?: 0.0,
+                        amountBss = doc.getString("amountBss") ?: "",
+                        status = doc.getString("status") ?: "pending",
+                        timestamp = doc.getLong("timestamp") ?: 0,
+                        adminComment = doc.getString("adminComment") ?: ""
+                    )
+                }
+            }
+
         db.collection("config").document("tasa_bcv").addSnapshotListener { snapshot, _ ->
             if (snapshot != null && snapshot.exists()) bcvRate = snapshot.getDouble("valor") ?: 36.5
         }
@@ -326,6 +364,7 @@ fun AdminListContent() {
             ) {
                 AdminNavButton("DB", Icons.Default.Storage, selectedTab == 0, Modifier.width(80.dp)) { selectedTab = 0 }
                 AdminNavButton("STOCK", Icons.Default.Inventory, selectedTab == 1, Modifier.width(80.dp)) { selectedTab = 1 }
+                AdminNavButton("CRÉDITOS", Icons.Default.CreditCard, selectedTab == 6, Modifier.width(90.dp)) { selectedTab = 6 }
                 AdminNavButton("NOVEDAD", Icons.Default.Campaign, selectedTab == 5, Modifier.width(80.dp)) { selectedTab = 5 }
                 AdminNavButton("COBROS", Icons.Default.MonetizationOn, selectedTab == 4, Modifier.width(80.dp)) { selectedTab = 4 }
                 AdminNavButton("PAGOS", Icons.Default.Payments, selectedTab == 3, Modifier.width(80.dp)) { selectedTab = 3 }
@@ -374,6 +413,11 @@ fun AdminListContent() {
                         onAddNews = { showAddNewsDialog = true },
                         onDeleteNews = { newsToDelete = it },
                         onImageClick = { expandedImageUrl = it }
+                    )
+                    6 -> CreditRequestsSection(
+                        requests = creditRequests,
+                        onApprove = { req: CreditRequest, comment: String -> updateCreditRequest(req, "approved", comment, db, showModernToast) },
+                        onDeny = { req: CreditRequest, comment: String -> updateCreditRequest(req, "denied", comment, db, showModernToast) }
                     )
                 }
             }
@@ -1346,5 +1390,92 @@ fun AddNewsDialog(onDismiss: () -> Unit, onConfirm: (Uri) -> Unit) {
 private fun deleteNews(news: News, db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) {
     db.collection("novedades").document(news.id).delete().addOnSuccessListener {
         showToast("Novedad eliminada", false)
+    }
+}
+
+@Composable
+fun CreditRequestsSection(
+    requests: List<CreditRequest>,
+    onApprove: (CreditRequest, String) -> Unit,
+    onDeny: (CreditRequest, String) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
+        Text("SOLICITUDES DE CRÉDITO", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black)
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        if (requests.isEmpty()) {
+            InfoSection("No hay solicitudes")
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
+                items(requests) { req ->
+                    CreditRequestCard(req, onApprove, onDeny)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CreditRequestCard(
+    req: CreditRequest,
+    onApprove: (CreditRequest, String) -> Unit,
+    onDeny: (CreditRequest, String) -> Unit
+) {
+    var adminComment by remember { mutableStateOf("") }
+    val date = java.text.SimpleDateFormat("dd/MM/yy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(req.timestamp))
+    
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), border = BorderStroke(0.5.dp, Color(0xFFC5A059).copy(0.3f))) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(date, color = Color.White.copy(0.4f), fontSize = 10.sp)
+                StatusBadge(req.status)
+            }
+            
+            Text(req.customerName.uppercase(), color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
+            Text("C.I: ${req.idNumber}", color = Color(0xFFC5A059), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text("TLF: ${req.phone}", color = Color.White.copy(0.6f), fontSize = 11.sp)
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            Surface(color = Color.White.copy(0.05f), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("MOTIVO:", color = Color(0xFFC5A059), fontSize = 9.sp, fontWeight = FontWeight.Black)
+                    Text(req.reason, color = Color.White.copy(0.8f), fontSize = 11.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("BANCO: ${req.bank}", color = Color.White.copy(0.6f), fontSize = 10.sp)
+                    Text("CUENTA: ${req.account}", color = Color.White.copy(0.6f), fontSize = 10.sp)
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("MONTO SOLICITADO:", color = Color.White.copy(0.5f), fontSize = 10.sp)
+            Text("$${req.amountUsd} (${req.amountBss} BSS)", color = Color(0xFFC5A059), fontWeight = FontWeight.Black, fontSize = 18.sp)
+            
+            if (req.status == "pending") {
+                Spacer(modifier = Modifier.height(16.dp))
+                AdminTextField(adminComment, { adminComment = it }, "Comentario / Nota Admin")
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = { onApprove(req, adminComment) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366))) {
+                        Text("APROBAR", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Black)
+                    }
+                    Button(onClick = { onDeny(req, adminComment) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) {
+                        Text("DENEGAR", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black)
+                    }
+                }
+            } else if (req.adminComment.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text("NOTA ADMIN: ${req.adminComment}", color = Color.White.copy(0.4f), fontSize = 10.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+            }
+        }
+    }
+}
+
+private fun updateCreditRequest(req: CreditRequest, status: String, comment: String, db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) {
+    db.collection("solicitudes_credito").document(req.id).update(
+        "status", status,
+        "adminComment", comment,
+        "processedTimestamp", System.currentTimeMillis()
+    ).addOnSuccessListener {
+        showToast("✅ SOLICITUD ${status.uppercase()}", false)
     }
 }

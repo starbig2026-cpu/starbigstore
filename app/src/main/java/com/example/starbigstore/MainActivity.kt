@@ -78,6 +78,7 @@ class MainActivity : FragmentActivity() {
                 var currentTab by remember { mutableIntStateOf(0) }
                 var shouldShowAuth by remember { mutableStateOf(false) }
                 var shouldShowCart by remember { mutableStateOf(false) }
+                var shouldShowCreditForm by remember { mutableStateOf(false) }
                 var addToCartCommand by remember { mutableStateOf<Triple<String, Int, String>?>(null) }
                 
                 var newsList by remember { mutableStateOf(listOf<String>()) }
@@ -140,6 +141,9 @@ class MainActivity : FragmentActivity() {
                                                 if (index == 4) {
                                                     shouldShowCart = true
                                                     currentTab = 4
+                                                } else if (index == 3) {
+                                                    shouldShowCreditForm = true
+                                                    currentTab = 0
                                                 } else {
                                                     currentTab = index
                                                 }
@@ -180,6 +184,8 @@ class MainActivity : FragmentActivity() {
                                 onAuthTriggered = { shouldShowAuth = false },
                                 triggerCart = shouldShowCart,
                                 onCartTriggered = { shouldShowCart = false },
+                                triggerCreditForm = shouldShowCreditForm,
+                                onCreditFormTriggered = { shouldShowCreditForm = false },
                                 currentTab = currentTab,
                                 addToCartCommand = addToCartCommand,
                                 onAddToCartProcessed = { addToCartCommand = null }
