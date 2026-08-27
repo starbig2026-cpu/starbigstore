@@ -155,16 +155,36 @@ class WebAppInterface(
                     val u = docs.documents[0]
                     val points = u.getLong("points") ?: 0
                     val status = u.getString("status") ?: "unverified"
-                    val userData = (u.data ?: emptyMap<String, Any>()).toMutableMap()
-                    userData["docId"] = u.id 
-                    val userDataJson = org.json.JSONObject(userData as Map<*, *>).toString()
+                    
+                    // Convertimos el mapa a algo seguro para JSON (sin Timestamps de Firestore)
+                    val userData = u.data ?: emptyMap<String, Any>()
+                    val safeData = org.json.JSONObject()
+                    userData.forEach { (k, v) ->
+                        when (v) {
+                            is com.google.firebase.Timestamp -> safeData.put(k, v.toDate().time)
+                            is String -> safeData.put(k, v.replace("'", "\\'")) // Escapar comillas simples
+                            else -> safeData.put(k, v)
+                        }
+                    }
+                    safeData.put("docId", u.id)
+                    
+                    val userDataJson = safeData.toString()
                     val safeName = (u.getString("name") ?: "").replace("'", "\\'")
+                    val safePhoto = (u.getString("photoUrl") ?: "").replace("'", "\\'")
+                    val safeStatus = (u.getString("status") ?: "unverified").replace("'", "\\'")
+
                     webView.post { 
                         webView.evaluateJavascript("""
                             (function() {
-                                const userData = $userDataJson;
-                                if(window.updateUserProfile) {
-                                    window.updateUserProfile('$safeName', '$cleanEmail', '${u.getString("photoUrl")}', '$status', $points, userData);
+                                try {
+                                    const userData = $userDataJson;
+                                    if(window.updateUserProfile) {
+                                        window.updateUserProfile('$safeName', '$cleanEmail', '$safePhoto', '$safeStatus', $points, userData);
+                                    } else {
+                                        console.error('updateUserProfile not found');
+                                    }
+                                } catch(e) {
+                                    console.error('Error injecting user data:', e);
                                 }
                             })();
                         """.trimIndent(), null)
@@ -174,9 +194,7 @@ class WebAppInterface(
                     FirebaseFirestore.getInstance().collection("registros_clientes")
                         .whereEqualTo("email", email.trim()).get().addOnSuccessListener { docs2 ->
                             if(!docs2.isEmpty) {
-                                val u = docs2.documents[0]
-                                // ... manejar igual que arriba si es necesario o simplemente informar
-                                fetchUserData(email.trim()) // Recursión controlada una sola vez
+                                fetchUserData(email.trim())
                             } else {
                                 webView.post {
                                     webView.evaluateJavascript("showNotification('PERFIL NO ENCONTRADO EN DB', 'error')", null)

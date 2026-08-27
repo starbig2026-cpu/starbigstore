@@ -200,7 +200,17 @@
 
                 <div class="input-group">
                     <label for="report-phone">Número de Teléfono / Cuenta</label>
-                    <input type="tel" id="report-phone" placeholder="Desde el que pagó" style="background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; width:100%; font-size:12px;">
+                    <div style="display: flex; gap: 5px;">
+                        <label for="report-phone-prefix" style="display:none;">Prefijo</label>
+                        <select id="report-phone-prefix" style="width: 100px; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; font-size:12px;">
+                            <option value="0412">0412</option>
+                            <option value="0422">0422</option>
+                            <option value="0414">0414</option>
+                            <option value="0416">0416</option>
+                            <option value="0424">0424</option>
+                        </select>
+                        <input type="tel" id="report-phone" placeholder="7 dígitos" maxlength="7" oninput="this.value = this.value.replace(/[^0-9]/g, '')" required style="flex: 1; background: #08080a; color: white; border: 1px solid #c5a05933; padding: 10px; font-size:12px;">
+                    </div>
                 </div>
 
                 <div style="display:flex; gap:10px;">
@@ -282,28 +292,28 @@
         <span class="close-modal" onclick="closeAdmin()">&times;</span>
         <h2 style="color:white; border-bottom: 1px solid #c5a059; padding-bottom: 10px; font-weight: 900; letter-spacing: 2px;">STARBIG ADMIN WEB</h2>
 
-        <!-- MONITOR DE RED -->
-        <div id="traffic-monitor-container" style="background:#121216; padding:20px; margin:20px 0; border:0.5px solid #c5a05933;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                <div><div style="color:#C5A059; font-size:10px; font-weight:bold;">MONITOREO</div><div style="color:white; font-size:16px; font-weight:900;">ACTIVIDAD REAL</div></div>
-                <div style="display:flex; gap:15px;"><span style="color:green; font-size:10px;">● ONLINE</span><span style="color:red; font-size:10px;">● OFFLINE</span></div>
+        <div class="admin-nav-tabs">
+            <div id="adm-tab-users" class="admin-nav-btn active" onclick="switchAdminTab('users')">
+                <i data-lucide="user-plus"></i> SOLICITUDES
             </div>
-            <canvas id="trafficCanvas" style="width:100%; height:80px;"></canvas>
-            <div style="display:flex; justify-content:space-between; margin-top:15px; border-top:1px solid #ffffff11; padding-top:10px;">
-                <div style="text-align:center;"><div style="color:#888; font-size:8px;">ONLINE</div><div id="stat-online" style="color:white; font-size:14px;">1</div></div>
-                <div style="text-align:center;"><div style="color:#888; font-size:8px;">OFFLINE</div><div id="stat-offline" style="color:white; font-size:14px;">0</div></div>
-                <div style="text-align:center;"><div style="color:#888; font-size:8px;">TOTAL</div><div id="stat-total" style="color:white; font-size:14px;">0</div></div>
+            <div id="adm-tab-db" class="admin-nav-btn" onclick="switchAdminTab('db')">
+                <i data-lucide="database"></i> CLIENTES
             </div>
-        </div>
-
-        <div class="auth-tabs" style="margin: 20px 0;">
-            <div id="adm-tab-users" class="tab-btn active" onclick="switchAdminTab('users')">SOLICITUDES</div>
-            <div id="adm-tab-db" class="tab-btn" onclick="switchAdminTab('db')">BASE DE DATOS</div>
-            <div id="adm-tab-inv" class="tab-btn" onclick="switchAdminTab('inventory')">INVENTARIO</div>
-            <div id="adm-tab-news" class="tab-btn" onclick="switchAdminTab('news')">NOVEDADES</div>
-            <div id="adm-tab-sales" class="tab-btn" onclick="switchAdminTab('sales')">COBRANZAS</div>
-            <div id="adm-tab-credits" class="tab-btn" onclick="switchAdminTab('credits')">CRÉDITOS</div>
-            <div id="adm-tab-pay" class="tab-btn" onclick="switchAdminTab('payments')">PAGOS</div>
+            <div id="adm-tab-inv" class="admin-nav-btn" onclick="switchAdminTab('inventory')">
+                <i data-lucide="package"></i> INVENTARIO
+            </div>
+            <div id="adm-tab-news" class="admin-nav-btn" onclick="switchAdminTab('news')">
+                <i data-lucide="megaphone"></i> NOVEDADES
+            </div>
+            <div id="adm-tab-sales" class="admin-nav-btn" onclick="switchAdminTab('sales')">
+                <i data-lucide="receipt"></i> COBRANZAS
+            </div>
+            <div id="adm-tab-credits" class="admin-nav-btn" onclick="switchAdminTab('credits')">
+                <i data-lucide="credit-card"></i> CRÉDITOS
+            </div>
+            <div id="adm-tab-pay" class="admin-nav-btn" onclick="switchAdminTab('payments')">
+                <i data-lucide="settings"></i> AJUSTES
+            </div>
         </div>
 
         <div id="admin-content-users" class="admin-panel-section">
@@ -649,7 +659,7 @@
 </div>
 
 <!-- MODAL GESTIONAR PAGO DE DEUDA -->
-<div id="debt-pay-modal" class="modal" style="background:rgba(0,0,0,0.85); z-index:9600;">
+<div id="debt-pay-modal" class="modal" style="background:rgba(0,0,0,0.85); z-index:9980;">
     <div class="modal-content" style="background:#121216; border:1px solid #C5A059; max-width: 400px; text-align: center;">
         <span class="close-modal" onclick="document.getElementById('debt-pay-modal').style.display='none'">&times;</span>
         <h2 style="color:white; margin-bottom:10px; font-weight: 900;">ABONAR A DEUDA</h2>
@@ -704,6 +714,39 @@
         <button onclick="document.getElementById('crop-modal').style.display='none'; if(croppieInstance) croppieInstance.destroy();" class="btn-secondary full-width">CANCELAR</button>
     </div>
 </div>
+
+<!-- MODAL COMPROBANTE DIGITAL -->
+<div id="receipt-modal" class="modal" style="background:rgba(0,0,0,0.95); z-index:9999;">
+    <div class="modal-content" style="max-width: 450px; padding: 40px 20px; text-align: center;">
+        <span class="close-modal" onclick="document.getElementById('receipt-modal').style.display='none'">&times;</span>
+
+        <div id="receipt-printable-area" style="background:white; color:black; padding:30px; border-radius:10px; font-family:'Courier New', Courier, monospace; text-align:left; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+            <div style="text-align:center; border-bottom:2px dashed #000; padding-bottom:15px; margin-bottom:15px;">
+                <h2 style="font-family:'Playfair Display', serif; margin:0;">STARBIG STORE</h2>
+                <p style="font-size:10px; margin:5px 0;">BOUTIQUE EXCLUSIVA</p>
+                <p style="font-size:9px;">RIF: J-501234567-0</p>
+            </div>
+
+            <h3 style="text-align:center; font-size:14px; margin-bottom:20px;">COMPROBANTE DE PAGO</h3>
+
+            <div id="receipt-content" style="font-size:11px; line-height:1.8;">
+                <!-- Dinámico -->
+            </div>
+
+            <div style="margin-top:30px; border-top:2px dashed #000; padding-top:15px; text-align:center;">
+                <p style="font-size:10px; font-weight:bold;">¡GRACIAS POR TU RESPONSABILIDAD!</p>
+                <p style="font-size:8px;">Este es un comprobante digital verificado por Starbig Store.</p>
+                <div id="receipt-qrcode" style="margin-top:10px; font-size:8px; color:#888;">ID-VERIFICACIÓN: <span id="receipt-verify-id"></span></div>
+            </div>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-top:25px;">
+            <button onclick="window.print()" class="btn-primary" style="flex:1; background:#000; border:1px solid #c5a059; color:#c5a059;"><i data-lucide="printer"></i> IMPRIMIR</button>
+            <button onclick="downloadReceiptImage()" class="btn-primary" style="flex:1;"><i data-lucide="download"></i> DESCARGAR JPG</button>
+        </div>
+        <button onclick="document.getElementById('receipt-modal').style.display='none'" class="btn-secondary full-width" style="margin-top:10px;">CERRAR</button>
+    </div>
+</div>
 <div id="edit-profile-overlay" class="modal" style="background:rgba(0,0,0,0.8); z-index:7000;">
     <div class="modal-content" style="background:#121216; border:1px solid #C5A059; max-width: 450px;">
         <h2 style="color:white; margin-bottom:20px; font-weight: 900; letter-spacing: 1px;">EDITAR PERFIL</h2>
@@ -721,6 +764,11 @@
         <div class="input-group">
             <label for="edit-phone">WhatsApp / Teléfono</label>
             <input type="tel" id="edit-phone" style="width:100%; background:#08080a; color:white; border:1px solid #c5a05933; padding:10px; margin-bottom:15px;">
+        </div>
+
+        <div class="input-group">
+            <label for="edit-id-number">Número de Cédula / ID</label>
+            <input type="text" id="edit-id-number" style="width:100%; background:#08080a; color:white; border:1px solid #c5a05933; padding:10px; margin-bottom:15px;">
         </div>
 
         <div class="input-group">
@@ -1580,6 +1628,7 @@
         };
 
         currentOrderId = orderId;
+        currentOrderCollection = "pedidos";
         isNewOrderCheckout = true;
 
         const message = `🛍️ NUEVO PEDIDO STARBIG STORE\n\nOrden: ${orderId}\nCliente: ${currentUserData?.name}\nItems: ${itemsList}\nTotal: ${totalUsd} (${totalBssText})\n\nPor favor, reporte su pago para procesar la orden.`;
@@ -1623,7 +1672,7 @@
         const payPanel = document.getElementById('admin-content-payments');
         if (payPanel) payPanel.style.display = tab === 'payments' ? 'block' : 'none';
 
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.admin-nav-btn').forEach(b => b.classList.remove('active'));
 
         const tabIdMap = {
             'users': 'adm-tab-users', 'db': 'adm-tab-db',
@@ -1632,6 +1681,7 @@
             'credits': 'adm-tab-credits'
         };
         document.getElementById(tabIdMap[tab]).classList.add('active');
+        lucide.createIcons();
 
         if(tab === 'news') loadAdminNews();
         if(tab === 'sales') loadAdminSales();
@@ -1942,140 +1992,173 @@
     }
 
     function loadAdminSales() {
+        const list = document.getElementById('admin-sales-list');
+        list.innerHTML = "";
+
+        // Escuchar Pedidos
         db.collection("pedidos").orderBy("timestamp", "desc").onSnapshot(snap => {
-            const list = document.getElementById('admin-sales-list');
-            list.innerHTML = "";
-            snap.forEach(doc => {
-                const order = doc.data();
-                const date = new Date(order.timestamp).toLocaleDateString();
-                const card = document.createElement('div');
-                card.style = "background:#121216; padding:15px; border:0.5px solid #c5a05944; color:white;";
+            renderCombinedAdminSales();
+        });
 
-                let itemsHtml = "";
-                order.items.forEach(item => {
-                    itemsHtml += `<div style="font-size:10px; color:#aaa;">• ${item.buyQty}x ${item.name} (${item.paymentMethod.toUpperCase()})</div>`;
-                });
-
-                card.innerHTML = `
-                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                        <span style="color:#C5A059; font-weight:bold; font-size:10px;">${order.orderId}</span>
-                        <div style="display:flex; align-items:center; gap:10px;">
-                            <span style="font-size:10px; color:#888;">${date}</span>
-                            <button onclick="deleteSingleSale('${doc.id}')" style="background:none; border:none; color:#ff444455; cursor:pointer; padding:0;"><i data-lucide="trash-2" style="width:12px; height:12px;"></i></button>
-                        </div>
-                    </div>
-                    <div style="font-weight:bold; margin-bottom:5px;">${order.customerName.toUpperCase()}</div>
-                    <div style="margin-bottom:10px;">${itemsHtml}</div>
-
-                    ${order.paymentReport ? `
-                        <div style="background:rgba(197,160,89,0.05); padding:10px; border-radius:8px; margin-bottom:10px; font-size:10px; border:1px solid rgba(197,160,89,0.2);">
-                            <div style="color:#C5A059; font-weight:800; margin-bottom:5px;">DETALLES DEL PAGO:</div>
-                            <div><strong>REF:</strong> ${order.paymentReport.reference}</div>
-                            <div><strong>BANCO:</strong> ${order.paymentReport.bank}</div>
-                            <div><strong>FECHA:</strong> ${order.paymentReport.date}</div>
-                            <div><strong>TLF:</strong> ${order.paymentReport.phone}</div>
-                            <div><strong>MONTO:</strong> ${order.paymentReport.amount} BSS</div>
-                            ${order.paymentReport.installments > 1 ? `<div><strong>CUOTAS:</strong> ${order.paymentReport.installments}</div>` : ''}
-                            ${order.paymentReport.captureBase64 ? `
-                                <div style="margin-top:10px; height:100px; background:#000; display:flex; justify-content:center; align-items:center; cursor:pointer;" onclick="expandImage('data:image/jpeg;base64,${order.paymentReport.captureBase64}')">
-                                    <img src="data:image/jpeg;base64,${order.paymentReport.captureBase64}" style="max-width:100%; max-height:100%;">
-                                </div>
-                            ` : ''}
-                        </div>
-                    ` : '<div style="color:#666; font-size:9px; margin-bottom:10px;">PAGO AÚN NO REPORTADO</div>'}
-
-                    <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #ffffff11; padding-top:10px;">
-                        <span style="font-weight:bold; color:#c5a059;">${order.totalUsd}</span>
-                        <div style="display:flex; gap:5px;">
-                            ${(order.status === 'pending' || order.status === 'awaiting_verification') ? `
-                                <button onclick="confirmPayment('${doc.id}')" style="background:#25D366; color:black; border:none; padding:5px 10px; font-size:9px; font-weight:bold; cursor:pointer; border-radius:4px;">APROBAR</button>
-                                <button onclick="rejectPayment('${doc.id}')" style="background:#ff4444; color:white; border:none; padding:5px 10px; font-size:9px; font-weight:bold; cursor:pointer; border-radius:4px;">RECHAZAR</button>
-                            ` : order.status === 'paid' ? '<span style="color:#25D366; font-size:9px; font-weight:bold;">PAGADO</span>' : '<span style="color:#ff4444; font-size:9px; font-weight:bold;">RECHAZADO</span>'}
-                        </div>
-                    </div>`;
-                list.appendChild(card);
-            });
-            lucide.createIcons();
+        // Escuchar Pagos de Créditos Personales
+        db.collection("solicitudes_credito").where("status", "==", "awaiting_verification").onSnapshot(snap => {
+            renderCombinedAdminSales();
         });
     }
 
-    async function deleteSingleSale(orderId) {
+    async function renderCombinedAdminSales() {
+        const list = document.getElementById('admin-sales-list');
+
+        // Obtenemos datos de ambas colecciones
+        const pedidosSnap = await db.collection("pedidos").orderBy("timestamp", "desc").get();
+        const creditsSnap = await db.collection("solicitudes_credito").where("status", "==", "awaiting_verification").get();
+
+        let allItems = [];
+        pedidosSnap.forEach(doc => allItems.push({...doc.data(), id: doc.id, _collection: "pedidos"}));
+        creditsSnap.forEach(doc => allItems.push({...doc.data(), id: doc.id, _collection: "solicitudes_credito"}));
+
+        // Ordenar por tiempo (más reciente primero)
+        allItems.sort((a, b) => b.timestamp - a.timestamp);
+
+        list.innerHTML = "";
+        allItems.forEach(item => {
+            const date = new Date(item.timestamp).toLocaleDateString();
+            const card = document.createElement('div');
+            card.style = "background:#121216; padding:15px; border:0.5px solid #c5a05944; color:white; margin-bottom:15px;";
+
+            const isOrder = item._collection === "pedidos";
+            let itemsHtml = "";
+            if (isOrder) {
+                item.items.forEach(it => {
+                    itemsHtml += `<div style="font-size:10px; color:#aaa;">• ${it.buyQty}x ${it.name} (${it.paymentMethod.toUpperCase()})</div>`;
+                });
+            } else {
+                itemsHtml = `<div style="font-size:10px; color:#c5a059;">• ABONO A CRÉDITO PERSONAL ($${item.amountUsd})</div>`;
+            }
+
+            card.innerHTML = `
+                <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                    <span style="color:#C5A059; font-weight:bold; font-size:10px;">${isOrder ? (item.orderId || 'ORDEN') : 'CRÉDITO'}</span>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span style="font-size:10px; color:#888;">${date}</span>
+                        <button onclick="deleteSingleSale('${item.id}', '${item._collection}')" style="background:none; border:none; color:#ff444455; cursor:pointer; padding:0;"><i data-lucide="trash-2" style="width:12px; height:12px;"></i></button>
+                    </div>
+                </div>
+                <div style="font-weight:bold; margin-bottom:5px;">${item.customerName.toUpperCase()}</div>
+                <div style="margin-bottom:10px;">${itemsHtml}</div>
+
+                ${item.paymentReport ? `
+                    <div style="background:rgba(197,160,89,0.05); padding:10px; border-radius:8px; margin-bottom:10px; font-size:10px; border:1px solid rgba(197,160,89,0.2);">
+                        <div style="color:#C5A059; font-weight:800; margin-bottom:5px;">DETALLES DEL PAGO:</div>
+                        <div><strong>REF:</strong> ${item.paymentReport.reference}</div>
+                        <div><strong>BANCO:</strong> ${item.paymentReport.bank}</div>
+                        <div><strong>FECHA:</strong> ${item.paymentReport.date}</div>
+                        <div><strong>TLF:</strong> ${item.paymentReport.phone}</div>
+                        <div><strong>MONTO:</strong> ${item.paymentReport.amount} BSS</div>
+                        ${item.paymentReport.captureBase64 ? `
+                            <div style="margin-top:10px; height:100px; background:#000; display:flex; justify-content:center; align-items:center; cursor:pointer;" onclick="expandImage('data:image/jpeg;base64,${item.paymentReport.captureBase64}')">
+                                <img src="data:image/jpeg;base64,${item.paymentReport.captureBase64}" style="max-width:100%; max-height:100%;">
+                            </div>
+                        ` : ''}
+                    </div>
+                ` : '<div style="color:#666; font-size:9px; margin-bottom:10px;">PAGO AÚN NO REPORTADO</div>'}
+
+                <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #ffffff11; padding-top:10px;">
+                    <span style="font-weight:bold; color:#c5a059;">${isOrder ? item.totalUsd : '$'+item.amountUsd}</span>
+                    <div style="display:flex; gap:5px;">
+                        ${(item.status === 'pending' || item.status === 'awaiting_verification') ? `
+                            <button onclick="confirmPayment('${item.id}', '${item._collection}')" style="background:#25D366; color:black; border:none; padding:5px 10px; font-size:9px; font-weight:bold; cursor:pointer; border-radius:4px;">APROBAR</button>
+                            <button onclick="rejectPayment('${item.id}', '${item._collection}')" style="background:#ff4444; color:white; border:none; padding:5px 10px; font-size:9px; font-weight:bold; cursor:pointer; border-radius:4px;">RECHAZAR</button>
+                        ` : item.status === 'paid' ? '<span style="color:#25D366; font-size:9px; font-weight:bold;">PAGADO</span>' : '<span style="color:#ff4444; font-size:9px; font-weight:bold;">RECHAZADO</span>'}
+                    </div>
+                </div>`;
+            list.appendChild(card);
+        });
+        lucide.createIcons();
+    }
+
+    async function deleteSingleSale(id, collection) {
         if(!confirm("¿Eliminar este registro permanentemente del historial?")) return;
         try {
-            await db.collection("pedidos").doc(orderId).delete();
+            await db.collection(collection).doc(id).delete();
             showNotification("Registro eliminado");
         } catch(e) {
             showNotification("Error al eliminar", "error");
         }
     }
 
-    async function confirmPayment(orderId) {
+    async function confirmPayment(id, collection) {
         if(!confirm("¿Confirmar recepción de pago y asignar puntos correspondientes?")) return;
 
         try {
-            const orderRef = db.collection("pedidos").doc(orderId);
-            const orderDoc = await orderRef.get();
-            const order = orderDoc.data();
+            const itemRef = db.collection(collection).doc(id);
+            const itemDoc = await itemRef.get();
+            const item = itemDoc.data();
 
-            // Lógica de Puntos Starbig (Solo se agregan al confirmar pago)
+            // Lógica de Puntos Starbig
             let totalPointsToGain = 0;
 
-            // 1. Puntos por artículos de contado (25 por cada uno)
-            order.items.forEach(item => {
-                if(item.paymentMethod === 'cash') totalPointsToGain += 25;
-            });
-
-            // 2. Puntos por pago de cuota de crédito (10 por la transacción)
-            const hasCredit = order.items.some(i => i.paymentMethod === 'credit');
-            if(hasCredit) totalPointsToGain += 10;
+            if (collection === "pedidos") {
+                // 1. Puntos por artículos de contado (25 por cada uno)
+                item.items.forEach(it => {
+                    if(it.paymentMethod === 'cash') totalPointsToGain += 25;
+                });
+                // 2. Puntos por pago de cuota de crédito (10 por la transacción)
+                if(item.items.some(it => it.paymentMethod === 'credit')) totalPointsToGain += 10;
+            } else {
+                // Abono a crédito personal: 10 puntos por la transacción
+                totalPointsToGain = 10;
+            }
 
             if(totalPointsToGain > 0) {
-                const userSnap = await db.collection("registros_clientes").where("email", "==", order.customerEmail).get();
+                const userSnap = await db.collection("registros_clientes").where("email", "==", item.customerEmail).get();
                 if(!userSnap.empty) {
                     const userDoc = userSnap.docs[0];
                     const currentPoints = userDoc.data().points || 0;
-                    const newPoints = currentPoints + totalPointsToGain;
-                    await userDoc.ref.update({ points: newPoints });
-                    showNotification(`+${totalPointsToGain} ESTRELLAS STARBIG ASIGNADAS A ${order.customerName}`);
+                    await userDoc.ref.update({ points: currentPoints + totalPointsToGain });
+                    showNotification(`+${totalPointsToGain} ESTRELLAS ASIGNADAS`);
                 }
             }
 
-            // LÓGICA DE CRÉDITO Y ABONOS
-            if (hasCredit) {
-                if (order.status === "pending" || (order.status === "awaiting_verification" && (order.installmentsPaid || 0) === 0)) {
-                    // Es el pago inicial
-                    const totalBss = parseFloat(order.totalBss.replace(" BSS", "")) || 0;
-                    const initial = totalBss * 0.25;
-                    await orderRef.update({
-                        status: "active_credit",
-                        remainingDebt: totalBss - initial,
-                        installmentsPaid: 0,
-                        paymentReport: null,
-                        hasCredit: true
-                    });
-                } else if (order.status === "awaiting_verification") {
-                    // Es un abono a cuota
-                    const amountPaid = parseFloat(order.paymentReport.amount) || 0;
-                    const totalBss = parseFloat(order.totalBss.replace(" BSS", "")) || 0;
-                    const initial = totalBss * 0.25;
-
-                    const extraCuotas = Math.floor((order.userPointsAtPurchase || 0) / 550);
-                    const numCuotas = order.numCuotas || Math.min(12, 2 + extraCuotas);
-                    const installmentVal = (totalBss - initial) / numCuotas;
-
-                    let newRemaining = (order.remainingDebt !== undefined ? order.remainingDebt : (totalBss - initial)) - amountPaid;
-                    let installmentsCovered = Math.max(1, Math.floor(amountPaid / (installmentVal * 0.95)));
-                    let newPaid = (order.installmentsPaid || 0) + installmentsCovered;
-
-                    await orderRef.update({
-                        remainingDebt: Math.max(0, newRemaining),
-                        installmentsPaid: newPaid,
-                        status: newRemaining <= 0 ? "paid" : "active_credit",
-                        paymentReport: null
-                    });
+            // LÓGICA DE ACTUALIZACIÓN DE ESTADO
+            if (collection === "pedidos") {
+                const hasCredit = item.items.some(it => it.paymentMethod === 'credit');
+                if (hasCredit) {
+                    if (item.status === "pending" || (item.status === "awaiting_verification" && (item.installmentsPaid || 0) === 0)) {
+                        const totalBss = parseFloat(item.totalBss.replace(" BSS", "")) || 0;
+                        const initial = totalBss * 0.25;
+                        await itemRef.update({
+                            status: "active_credit",
+                            remainingDebt: totalBss - initial,
+                            installmentsPaid: 0,
+                            paymentReport: null
+                        });
+                    } else {
+                        const amountPaid = parseFloat(item.paymentReport.amount) || 0;
+                        const remaining = item.remainingDebt - amountPaid;
+                        await itemRef.update({
+                            remainingDebt: Math.max(0, remaining),
+                            installmentsPaid: (item.installmentsPaid || 0) + 1,
+                            status: remaining <= 0 ? "paid" : "active_credit",
+                            paymentReport: null
+                        });
+                    }
+                } else {
+                    await itemRef.update({ status: "paid" });
                 }
             } else {
-                await orderRef.update({ status: "paid" });
+                // Para solicitudes de crédito personal
+                // Asumimos pago completo para simplificar o abono si es plan semanal
+                if (item.plan === "weekly_4" || item.plan === "weekly_interest") {
+                     // Lógica de abono similar a pedidos...
+                     const amountPaid = parseFloat(item.paymentReport.amount) || 0;
+                     const totalBss = parseFloat(item.amountBss) * (item.plan === "weekly_4" ? 1.1 : 1.0);
+                     // Si es un abono, restamos del total. Si es el último pago, marcamos como pagado.
+                     // Por ahora, para simplificar al admin:
+                     await itemRef.update({ status: "paid", paymentReport: null });
+                } else {
+                    await itemRef.update({ status: "paid", paymentReport: null });
+                }
             }
 
             showNotification("✅ PAGO CONFIRMADO");
@@ -2085,33 +2168,28 @@
         }
     }
 
-    async function rejectPayment(orderId) {
-        if(!confirm("¿Seguro que desea RECHAZAR este pago? Se devolverán los puntos si se usaron recompensas.")) return;
+    async function rejectPayment(id, collection) {
+        if(!confirm("¿Seguro que desea RECHAZAR este pago?")) return;
 
         try {
-            const orderRef = db.collection("pedidos").doc(orderId);
-            const orderDoc = await orderRef.get();
-            const order = orderDoc.data();
+            const itemRef = db.collection(collection).doc(id);
+            const itemDoc = await itemRef.get();
+            const item = itemDoc.data();
 
-            // Si usó puntos (recompensas), se los devolvemos
-            if (order.pointsUsed && order.pointsUsed > 0) {
-                const userSnap = await db.collection("registros_clientes").where("email", "==", order.customerEmail).get();
+            if (item.pointsUsed && item.pointsUsed > 0) {
+                const userSnap = await db.collection("registros_clientes").where("email", "==", item.customerEmail).get();
                 if(!userSnap.empty) {
                     const userDoc = userSnap.docs[0];
-                    const currentPoints = userDoc.data().points || 0;
-                    const newPoints = currentPoints + order.pointsUsed;
-                    // También reseteamos la fecha de recompensa si es necesario
-                    // (Opcional, dependiendo de qué tan estricto quieras ser)
-                    await userDoc.ref.update({ points: newPoints });
-                    showNotification(`Puntos devueltos a ${order.customerName}`);
+                    await userDoc.ref.update({ points: (userDoc.data().points || 0) + item.pointsUsed });
                 }
             }
 
-            await orderRef.update({ status: "rejected" });
+            // Si es un abono a crédito activo, regresamos al estado anterior
+            const newStatus = (collection === "pedidos" && item.hasCredit) ? "active_credit" : "rejected";
+            await itemRef.update({ status: newStatus });
             showNotification("❌ PAGO RECHAZADO", "error");
         } catch(e) {
-            console.error(e);
-            showNotification("Error al rechazar pago", "error");
+            showNotification("Error al rechazar", "error");
         }
     }
 
@@ -2472,16 +2550,48 @@
                 const date = new Date(s.timestamp).toLocaleDateString();
                 const color = s.status === 'pending' ? '#c5a059' : (s.status === 'approved' ? '#25D366' : '#ff4444');
 
+                let planText = "";
+                if(s.plan === 'weekly_4') planText = "4 PAGOS SEMANALES";
+                else if(s.plan === 'weekly_interest') planText = "INTERÉS SEMANAL (10%)";
+                else if(s.plan === 'full_30_days') planText = "PAGO ÚNICO (30 DÍAS)";
+
                 container.innerHTML += `
-                    <div style="background:rgba(255,255,255,0.03); padding:15px; border-radius:12px; border:1px solid rgba(197,160,89,0.1); margin-bottom:15px;">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                            <span style="color:#888; font-size:0.6rem;">${date}</span>
-                            <span style="color:${color}; font-weight:800; font-size:0.7rem;">${s.status.toUpperCase()}</span>
+                    <div style="background:rgba(255,255,255,0.03); padding:20px; border-radius:15px; border:1px solid rgba(197, 160, 89, 0.1); margin-bottom:20px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
+                            <span style="color:#888; font-size:0.6rem; font-weight:800; letter-spacing:1px;">SOLICITUD: ${date}</span>
+                            <span style="color:${color}; font-weight:900; font-size:0.7rem; letter-spacing:1px; border:1px solid ${color}44; padding:2px 8px; border-radius:4px;">${s.status.toUpperCase()}</span>
                         </div>
-                        <div style="color:white; font-size:0.9rem; font-weight:800;">MONTO: $${s.amountUsd} (${s.amountBss} BSS)</div>
-                        ${s.adminComment ? `<div style="margin-top:10px; padding:10px; background:rgba(0,0,0,0.3); border-radius:8px; color:#aaa; font-size:0.7rem;"><strong>NOTA:</strong> ${s.adminComment}</div>` : ''}
+
+                        <div style="color:white; font-size:1.1rem; font-weight:900; margin-bottom:5px;">$${s.amountUsd} <span style="color:#c5a059; font-size:0.8rem;">(${s.amountBss} BSS)</span></div>
+                        <div style="color:#888; font-size:0.7rem; font-weight:700; margin-bottom:15px;">PLAN: ${planText}</div>
+
+                        <div style="background:rgba(0,0,0,0.3); padding:12px; border-radius:10px; font-size:0.7rem; color:#aaa; line-height:1.5;">
+                            <strong>BANCO:</strong> ${s.bank}<br>
+                            <strong>CUENTA:</strong> ${s.account}
+                        </div>
+
+                        ${s.adminComment ? `
+                            <div style="margin-top:15px; padding:15px; background:rgba(197,160,89,0.05); border-left:3px solid ${color}; border-radius:0 8px 8px 0; color:#fff; font-size:0.75rem; margin-bottom:15px;">
+                                <strong style="color:${color}; display:block; margin-bottom:5px; font-size:0.6rem;">RESPUESTA DE ADMINISTRACIÓN:</strong>
+                                ${s.adminComment}
+                            </div>
+                        ` : ''}
+
+                        ${s.status === 'approved' ? `
+                            <button onclick="handleCreditAdvancePayment('${doc.id}', ${s.amountBss}, '${s.plan}', '${s.amountUsd}')" class="btn-primary full-width" style="height:40px; font-size:10px; margin-bottom:10px;">PAGAR / ADELANTAR</button>
+                        ` : ''}
+
+                        ${s.status === 'paid' ? `
+                            <div style="background:#25D36622; color:#25D366; padding:10px; border-radius:8px; text-align:center; font-weight:800; font-size:10px; border:1px solid #25D36644; margin-bottom:10px;">
+                                <i data-lucide="check-circle" style="width:12px; height:12px; vertical-align:middle; margin-right:5px;"></i> CRÉDITO LIQUIDADO
+                            </div>
+                            <button onclick="generateDigitalReceipt('${doc.id}', 'credit')" class="btn-secondary full-width" style="height:40px; font-size:10px; border-color:#25D366; color:#25D366;">
+                                <i data-lucide="download" style="width:12px; height:12px; vertical-align:middle; margin-right:5px;"></i> VER COMPROBANTE DIGITAL
+                            </button>
+                        ` : ''}
                     </div>`;
             });
+            lucide.createIcons();
         } catch(e) {
             console.error("Firestore Query Error:", e);
             const errorMsg = e.message || "";
@@ -2495,12 +2605,67 @@
         }
     }
 
+    function handleCreditAdvancePayment(id, amountBss, plan, amountUsd) {
+        const installment = amountBss / (plan === 'weekly_4' ? 4 : 1);
+        openDebtPay(id, installment, amountBss, "solicitudes_credito");
+        // Personalizamos para este tipo de crédito de 50$
+        document.getElementById('debt-pay-title').innerText = "Abonar a Crédito Personal: " + parseFloat(amountBss).toFixed(2) + " BSS";
+    }
+
+    async function generateDigitalReceipt(id, type) {
+        const container = document.getElementById('receipt-content');
+        const modal = document.getElementById('receipt-modal');
+
+        showNotification("GENERANDO COMPROBANTE...");
+
+        try {
+            const doc = await db.collection(type === 'credit' ? "solicitudes_credito" : "pedidos").doc(id).get();
+            const data = doc.data();
+            const date = new Date(data.timestamp).toLocaleString();
+
+            document.getElementById('receipt-verify-id').innerText = id.substring(0,12).toUpperCase();
+
+            let html = `
+                <div><strong>FECHA:</strong> ${date}</div>
+                <div><strong>CLIENTE:</strong> ${data.customerName.toUpperCase()}</div>
+                <div><strong>CORREO:</strong> ${data.customerEmail}</div>
+                <div style="border-bottom:1px solid #eee; margin:10px 0;"></div>
+                <div style="font-weight:bold; margin-bottom:5px;">CONCEPTO:</div>
+                <div style="padding-left:10px;">
+                    ${type === 'credit' ? `CRÉDITO PERSONAL APROBADO<br>PLAN: ${data.plan.toUpperCase()}` : `COMPRA DE PRODUCTOS`}
+                </div>
+                <div style="border-bottom:1px solid #eee; margin:10px 0;"></div>
+                <div style="display:flex; justify-content:space-between; font-size:14px; font-weight:bold;">
+                    <span>TOTAL LIQUIDADO:</span>
+                    <span>$${data.amountUsd || data.totalUsd}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:12px; color:#666;">
+                    <span>VALOR EN BSS:</span>
+                    <span>${data.amountBss || data.totalBss} BSS</span>
+                </div>
+            `;
+
+            container.innerHTML = html;
+            modal.style.display = 'block';
+            lucide.createIcons();
+
+        } catch(e) {
+            showNotification("Error al generar recibo", "error");
+        }
+    }
+
+    function downloadReceiptImage() {
+        showNotification("FUNCIÓN DE DESCARGA ACTIVA. USE IMPRIMIR PARA PDF.");
+        window.print();
+    }
+
     function editProfile() {
         if(!currentUserData) { showNotification("Cargando datos...", "error"); return; }
 
         document.getElementById('edit-name').value = currentUserData.firstName || currentUserData.name.split(' ')[0] || "";
         document.getElementById('edit-lastname').value = currentUserData.lastName || currentUserData.name.split(' ').slice(1).join(' ') || "";
         document.getElementById('edit-phone').value = currentUserData.phone || "";
+        document.getElementById('edit-id-number').value = currentUserData.idNumber || "";
 
         // Reset de selects de ubicación
         document.getElementById('edit-country').value = "";
@@ -2517,6 +2682,7 @@
         const firstName = document.getElementById('edit-name').value.trim();
         const lastName = document.getElementById('edit-lastname').value.trim();
         const phone = document.getElementById('edit-phone').value.trim();
+        const idNumber = document.getElementById('edit-id-number').value.trim();
 
         const country = document.getElementById('edit-country').value;
         const state = document.getElementById('edit-state').value;
@@ -2544,7 +2710,7 @@
             const snap = await db.collection("registros_clientes").where("email", "==", email).get();
             if(!snap.empty) {
                 await snap.docs[0].ref.update({
-                    firstName, lastName, name: newName, phone, address
+                    firstName, lastName, name: newName, phone, address, idNumber
                 });
             }
 
@@ -2554,7 +2720,7 @@
                 body: JSON.stringify({
                     action: "updateProfile",
                     email: email,
-                    firstName, lastName, phone, address
+                    firstName, lastName, phone, address, idNumber
                 })
             });
 
@@ -2564,6 +2730,7 @@
             currentUserData.name = newName;
             currentUserData.phone = phone;
             currentUserData.address = address;
+            currentUserData.idNumber = idNumber;
 
             document.getElementById('profile-name').innerText = newName;
 
@@ -2980,6 +3147,7 @@
     let pendingWhatsappMsg = "";
 
     let currentOrderId = null;
+    let currentOrderCollection = "pedidos";
     let selectedReportDate = new Date().toISOString().split('T')[0];
     let currentOrderTotalBss = 0;
     let currentOrderHasCredit = false;
@@ -3075,19 +3243,34 @@
     }
 
     async function submitPaymentReport() {
-        const ref = document.getElementById('report-ref').value;
+        const ref = document.getElementById('report-ref').value.trim();
         const bank = document.getElementById('report-bank').value;
-        const phone = document.getElementById('report-phone').value;
+        const phonePrefix = document.getElementById('report-phone-prefix').value;
+        const phoneBody = document.getElementById('report-phone').value.trim();
         const amount = document.getElementById('report-amount').value;
         const fileInput = document.getElementById('report-capture');
         const file = fileInput.files[0];
 
-        if(!ref || !bank || !amount) {
-            showNotification("POR FAVOR, LLENE LOS CAMPOS OBLIGATORIOS", "error");
+        if(!ref || !bank || !amount || !phoneBody) {
+            showNotification("POR FAVOR, LLENE TODOS LOS CAMPOS", "error");
+            return;
+        }
+
+        if(phoneBody.length !== 7) {
+            showNotification("EL NÚMERO DEBE TENER 7 DÍGITOS", "error");
+            return;
+        }
+
+        const phone = phonePrefix + phoneBody;
+
+        if (!currentOrderId) {
+            showNotification("ERROR: NO SE ENCONTRÓ ID DE ORDEN. REINTENTE.", "error");
             return;
         }
 
         showNotification("GUARDANDO REPORTE...");
+
+        const collectionName = currentOrderCollection || "pedidos";
 
         try {
             let capture64 = file ? await getBase64(file) : null;
@@ -3095,7 +3278,8 @@
 
             // Si es un pedido nuevo desde el carrito, lo guardamos ahora en Firebase
             if (isNewOrderCheckout && pendingOrderData) {
-                await db.collection("pedidos").doc(currentOrderId).set(pendingOrderData);
+                console.log("Creando nueva orden en:", collectionName, currentOrderId);
+                await db.collection(collectionName).doc(currentOrderId).set(pendingOrderData);
 
                 // Restar puntos si usó recompensa
                 if(pendingOrderData.pointsUsed > 0 && currentUserData.docId) {
@@ -3117,7 +3301,8 @@
                 if(document.getElementById('cart-modal').style.display === 'block') toggleCart();
             }
 
-            await db.collection("pedidos").doc(currentOrderId).update({
+            console.log("Actualizando reporte en:", collectionName, currentOrderId);
+            await db.collection(collectionName).doc(currentOrderId).update({
                 paymentReport: {
                     reference: ref,
                     bank: bank,
@@ -3140,8 +3325,8 @@
             pendingOrderData = null;
             showNotification("✅ ORDEN Y REPORTE ENVIADOS CORRECTAMENTE");
         } catch(e) {
-            console.error(e);
-            showNotification("Error al enviar reporte", "error");
+            console.error("Error al enviar reporte:", e);
+            showNotification("ERROR DB: " + (e.message || "FIREBASE ERROR"), "error");
         }
     }
 
@@ -3155,9 +3340,10 @@
     }
 
     function contactWhatsapp(number, customMsg = null) {
-        const msg = customMsg || pendingWhatsappMsg;
+        let msg = customMsg || pendingWhatsappMsg;
         if(!msg) {
-            const name = document.getElementById('profile-name').innerText;
+            const nameEl = document.getElementById('profile-name');
+            const name = nameEl ? nameEl.innerText : "un cliente";
             msg = `Hola, soy ${name}. Solicito asistencia.`;
         }
         window.open(`https://wa.me/${number.replace('+', '')}?text=${encodeURIComponent(msg)}`);
@@ -3437,10 +3623,10 @@
     function processUserCredits(snap, type) {
         if(type === "pedidos") {
             rawOrders = [];
-            snap.forEach(doc => rawOrders.push({...doc.data(), id: doc.id}));
+            snap.forEach(doc => rawOrders.push({...doc.data(), id: doc.id, _collection: "pedidos"}));
         } else {
             rawRequests = [];
-            snap.forEach(doc => rawRequests.push({...doc.data(), id: doc.id}));
+            snap.forEach(doc => rawRequests.push({...doc.data(), id: doc.id, _collection: "solicitudes_credito"}));
         }
 
         userCredits = [...rawOrders, ...rawRequests];
@@ -3642,7 +3828,7 @@
         }
 
         userCredits.forEach(credit => {
-            const totalBss = parseFloat(credit.totalBss.replace(" BSS", "")) || 0;
+            const totalBss = parseFloat(credit.totalBss?.toString().replace(" BSS", "") || credit.amountBss?.toString() || "0") || 0;
             const initial = totalBss * 0.25;
             const remaining = (credit.remainingDebt !== undefined) ? credit.remainingDebt : (totalBss - initial);
 
@@ -3655,25 +3841,26 @@
             container.innerHTML += `
                 <div style="background:#121216; padding:15px; border-radius:12px; border:1px solid rgba(197, 160, 89, 0.2); margin-bottom:15px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                        <span style="color:#C5A059; font-weight:800; font-size:0.75rem;">ORDEN: ${credit.orderId}</span>
+                        <span style="color:#C5A059; font-weight:800; font-size:0.75rem;">ORDEN: ${credit.orderId || 'CRÉDITO'}</span>
                         <span style="color:#888; font-size:0.6rem;">${new Date(credit.timestamp).toLocaleDateString()}</span>
                     </div>
                     <div style="color:white; font-size:0.8rem; margin-bottom:15px;">
                         DEUDA RESTANTE: <strong style="color:#C5A059;">${remaining.toFixed(2)} BSS</strong>
                     </div>
-                    <button onclick="openDebtPay('${credit.id}', ${installment}, ${remaining})" class="btn-primary full-width" style="padding:10px; font-size:0.7rem;">PAGAR / ABONAR</button>
+                    <button onclick="openDebtPay('${credit.id}', ${installment}, ${remaining}, '${credit._collection}')" class="btn-primary full-width" style="padding:10px; font-size:0.7rem;">PAGAR / ABONAR</button>
                 </div>`;
         });
     }
 
-    function openDebtPay(id, installment, remaining) {
+    function openDebtPay(id, installment, remaining, explicitCollection = null) {
         // Encontrar la deuda original para calcular porcentajes reales sobre el total de la orden
         const order = userCredits.find(o => o.id === id);
-        const totalBss = order ? (parseFloat(order.totalBss.replace(" BSS", "")) || 0) : remaining;
+        const totalBss = order ? (parseFloat(order.totalBss?.toString().replace(" BSS", "") || order.amountBss?.toString() || "0") || 0) : remaining;
         const initialBss = totalBss * 0.25;
-        const debtPrincipal = totalBss - initialBss; // La deuda real después de la inicial
+        const debtPrincipal = totalBss - initialBss;
+        const collection = explicitCollection || order?._collection || "pedidos";
 
-        currentPayingDebt = { id, installment, remaining, debtPrincipal };
+        currentPayingDebt = { id, installment, remaining, debtPrincipal, collection };
         document.getElementById('debt-pay-title').innerText = "Deuda Restante: " + remaining.toFixed(2) + " BSS";
         document.getElementById('debt-val-inst').innerText = installment.toFixed(2);
         document.getElementById('debt-val-full').innerText = remaining.toFixed(2);
@@ -3755,20 +3942,19 @@
 
         showNotification("PREPARANDO REPORTE DE ABONO...");
 
-        // Generamos un mensaje especial de abono para WhatsApp
         const msg = `💰 REPORTE DE ABONO A DEUDA\n\nOrden: ${currentPayingDebt.id}\nCliente: ${currentUserData.name}\nMonto a abonar: ${amount.toFixed(2)} BSS\n\nPor favor, confirme los datos para proceder al pago.`;
 
-        // Abrimos el selector de contacto (reutilizamos el que ya existe)
-        // Pero primero guardamos una referencia temporal para el abono
-        currentOrderId = currentPayingDebt.id; // Para que el formulario de reporte sepa a qué orden pertenece
-        currentOrderTotalBss = amount; // Sugerimos este monto en el reporte
-        isNewOrderCheckout = false; // Importante resetear esto para abonos
+        currentOrderId = currentPayingDebt.id;
+        currentOrderCollection = currentPayingDebt.collection;
+        currentOrderTotalBss = amount;
+        isNewOrderCheckout = false;
 
         document.getElementById('debt-pay-modal').style.display = 'none';
         document.getElementById('credits-modal').style.display = 'none';
+        document.getElementById('credit-status-modal').style.display = 'none';
 
         openContactChoice(msg);
-        showPayInfo('pagomovil'); // Por defecto abrimos pago móvil que es lo más común para abonos
+        showPayInfo('pagomovil');
     }
 </script>
 </body>

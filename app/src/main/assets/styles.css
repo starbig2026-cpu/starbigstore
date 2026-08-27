@@ -202,15 +202,91 @@ body::before {
   border-color: #c5a059;
 }
 
-/* NOVEDADES ADMIN */
-.delete-news-btn {
-    transition: 0.3s;
-    opacity: 0.6;
+/* ADMIN NAVIGATION REDESIGN - TRUE GRID */
+.admin-nav-tabs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); /* Cuadrícula flexible que baja automáticamente */
+    gap: 15px;
+    margin: 20px 0;
+    padding: 20px;
+    background: rgba(18, 18, 22, 0.95);
+    border: 1px solid rgba(197, 160, 89, 0.2);
+    border-radius: 20px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
 }
-.delete-news-btn:hover {
+
+.admin-nav-btn {
+    background: #08080a;
+    border: 1px solid rgba(197, 160, 89, 0.1);
+    color: rgba(255,255,255,0.4);
+    height: 100px;
+    border-radius: 16px;
+    font-size: 0.6rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    text-transform: uppercase;
+}
+
+.admin-nav-btn i {
+    width: 24px;
+    height: 24px;
+    opacity: 0.5;
+}
+
+.admin-nav-btn:hover {
+    background: rgba(197, 160, 89, 0.05);
+    border-color: rgba(197, 160, 89, 0.4);
+    color: #fff;
+    transform: translateY(-5px);
+}
+
+.admin-nav-btn.active {
+    background: #c5a059;
+    border-color: #fff;
+    color: #000;
+    box-shadow: 0 15px 30px rgba(197, 160, 89, 0.3);
+}
+
+.admin-nav-btn.active i {
+    color: #000;
     opacity: 1;
-    transform: scale(1.1);
 }
+
+@media (max-width: 480px) {
+    .admin-nav-tabs {
+        grid-template-columns: repeat(3, 1fr); /* 3 columnas en pantallas pequeñas */
+        gap: 8px;
+        padding: 12px;
+    }
+    .admin-nav-btn {
+        height: 85px;
+        font-size: 0.55rem;
+    }
+    .admin-nav-btn i {
+        width: 20px;
+        height: 20px;
+    }
+}
+
+
+
+.admin-panel-section {
+    padding-top: 20px;
+    animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
 
 #admin-news-list div {
     border-radius: 10px;

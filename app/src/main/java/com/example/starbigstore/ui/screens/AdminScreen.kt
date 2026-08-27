@@ -13,7 +13,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,7 +71,11 @@ data class CreditRequest(
     val amountBss: String = "",
     val status: String = "pending",
     val timestamp: Long = 0,
-    val adminComment: String = ""
+    val adminComment: String = "",
+    val paymentReport: PaymentReport? = null,
+    val plan: String = "",
+    val installmentsPaid: Int = 0,
+    val remainingDebt: Double? = null
 )
 
 data class CustomerRegistration(
@@ -110,7 +118,8 @@ data class Order(
     val status: String = "pending",
     val timestamp: Long = 0,
     val paymentReport: PaymentReport? = null,
-    val pointsUsed: Int = 0
+    val pointsUsed: Int = 0,
+    val collection: String = "pedidos"
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -153,12 +162,23 @@ fun AdminScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                             onValueChange = { pinInput = it },
                             placeholder = { Text("PIN DE SEGURIDAD", color = Color.White.copy(alpha = 0.3f), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
                             visualTransformation = PasswordVisualTransformation(),
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFFC5A059), unfocusedBorderColor = Color.White.copy(alpha = 0.1f)),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFFC5A059),
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
+                                focusedContainerColor = Color(0xFF1A1A20),
+                                unfocusedContainerColor = Color(0xFF1A1A20)
+                            ),
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(0.dp)
+                            shape = RoundedCornerShape(12.dp)
                         )
                         Spacer(modifier = Modifier.height(32.dp))
-                        Button(onClick = { if (pinInput == correctPin) isAuthorized = true }, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059)), shape = RoundedCornerShape(0.dp)) {
+                        Button(
+                            onClick = { if (pinInput == correctPin) isAuthorized = true },
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059)),
+                            shape = RoundedCornerShape(12.dp),
+                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
+                        ) {
                             Text("AUTENTICAR", color = Color.Black, fontWeight = FontWeight.Black)
                         }
                     }
@@ -224,6 +244,106 @@ fun AdminListContent() {
         }
     }
 
+    fun refreshCombinedList(db: FirebaseFirestore) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val pedidos = db.collection("pedidos").orderBy("timestamp", Query.Direction.DESCENDING).get().await()
+                val credits = db.collection("solicitudes_credito").whereEqualTo("status", "awaiting_verification").get().await()
+
+                val allOrders = mutableListOf<Order>()
+
+                pedidos.documents.forEach { doc ->
+                    val itemsRaw = doc.get("items") as? List<*>
+                    val items = itemsRaw?.mapNotNull { item ->
+                        val map = item as? Map<*, *>
+                        if (map != null) {
+                            OrderItem(
+                                name = map["name"] as? String ?: "",
+                                buyQty = (map["buyQty"] as? Number)?.toInt() ?: 1,
+                                paymentMethod = map["paymentMethod"] as? String ?: "cash",
+                                priceUsd = (map["priceUsd"] as? Number)?.toDouble() ?: 0.0
+                            )
+                        } else null
+                    } ?: emptyList()
+
+                    val reportMap = doc.get("paymentReport") as? Map<*, *>
+                    val report = reportMap?.let {
+                        PaymentReport(
+                            reference = it["reference"] as? String ?: "",
+                            bank = it["bank"] as? String ?: "",
+                            date = it["date"] as? String ?: "",
+                            phone = it["phone"] as? String ?: "",
+                            amount = it["amount"]?.toString() ?: "",
+                            installments = it["installments"]?.toString() ?: "1",
+                            captureBase64 = it["captureBase64"] as? String
+                        )
+                    }
+
+                    allOrders.add(Order(
+                        id = doc.id,
+                        orderId = doc.getString("orderId") ?: "ORDEN",
+                        customerEmail = doc.getString("customerEmail") ?: "",
+                        customerName = doc.getString("customerName") ?: "",
+                        items = items,
+                        totalUsd = doc.getString("totalUsd") ?: "",
+                        totalBss = doc.getString("totalBss") ?: "",
+                        status = doc.getString("status") ?: "pending",
+                        timestamp = doc.getLong("timestamp") ?: 0,
+                        paymentReport = report,
+                        pointsUsed = (doc.getLong("pointsUsed") ?: 0).toInt(),
+                        collection = "pedidos"
+                    ))
+                }
+
+                credits.documents.forEach { doc ->
+                    val reportMap = doc.get("paymentReport") as? Map<*, *>
+                    val report = reportMap?.let {
+                        PaymentReport(
+                            reference = it["reference"] as? String ?: "",
+                            bank = it["bank"] as? String ?: "",
+                            date = it["date"] as? String ?: "",
+                            phone = it["phone"] as? String ?: "",
+                            amount = it["amount"]?.toString() ?: "",
+                            installments = it["installments"]?.toString() ?: "1",
+                            captureBase64 = it["captureBase64"] as? String
+                        )
+                    }
+
+                    allOrders.add(Order(
+                        id = doc.id,
+                        orderId = "CRÉDITO",
+                        customerEmail = doc.getString("customerEmail") ?: "",
+                        customerName = doc.getString("customerName") ?: "",
+                        items = listOf(OrderItem(name = "ABONO A CRÉDITO PERSONAL", buyQty = 1, paymentMethod = "CRÉDITO", priceUsd = doc.getDouble("amountUsd") ?: 0.0)),
+                        totalUsd = "$${doc.getDouble("amountUsd") ?: 0.0}",
+                        totalBss = doc.getString("amountBss") ?: "",
+                        status = "awaiting_verification",
+                        timestamp = doc.getLong("timestamp") ?: 0,
+                        paymentReport = report,
+                        collection = "solicitudes_credito"
+                    ))
+                }
+
+                orders = allOrders.sortedByDescending { it.timestamp }
+            } catch (e: Exception) {
+                android.util.Log.e("AdminScreen", "Refresh Error", e)
+            }
+        }
+    }
+
+    fun syncCombinedOrders(db: FirebaseFirestore) {
+        // Escuchar Pedidos
+        db.collection("pedidos").orderBy("timestamp", Query.Direction.DESCENDING)
+            .addSnapshotListener { _, _ ->
+                refreshCombinedList(db)
+            }
+        // Escuchar Abonos de Créditos
+        db.collection("solicitudes_credito").whereEqualTo("status", "awaiting_verification")
+            .addSnapshotListener { _, _ ->
+                refreshCombinedList(db)
+            }
+    }
+
     LaunchedEffect(Unit) {
         db.collection("registros_clientes").orderBy("timestamp", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, _ ->
@@ -253,50 +373,7 @@ fun AdminListContent() {
             }
         }
 
-        db.collection("pedidos").orderBy("timestamp", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, _ ->
-                if (snapshot != null) orders = snapshot.documents.map { doc ->
-                    val itemsRaw = doc.get("items") as? List<*>
-                    val items = itemsRaw?.mapNotNull { item ->
-                        val map = item as? Map<*, *>
-                        if (map != null) {
-                            OrderItem(
-                                name = map["name"] as? String ?: "",
-                                buyQty = (map["buyQty"] as? Number)?.toInt() ?: 1,
-                                paymentMethod = map["paymentMethod"] as? String ?: "cash",
-                                priceUsd = (map["priceUsd"] as? Number)?.toDouble() ?: 0.0
-                            )
-                        } else null
-                    } ?: emptyList()
-
-                    val reportMap = doc.get("paymentReport") as? Map<*, *>
-                    val report = reportMap?.let {
-                        PaymentReport(
-                            reference = it["reference"] as? String ?: "",
-                            bank = it["bank"] as? String ?: "",
-                            date = it["date"] as? String ?: "",
-                            phone = it["phone"] as? String ?: "",
-                            amount = it["amount"]?.toString() ?: "",
-                            installments = it["installments"]?.toString() ?: "1",
-                            captureBase64 = it["captureBase64"] as? String
-                        )
-                    }
-
-                    Order(
-                        id = doc.id,
-                        orderId = doc.getString("orderId") ?: "",
-                        customerEmail = doc.getString("customerEmail") ?: "",
-                        customerName = doc.getString("customerName") ?: "",
-                        items = items,
-                        totalUsd = doc.getString("totalUsd") ?: "",
-                        totalBss = doc.getString("totalBss") ?: "",
-                        status = doc.getString("status") ?: "pending",
-                        timestamp = doc.getLong("timestamp") ?: 0,
-                        paymentReport = report,
-                        pointsUsed = (doc.getLong("pointsUsed") ?: 0).toInt()
-                    )
-                }
-            }
+        syncCombinedOrders(db)
 
         db.collection("novedades").orderBy("timestamp", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, _ ->
@@ -308,7 +385,6 @@ fun AdminListContent() {
                     )
                 }
             }
-
         db.collection("solicitudes_credito").orderBy("timestamp", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, _ ->
                 if (snapshot != null) creditRequests = snapshot.documents.map { doc ->
@@ -345,33 +421,61 @@ fun AdminListContent() {
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(Color(0xFF08080A))) {
-            Box(modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 20.dp)) {
-                Column(modifier = Modifier.align(Alignment.CenterStart)) {
-                    Text("CENTRAL DE INTELIGENCIA", color = Color.White.copy(alpha = 0.4f), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
-                    Text("STARBIG CONTROL", color = Color.White, fontWeight = FontWeight.Black, fontSize = 28.sp)
-                }
-                Image(painter = painterResource(id = R.drawable.logo_admin), contentDescription = null, modifier = Modifier.size(80.dp).align(Alignment.TopEnd), contentScale = ContentScale.Fit)
-            }
-
-            TrafficMonitorSection()
-            Spacer(modifier = Modifier.height(24.dp))
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .background(Color(0xFF121216))
+                    .padding(horizontal = 24.dp, vertical = 24.dp)
             ) {
-                AdminNavButton("DB", Icons.Default.Storage, selectedTab == 0, Modifier.width(80.dp)) { selectedTab = 0 }
-                AdminNavButton("STOCK", Icons.Default.Inventory, selectedTab == 1, Modifier.width(80.dp)) { selectedTab = 1 }
-                AdminNavButton("CRÉDITOS", Icons.Default.CreditCard, selectedTab == 6, Modifier.width(90.dp)) { selectedTab = 6 }
-                AdminNavButton("NOVEDAD", Icons.Default.Campaign, selectedTab == 5, Modifier.width(80.dp)) { selectedTab = 5 }
-                AdminNavButton("COBROS", Icons.Default.MonetizationOn, selectedTab == 4, Modifier.width(80.dp)) { selectedTab = 4 }
-                AdminNavButton("PAGOS", Icons.Default.Payments, selectedTab == 3, Modifier.width(80.dp)) { selectedTab = 3 }
-                AdminNavButton("SOLIC.", Icons.Default.Group, selectedTab == 2, Modifier.width(80.dp)) { selectedTab = 2 }
+                Column(modifier = Modifier.align(Alignment.CenterStart)) {
+                    Text("PANEL DE CONTROL", color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
+                    Text("ADMINISTRACIÓN", color = Color.White, fontWeight = FontWeight.Black, fontSize = 28.sp)
+                }
+                Image(painter = painterResource(id = R.drawable.logo_admin), contentDescription = null, modifier = Modifier.size(60.dp).align(Alignment.CenterEnd), contentScale = ContentScale.Fit)
             }
+            
             Spacer(modifier = Modifier.height(24.dp))
-            HorizontalDivider(color = Color(0xFFC5A059).copy(alpha = 0.15f), thickness = 0.5.dp)
+            
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                color = Color(0xFF121216),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, Color(0xFFC5A059).copy(alpha = 0.2f))
+            ) {
+                val menuItems = listOf(
+                    Triple("USUARIOS", Icons.Default.Group, 0),
+                    Triple("STOCK", Icons.Default.Inventory, 1),
+                    Triple("SOLICITUD", Icons.Default.HourglassEmpty, 2),
+                    Triple("PAGOS", Icons.Default.Payments, 3),
+                    Triple("COBROS", Icons.Default.MonetizationOn, 4),
+                    Triple("NOVEDAD", Icons.Default.Campaign, 5),
+                    Triple("CRÉDITOS", Icons.Default.CreditCard, 6)
+                )
+                
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(3),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp)
+                        .height(200.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(menuItems.size) { index ->
+                        val item = menuItems[index]
+                        AdminNavButton(
+                            text = item.first,
+                            icon = item.second,
+                            isSelected = selectedTab == item.third,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { selectedTab = item.third }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
 
             Box(modifier = Modifier.weight(1f)) {
                 when (selectedTab) {
@@ -706,67 +810,39 @@ fun AdminListContent() {
 }
 
 @Composable
-fun TrafficMonitorSection() {
-    val db = FirebaseFirestore.getInstance()
-    var onlineCount by remember { mutableIntStateOf(1) }
-    var totalRegistered by remember { mutableIntStateOf(0) }
-    var onlineHistory by remember { mutableStateOf(List(20) { 1 }) }
-    var offlineHistory by remember { mutableStateOf(List(20) { 0 }) }
-    LaunchedEffect(Unit) {
-        db.collection("registros_clientes").addSnapshotListener { snap, _ -> totalRegistered = snap?.size() ?: 0 }
-        while(true) {
-            val twoMinutesAgo = System.currentTimeMillis() - 120000
-            db.collection("presencia").whereGreaterThan("ultimoPulso", twoMinutesAgo).get().addOnSuccessListener { onlineCount = if (it.size() < 1) 1 else it.size() }
-            onlineHistory = onlineHistory.drop(1) + onlineCount
-            offlineHistory = offlineHistory.drop(1) + (totalRegistered - onlineCount).coerceAtLeast(0)
-            delay(3000)
-        }
-    }
-
-    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(0.dp), border = BorderStroke(0.5.dp, Color(0xFFC5A059).copy(0.3f))) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Text("MONITOREO DE RED", color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    Text("ACTIVIDAD REAL", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black)
-                }
-            }
-            Spacer(modifier = Modifier.height(20.dp))
-            Canvas(modifier = Modifier.fillMaxWidth().height(80.dp)) {
-                val stepX = size.width / (onlineHistory.size - 1)
-                val maxVal = maxOf(onlineHistory.maxOrNull()?.toFloat() ?: 1f, offlineHistory.maxOrNull()?.toFloat() ?: 1f, 5f)
-                fun draw(data: List<Int>, color: Color) {
-                    for (i in 0 until data.size - 1) {
-                        drawLine(color, androidx.compose.ui.geometry.Offset(i * stepX, size.height - (data[i] / maxVal * size.height)), androidx.compose.ui.geometry.Offset((i + 1) * stepX, size.height - (data[i + 1] / maxVal * size.height)), 2.dp.toPx())
-                    }
-                }
-                draw(offlineHistory, Color.Red)
-                draw(onlineHistory, Color.Green)
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                TrafficStat("ONLINE", "${onlineHistory.last()}")
-                TrafficStat("OFFLINE", "${offlineHistory.last()}")
-                TrafficStat("TOTAL", "$totalRegistered")
-            }
-        }
-    }
-}
-
-@Composable
-fun TrafficStat(label: String, value: String) {
-    Column {
-        Text(label, color = Color.White.copy(0.4f), fontSize = 8.sp, fontWeight = FontWeight.Bold)
-        Text(value, color = Color.White, fontSize = 12.sp)
-    }
-}
-
-@Composable
 fun AdminNavButton(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector, isSelected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Button(onClick = onClick, modifier = modifier.height(48.dp), shape = RoundedCornerShape(0.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isSelected) Color(0xFFC5A059) else Color(0xFF1A1A20), contentColor = if (isSelected) Color.Black else Color.White)) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, null, modifier = Modifier.size(16.dp))
-            Text(text, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+    val backgroundColor by androidx.compose.animation.animateColorAsState(
+        if (isSelected) Color(0xFFC5A059) else Color(0xFF08080A),
+        label = "bg"
+    )
+    val contentColor by androidx.compose.animation.animateColorAsState(
+        if (isSelected) Color.Black else Color.White.copy(0.5f),
+        label = "content"
+    )
+    val borderColor by androidx.compose.animation.animateColorAsState(
+        if (isSelected) Color.White.copy(0.4f) else Color(0xFFC5A059).copy(0.15f),
+        label = "border"
+    )
+    
+    Box(
+        modifier = modifier
+            .height(85.dp)
+            .background(backgroundColor, RoundedCornerShape(12.dp))
+            .border(1.dp, borderColor, RoundedCornerShape(12.dp))
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Icon(icon, null, modifier = Modifier.size(24.dp), tint = contentColor)
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = text, 
+                fontSize = 8.sp, 
+                fontWeight = FontWeight.Black, 
+                color = contentColor, 
+                letterSpacing = 0.5.sp,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
@@ -839,10 +915,10 @@ private fun deleteProduct(p: Product, db: FirebaseFirestore) {
 @Composable
 fun CustomerAdminCard(reg: CustomerRegistration, onApprove: () -> Unit, onReject: () -> Unit, onImageClick: (String) -> Unit) {
     val isActive = reg.status == "active"
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(0.dp), border = BorderStroke(0.5.dp, if(isActive) Color.Green.copy(0.4f) else Color(0xFFC5A059).copy(0.2f))) {
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, if(isActive) Color.Green.copy(0.3f) else Color(0xFFC5A059).copy(0.2f))) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row {
-                Box(modifier = Modifier.size(80.dp).background(Color(0xFF1A1A20)).clickable { onImageClick(reg.photoUrl) }) { 
+                Box(modifier = Modifier.size(80.dp).background(Color(0xFF1A1A20), RoundedCornerShape(8.dp)).clickable { onImageClick(reg.photoUrl) }) { 
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
                             .data(fixDriveUrl(reg.photoUrl))
@@ -868,7 +944,7 @@ fun CustomerAdminCard(reg: CustomerRegistration, onApprove: () -> Unit, onReject
             InfoRow(Icons.Default.Place, reg.address)
             InfoRow(Icons.Default.Phone, reg.phone)
             Spacer(modifier = Modifier.height(16.dp))
-            Box(modifier = Modifier.fillMaxWidth().height(150.dp).background(Color.Black).clickable { onImageClick(reg.idCardUrl) }) { 
+            Box(modifier = Modifier.fillMaxWidth().height(150.dp).background(Color.Black, RoundedCornerShape(8.dp)).clickable { onImageClick(reg.idCardUrl) }) { 
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(fixDriveUrl(reg.idCardUrl))
@@ -881,9 +957,9 @@ fun CustomerAdminCard(reg: CustomerRegistration, onApprove: () -> Unit, onReject
                 ) 
             }
             Spacer(modifier = Modifier.height(20.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(onClick = onReject, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red), border = BorderStroke(1.dp, Color.Red), shape = RoundedCornerShape(0.dp)) { Text("ELIMINAR") }
-                if(!isActive) Button(onClick = onApprove, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059)), shape = RoundedCornerShape(0.dp)) { Text("APROBAR", color = Color.Black) }
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                OutlinedButton(onClick = onReject, modifier = Modifier.weight(1f).height(48.dp), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red), border = BorderStroke(1.dp, Color.Red), shape = RoundedCornerShape(12.dp)) { Text("ELIMINAR") }
+                if(!isActive) Button(onClick = onApprove, modifier = Modifier.weight(1f).height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059)), shape = RoundedCornerShape(12.dp)) { Text("APROBAR", color = Color.Black, fontWeight = FontWeight.Bold) }
             }
         }
     }
@@ -895,29 +971,48 @@ fun InventorySection(products: List<Product>, bcv: Double, onAdd: () -> Unit, on
     val categories = listOf("Todos") + products.map { it.category }.distinct().sorted()
 
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column {
-                    Text("TASA BCV", color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    Text("$bcv BSS", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = Color(0xFF1A1A20),
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, Color.White.copy(0.05f))
+        ) {
+            Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column {
+                        Text("TASA BCV OFICIAL", color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text("$bcv BSS", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    IconButton(onClick = onSync, modifier = Modifier.background(Color.White.copy(0.05f), RoundedCornerShape(8.dp))) {
+                        Icon(Icons.Default.Sync, contentDescription = null, tint = Color(0xFFC5A059), modifier = Modifier.size(20.dp))
+                    }
                 }
-                Spacer(modifier = Modifier.width(12.dp))
-                IconButton(onClick = onSync, modifier = Modifier.size(24.dp)) {
-                    Icon(Icons.Default.Sync, contentDescription = null, tint = Color(0xFFC5A059), modifier = Modifier.size(18.dp))
+                Button(onClick = onRate, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059)), shape = RoundedCornerShape(8.dp), contentPadding = PaddingValues(horizontal = 16.dp)) { 
+                    Text("AJUSTAR", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp) 
                 }
             }
-            Button(onClick = onRate, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1A1A20)), shape = RoundedCornerShape(0.dp)) { Text("TASA", color = Color(0xFFC5A059)) }
         }
-        Spacer(modifier = Modifier.height(20.dp))
+        
+        Spacer(modifier = Modifier.height(24.dp))
         
         val tabIndex = categories.indexOf(selectedCategory).let { if (it == -1) 0 else it }
         
-        SecondaryScrollableTabRow(
+        ScrollableTabRow(
             selectedTabIndex = tabIndex,
             containerColor = Color.Transparent,
             contentColor = Color(0xFFC5A059),
             edgePadding = 0.dp,
-            divider = {}
+            divider = {},
+            indicator = { tabPositions ->
+                if (tabIndex < tabPositions.size) {
+                    TabRowDefaults.SecondaryIndicator(
+                        modifier = Modifier.tabIndicatorOffset(tabPositions[tabIndex]),
+                        color = Color(0xFFC5A059),
+                        height = 3.dp
+                    )
+                }
+            }
         ) {
             categories.forEach { cat ->
                 Tab(
@@ -928,12 +1023,17 @@ fun InventorySection(products: List<Product>, bcv: Double, onAdd: () -> Unit, on
             }
         }
         
-        Spacer(modifier = Modifier.height(20.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("PRODUCTOS", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black)
-            IconButton(onClick = onAdd) { Icon(Icons.Default.Add, null, tint = Color(0xFFC5A059)) }
+        Spacer(modifier = Modifier.height(24.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("GESTIÓN DE STOCK", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
+            Button(onClick = onAdd, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059).copy(0.1f)), shape = RoundedCornerShape(8.dp)) {
+                Icon(Icons.Default.Add, null, tint = Color(0xFFC5A059), modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("NUEVO", color = Color(0xFFC5A059), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
         }
-        LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Spacer(modifier = Modifier.height(16.dp))
+        LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
             val filtered = if(selectedCategory == "Todos") products else products.filter { it.category == selectedCategory }
             items(filtered) { ProductAdminItem(it, bcv, onDelete, onEdit) }
         }
@@ -942,7 +1042,7 @@ fun InventorySection(products: List<Product>, bcv: Double, onAdd: () -> Unit, on
 
 @Composable
 fun ProductAdminItem(p: Product, bcv: Double, onDelete: (Product) -> Unit, onEdit: (Product) -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(0.dp)) {
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, Color.White.copy(0.05f))) {
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
@@ -951,23 +1051,23 @@ fun ProductAdminItem(p: Product, bcv: Double, onDelete: (Product) -> Unit, onEdi
                     .crossfade(true)
                     .build(),
                 contentDescription = null,
-                modifier = Modifier.size(50.dp).background(Color.Black),
+                modifier = Modifier.size(56.dp).background(Color.Black, RoundedCornerShape(8.dp)),
                 contentScale = ContentScale.Crop,
                 error = painterResource(R.drawable.logo_admin),
                 placeholder = painterResource(R.drawable.logo_admin)
             )
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(p.name.uppercase(), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                Row {
-                    Text("$${p.priceUsd}", color = Color(0xFFC5A059), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text("${(p.priceUsd * bcv).format(2)} BSS", color = Color.White.copy(0.6f), fontSize = 11.sp)
+                Text(p.name.uppercase(), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("$${p.priceUsd}", color = Color(0xFFC5A059), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("${(p.priceUsd * bcv).format(2)} BSS", color = Color.White.copy(0.5f), fontSize = 11.sp)
                 }
-                Text("STOCK: ${p.stock}", color = Color.White.copy(0.5f), fontSize = 9.sp)
+                Text("EN STOCK: ${p.stock}", color = if(p.stock < 5) Color.Red.copy(0.7f) else Color.Green.copy(0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
             }
-            IconButton(onClick = { onEdit(p) }) { Icon(Icons.Default.Edit, null, tint = Color.White.copy(0.6f), modifier = Modifier.size(18.dp)) }
-            IconButton(onClick = { onDelete(p) }) { Icon(Icons.Default.Delete, null, tint = Color.Red.copy(0.6f), modifier = Modifier.size(18.dp)) }
+            IconButton(onClick = { onEdit(p) }) { Icon(Icons.Default.Edit, null, tint = Color.White.copy(0.4f), modifier = Modifier.size(20.dp)) }
+            IconButton(onClick = { onDelete(p) }) { Icon(Icons.Default.Delete, null, tint = Color.Red.copy(0.4f), modifier = Modifier.size(20.dp)) }
         }
     }
 }
@@ -1112,45 +1212,47 @@ fun OrderAdminCard(
 ) {
     val date = java.text.SimpleDateFormat("dd/MM/yy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(order.timestamp))
     
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(0.dp), border = BorderStroke(0.5.dp, Color(0xFFC5A059).copy(alpha = 0.2f))) {
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Color(0xFFC5A059).copy(alpha = 0.15f))) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(order.orderId, color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text(order.orderId, color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(date, color = Color.White.copy(0.4f), fontSize = 10.sp)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    IconButton(onClick = { onDelete(order) }, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.Delete, null, tint = Color.Red.copy(0.4f), modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    IconButton(onClick = { onDelete(order) }, modifier = Modifier.size(28.dp).background(Color.Red.copy(0.1f), RoundedCornerShape(6.dp))) {
+                        Icon(Icons.Default.Delete, null, tint = Color.Red.copy(0.6f), modifier = Modifier.size(16.dp))
                     }
                 }
             }
             
-            Text(order.customerName.uppercase(), color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
-            Spacer(modifier = Modifier.height(8.dp))
+            Text(order.customerName.uppercase(), color = Color.White, fontWeight = FontWeight.Black, fontSize = 16.sp)
+            Spacer(modifier = Modifier.height(12.dp))
             
-            order.items.forEach { item ->
-                Text("• ${item.buyQty}x ${item.name} (${item.paymentMethod.uppercase()})", color = Color.White.copy(0.6f), fontSize = 11.sp)
+            Column(modifier = Modifier.fillMaxWidth().background(Color.White.copy(0.03f), RoundedCornerShape(8.dp)).padding(12.dp)) {
+                order.items.forEach { item ->
+                    Text("• ${item.buyQty}x ${item.name} (${item.paymentMethod.uppercase()})", color = Color.White.copy(0.8f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                }
             }
             
             order.paymentReport?.let { report ->
                 Spacer(modifier = Modifier.height(16.dp))
-                Surface(color = Color(0xFFC5A059).copy(0.05f), border = BorderStroke(0.5.dp, Color(0xFFC5A059).copy(0.2f)), modifier = Modifier.fillMaxWidth()) {
+                Surface(color = Color(0xFFC5A059).copy(0.05f), border = BorderStroke(1.dp, Color(0xFFC5A059).copy(0.2f)), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(12.dp)) {
-                        Text("DETALLES DEL PAGO:", color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Black)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        PaymentDetailItem("REF", report.reference)
-                        PaymentDetailItem("BANCO", report.bank)
+                        Text("COMPROBANTE DE PAGO", color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        PaymentDetailItem("REFERENCIA", report.reference)
+                        PaymentDetailItem("ENTIDAD", report.bank)
                         PaymentDetailItem("MONTO", "${report.amount} BSS")
                         if(report.installments.toInt() > 1) PaymentDetailItem("CUOTAS", report.installments)
                         
                         report.captureBase64?.let { base64 ->
                             if (base64.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(12.dp))
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(120.dp)
-                                        .background(Color.Black)
+                                        .height(160.dp)
+                                        .background(Color.Black, RoundedCornerShape(8.dp))
                                         .clickable { onImageClick("data:image/jpeg;base64,$base64") },
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -1172,23 +1274,23 @@ fun OrderAdminCard(
                 }
             }
             
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(order.totalUsd, color = Color(0xFFC5A059), fontWeight = FontWeight.Black, fontSize = 16.sp)
+                Text(order.totalUsd, color = Color(0xFFC5A059), fontWeight = FontWeight.Black, fontSize = 20.sp)
                 
                 when (order.status) {
                     "pending", "awaiting_verification" -> {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = { onConfirm(order) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp), shape = RoundedCornerShape(4.dp), modifier = Modifier.height(32.dp)) {
-                                Text("APROBAR", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Black)
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Button(onClick = { onConfirm(order) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)), contentPadding = PaddingValues(horizontal = 20.dp), shape = RoundedCornerShape(10.dp), modifier = Modifier.height(40.dp)) {
+                                Text("APROBAR", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Black)
                             }
-                            Button(onClick = { onReject(order) }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp), shape = RoundedCornerShape(4.dp), modifier = Modifier.height(32.dp)) {
-                                Text("RECHAZAR", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Black)
+                            Button(onClick = { onReject(order) }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(0.2f)), contentPadding = PaddingValues(horizontal = 20.dp), shape = RoundedCornerShape(10.dp), modifier = Modifier.height(40.dp), border = BorderStroke(1.dp, Color.Red)) {
+                                Text("RECHAZAR", color = Color.Red, fontSize = 11.sp, fontWeight = FontWeight.Black)
                             }
                         }
                     }
-                    "paid" -> Text("PAGADO", color = Color(0xFF25D366), fontWeight = FontWeight.Black, fontSize = 10.sp)
-                    "rejected" -> Text("RECHAZADO", color = Color.Red, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                    "paid" -> Surface(color = Color(0xFF25D366).copy(0.1f), shape = RoundedCornerShape(6.dp)) { Text("PAGADO", color = Color(0xFF25D366), fontWeight = FontWeight.Black, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) }
+                    "rejected" -> Surface(color = Color.Red.copy(0.1f), shape = RoundedCornerShape(6.dp)) { Text("RECHAZADO", color = Color.Red, fontWeight = FontWeight.Black, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) }
                 }
             }
         }
@@ -1207,8 +1309,12 @@ private fun confirmOrderPayment(order: Order, db: FirebaseFirestore, showToast: 
     CoroutineScope(Dispatchers.IO).launch {
         try {
             var totalPointsToGain = 0
-            order.items.forEach { if(it.paymentMethod == "cash") totalPointsToGain += 25 }
-            if (order.items.any { it.paymentMethod == "credit" }) totalPointsToGain += 10
+            if (order.collection == "pedidos") {
+                order.items.forEach { if(it.paymentMethod == "cash") totalPointsToGain += 25 }
+                if (order.items.any { it.paymentMethod == "credit" }) totalPointsToGain += 10
+            } else {
+                totalPointsToGain = 10
+            }
             
             if (totalPointsToGain > 0) {
                 val userSnap = db.collection("registros_clientes").whereEqualTo("email", order.customerEmail).get().await()
@@ -1219,7 +1325,7 @@ private fun confirmOrderPayment(order: Order, db: FirebaseFirestore, showToast: 
                 }
             }
             
-            db.collection("pedidos").document(order.id).update("status", "paid").await()
+            db.collection(order.collection).document(order.id).update("status", "paid", "paymentReport", null).await()
             CoroutineScope(Dispatchers.Main).launch { showToast("✅ PAGO CONFIRMADO", false) }
         } catch (e: Exception) {
             CoroutineScope(Dispatchers.Main).launch { showToast("❌ ERROR AL CONFIRMAR", true) }
@@ -1238,7 +1344,10 @@ private fun rejectOrderPayment(order: Order, db: FirebaseFirestore, showToast: (
                     userDoc.reference.update("points", currentPoints + order.pointsUsed).await()
                 }
             }
-            db.collection("pedidos").document(order.id).update("status", "rejected").await()
+            // Si es un abono a crédito activo, regresamos al estado correspondiente
+            val isCreditOrder = order.collection == "pedidos" && order.items.any { it.paymentMethod == "credit" }
+            val newStatus = if (isCreditOrder) "active_credit" else "rejected"
+            db.collection(order.collection).document(order.id).update("status", newStatus, "paymentReport", null).await()
             CoroutineScope(Dispatchers.Main).launch { showToast("❌ PAGO RECHAZADO", true) }
         } catch (e: Exception) {
             CoroutineScope(Dispatchers.Main).launch { showToast("❌ ERROR AL RECHAZAR", true) }
@@ -1247,7 +1356,7 @@ private fun rejectOrderPayment(order: Order, db: FirebaseFirestore, showToast: (
 }
 
 private fun deleteOrder(order: Order, db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) {
-    db.collection("pedidos").document(order.id).delete().addOnSuccessListener {
+    db.collection(order.collection).document(order.id).delete().addOnSuccessListener {
         showToast("Registro eliminado", false)
     }
 }
@@ -1278,7 +1387,22 @@ fun dropdownColors() = OutlinedTextFieldDefaults.colors(focusedBorderColor = Col
 
 @Composable
 fun AdminTextField(v: String, onV: (String) -> Unit, l: String) {
-    OutlinedTextField(v, onV, label = { Text(l, fontSize = 10.sp) }, modifier = Modifier.fillMaxWidth(), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFFC5A059), unfocusedBorderColor = Color.White.copy(0.1f), focusedTextColor = Color.White, unfocusedTextColor = Color.White), shape = RoundedCornerShape(0.dp), singleLine = true)
+    OutlinedTextField(
+        value = v,
+        onValueChange = onV,
+        label = { Text(l, fontSize = 10.sp) },
+        modifier = Modifier.fillMaxWidth(),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = Color(0xFFC5A059),
+            unfocusedBorderColor = Color.White.copy(0.1f),
+            focusedTextColor = Color.White,
+            unfocusedTextColor = Color.White,
+            focusedContainerColor = Color(0xFF1A1A20),
+            unfocusedContainerColor = Color(0xFF1A1A20)
+        ),
+        shape = RoundedCornerShape(12.dp),
+        singleLine = true
+    )
 }
 
 @Composable
@@ -1330,9 +1454,9 @@ fun NewsAdminSection(
 
 @Composable
 fun NewsAdminCard(news: News, onDelete: (News) -> Unit, onImageClick: (String) -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(0.dp), border = BorderStroke(0.5.dp, Color(0xFFC5A059).copy(alpha = 0.2f))) {
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Color(0xFFC5A059).copy(alpha = 0.2f))) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Box(modifier = Modifier.fillMaxWidth().height(200.dp).background(Color.Black).clickable { onImageClick(news.imageUrl) }) {
+            Box(modifier = Modifier.fillMaxWidth().height(220.dp).background(Color.Black, RoundedCornerShape(12.dp)).clickable { onImageClick(news.imageUrl) }) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(fixDriveUrl(news.imageUrl))
@@ -1344,10 +1468,18 @@ fun NewsAdminCard(news: News, onDelete: (News) -> Unit, onImageClick: (String) -
                     error = painterResource(R.drawable.logo_admin)
                 )
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                IconButton(onClick = { onDelete(news) }) {
-                    Icon(Icons.Default.Delete, null, tint = Color.Red.copy(0.6f))
+                Button(
+                    onClick = { onDelete(news) },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(0.1f)),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, Color.Red.copy(0.3f)),
+                    contentPadding = PaddingValues(horizontal = 16.dp)
+                ) {
+                    Icon(Icons.Default.Delete, null, tint = Color.Red, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("ELIMINAR", color = Color.Red, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -1424,47 +1556,52 @@ fun CreditRequestCard(
     var adminComment by remember { mutableStateOf("") }
     val date = java.text.SimpleDateFormat("dd/MM/yy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(req.timestamp))
     
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), border = BorderStroke(0.5.dp, Color(0xFFC5A059).copy(0.3f))) {
-        Column(modifier = Modifier.padding(16.dp)) {
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Color(0xFFC5A059).copy(0.3f))) {
+        Column(modifier = Modifier.padding(20.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(date, color = Color.White.copy(0.4f), fontSize = 10.sp)
                 StatusBadge(req.status)
             }
             
-            Text(req.customerName.uppercase(), color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp)
-            Text("C.I: ${req.idNumber}", color = Color(0xFFC5A059), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            Text("TLF: ${req.phone}", color = Color.White.copy(0.6f), fontSize = 11.sp)
+            Text(req.customerName.uppercase(), color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
+            Text("DOCUMENTO: ${req.idNumber}", color = Color(0xFFC5A059), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text("CONTACTO: ${req.phone}", color = Color.White.copy(0.6f), fontSize = 12.sp)
             
-            Spacer(modifier = Modifier.height(12.dp))
-            Surface(color = Color.White.copy(0.05f), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text("MOTIVO:", color = Color(0xFFC5A059), fontSize = 9.sp, fontWeight = FontWeight.Black)
-                    Text(req.reason, color = Color.White.copy(0.8f), fontSize = 11.sp)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("BANCO: ${req.bank}", color = Color.White.copy(0.6f), fontSize = 10.sp)
-                    Text("CUENTA: ${req.account}", color = Color.White.copy(0.6f), fontSize = 10.sp)
+            Spacer(modifier = Modifier.height(16.dp))
+            Surface(color = Color.White.copy(0.05f), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("JUSTIFICACIÓN DE SOLICITUD", color = Color(0xFFC5A059), fontSize = 9.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(req.reason, color = Color.White.copy(0.9f), fontSize = 12.sp, lineHeight = 18.sp)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(color = Color.White.copy(0.05f))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("BANCO: ${req.bank}", color = Color.White.copy(0.7f), fontSize = 11.sp)
+                    Text("CUENTA: ${req.account}", color = Color.White.copy(0.7f), fontSize = 11.sp)
                 }
             }
             
-            Spacer(modifier = Modifier.height(12.dp))
-            Text("MONTO SOLICITADO:", color = Color.White.copy(0.5f), fontSize = 10.sp)
-            Text("$${req.amountUsd} (${req.amountBss} BSS)", color = Color(0xFFC5A059), fontWeight = FontWeight.Black, fontSize = 18.sp)
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("MONTO GLOBAL SOLICITADO", color = Color.White.copy(0.5f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Text("$${req.amountUsd} (${req.amountBss} BSS)", color = Color(0xFFC5A059), fontWeight = FontWeight.Black, fontSize = 22.sp)
             
             if (req.status == "pending") {
-                Spacer(modifier = Modifier.height(16.dp))
-                AdminTextField(adminComment, { adminComment = it }, "Comentario / Nota Admin")
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = { onApprove(req, adminComment) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366))) {
-                        Text("APROBAR", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Black)
+                Spacer(modifier = Modifier.height(20.dp))
+                AdminTextField(adminComment, { adminComment = it }, "Comentarios internos o instrucciones")
+                Spacer(modifier = Modifier.height(20.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Button(onClick = { onApprove(req, adminComment) }, modifier = Modifier.weight(1f).height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)), shape = RoundedCornerShape(12.dp)) {
+                        Text("APROBAR", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Black)
                     }
-                    Button(onClick = { onDeny(req, adminComment) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) {
-                        Text("DENEGAR", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black)
+                    Button(onClick = { onDeny(req, adminComment) }, modifier = Modifier.weight(1f).height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = Color.Red), shape = RoundedCornerShape(12.dp)) {
+                        Text("DENEGAR", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black)
                     }
                 }
             } else if (req.adminComment.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(10.dp))
-                Text("NOTA ADMIN: ${req.adminComment}", color = Color.White.copy(0.4f), fontSize = 10.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+                Spacer(modifier = Modifier.height(12.dp))
+                Surface(color = Color.White.copy(0.03f), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Text("NOTA ADMIN: ${req.adminComment}", color = Color.White.copy(0.4f), fontSize = 11.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, modifier = Modifier.padding(12.dp))
+                }
             }
         }
     }
