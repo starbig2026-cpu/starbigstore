@@ -148,12 +148,90 @@ body::before {
 .full-width { width: 100%; }
 .profile-avatar { width: 110px; height: 110px; border-radius: 50%; border: 3px solid #c5a059; margin: 0 auto 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
 .profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.status-box { background: rgba(197, 160, 89, 0.05); padding: 1.5rem; border-radius: 15px; margin: 2rem 0; border: 1px solid rgba(197,160,89,0.1); }
-.status-box span { font-size: 0.7rem; color: #888; letter-spacing: 1px; display: block; margin-bottom: 5px; }
-.status-box strong { color: #c5a059; font-size: 1.2rem; font-weight: 900; }
+.status-box {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(197, 160, 89, 0.05) 100%);
+    padding: 1.2rem 1.5rem;
+    border-radius: 20px;
+    margin: 1.5rem 0;
+    border: 1px solid rgba(197, 160, 89, 0.2);
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    text-align: left;
+}
+
+.status-box::before {
+    content: "";
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(197, 160, 89, 0.08) 0%, transparent 70%);
+    z-index: 0;
+    pointer-events: none;
+}
+
+.status-icon {
+    width: 48px;
+    height: 48px;
+    background: rgba(197, 160, 89, 0.15);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #c5a059;
+    z-index: 1;
+    flex-shrink: 0;
+    transition: 0.3s;
+}
+
+.status-text-container {
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.status-box span {
+    font-size: 0.6rem;
+    color: #888;
+    letter-spacing: 2px;
+    font-weight: 800;
+    text-transform: uppercase;
+    margin-bottom: 2px !important;
+}
+
+.status-box strong {
+    color: #c5a059;
+    font-size: 1.1rem;
+    font-weight: 900;
+    letter-spacing: 1px;
+    text-shadow: 0 0 15px rgba(0,0,0,0.5);
+}
 
 .profile-menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 25px; }
+.notification-badge {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: #ff4444;
+    color: white;
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 50%;
+    font-weight: 800;
+    box-shadow: 0 0 10px rgba(255, 68, 68, 0.5);
+    z-index: 10;
+    border: 1.5px solid #0d0d11;
+    min-width: 18px;
+    text-align: center;
+}
+
 .menu-item-btn {
+    position: relative; /* Asegura que el badge se posicione respecto al botón */
     background: rgba(255,255,255,0.03);
     border: 1px solid rgba(197, 160, 89, 0.2);
     color: #fff;

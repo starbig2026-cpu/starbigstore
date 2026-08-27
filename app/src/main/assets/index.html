@@ -16,7 +16,10 @@
 <body>
 
 <header class="navbar">
-    <div class="logo" onclick="handleLogoClick()">STARBIG<span>STORE</span></div>
+    <div class="logo" onclick="handleLogoClick()" style="display: flex; flex-direction: column; line-height: 1;">
+        <div>STARBIG<span>STORE</span></div>
+        <div style="font-size: 10px; letter-spacing: 2px; color: #c5a059; font-weight: 800; margin-top: 3px; opacity: 1;">RIF-V227276793</div>
+    </div>
         <div class="nav-icons">
             <label for="language-selector" style="display:none;">Idioma</label>
             <select id="language-selector" onchange="changeLanguage(this.value)" style="background:transparent; color:#c5a059; border:1px solid #c5a059; font-size:12px; cursor:pointer;">
@@ -110,15 +113,22 @@
         <div id="profile-container" class="auth-container" style="display:none; text-align:center;">
             <div class="profile-avatar"><img id="profile-img-large" src="" alt="Perfil" referrerpolicy="no-referrer"></div>
             <h2 id="profile-name">Cargando...</h2>
-            <div class="status-box"><span>ESTADO DE CUENTA:</span> <strong id="profile-status">VERIFICANDO</strong></div>
+            <div class="status-box">
+                <div class="status-icon" id="status-icon-bg"><i data-lucide="shield-check" id="status-icon-i"></i></div>
+                <div class="status-text-container">
+                    <span>ESTADO DE CUENTA</span>
+                    <strong id="profile-status">VERIFICANDO</strong>
+                </div>
+            </div>
 
             <div class="profile-menu-grid">
+                <button onclick="toggleCart()" class="menu-item-btn"><i data-lucide="shopping-cart"></i> CARRITO <span id="cart-count-profile" class="notification-badge" style="display: none;">0</span></button>
                 <button onclick="editProfile()" class="menu-item-btn"><i data-lucide="user-cog"></i> EDITAR PERFIL</button>
                 <button onclick="changePhoto()" class="menu-item-btn"><i data-lucide="camera"></i> CAMBIAR FOTO</button>
                 <button onclick="openSecurity()" class="menu-item-btn"><i data-lucide="lock"></i> SEGURIDAD</button>
                 <button onclick="viewPoints()" class="menu-item-btn"><i data-lucide="award"></i> PUNTOS: <span id="user-points">0</span></button>
-                <button onclick="openMyCredits()" class="menu-item-btn" style="grid-column: span 1; background: rgba(197, 160, 89, 0.1); border-color: #c5a059;"><i data-lucide="calendar"></i> MIS PAGOS</button>
-                <button onclick="openCreditStatus()" class="menu-item-btn" style="grid-column: span 1; background: rgba(197, 160, 89, 0.1); border-color: #c5a059;"><i data-lucide="file-text"></i> STATUS CRÉDITO</button>
+                <button onclick="openMyCredits()" class="menu-item-btn" style="background: rgba(197, 160, 89, 0.1); border-color: #c5a059;"><i data-lucide="calendar"></i> MIS PAGOS <span id="payments-count" class="notification-badge" style="display: none;">0</span></button>
+                <button onclick="openCreditStatus()" class="menu-item-btn" style="grid-column: span 2; background: rgba(197, 160, 89, 0.1); border-color: #c5a059;"><i data-lucide="file-text"></i> STATUS CRÉDITO <span id="credits-status-count" class="notification-badge" style="display: none;">0</span></button>
             </div>
 
             <button id="whatsapp-verify-btn" onclick="openContactChoice()" class="btn-primary full-width" style="background:#25D366; margin-top:25px; display:none;">WHATSAPP VERIFICACIÓN</button>
@@ -234,10 +244,10 @@
 
         <p style="color:#888; font-size: 0.6rem; font-weight: 800; margin-bottom: 15px; letter-spacing: 2px;">CONTACTAR SOPORTE</p>
         <div style="display: flex; flex-direction: column; gap: 12px;">
-            <button onclick="contactWhatsapp('+584244019899')" class="btn-primary full-width" style="background:#25D366; border:none; color:white; height: 50px;">
+            <button onclick="contactWhatsapp('+584124136485')" class="btn-primary full-width" style="background:#25D366; border:none; color:white; height: 50px;">
                 <i data-lucide="message-circle"></i> SOPORTE VENTAS
             </button>
-            <button onclick="contactWhatsapp('+584124136485')" class="btn-primary full-width" style="background:#25D366; border:none; color:white; height: 50px;">
+            <button onclick="contactWhatsapp('+584244019899')" class="btn-primary full-width" style="background:#25D366; border:none; color:white; height: 50px;">
                 <i data-lucide="message-circle"></i> SOPORTE TÉCNICO
             </button>
         </div>
@@ -732,7 +742,7 @@
             <div style="text-align:center; border-bottom:2px dashed #000; padding-bottom:15px; margin-bottom:15px;">
                 <h2 style="font-family:'Playfair Display', serif; margin:0;">STARBIG STORE</h2>
                 <p style="font-size:10px; margin:5px 0;">BOUTIQUE EXCLUSIVA</p>
-                <p style="font-size:9px;">RIF: J-501234567-0</p>
+                <p style="font-size:9px;">RIF: V-22727679-3</p>
             </div>
 
             <h3 style="text-align:center; font-size:14px; margin-bottom:20px;">COMPROBANTE DE PAGO</h3>
@@ -1072,6 +1082,7 @@
     });
 
     function openAuth() {
+        closeCart();
         document.getElementById("auth-modal").style.display = "block";
         lucide.createIcons();
     }
@@ -1193,6 +1204,7 @@
         const p = allProducts.find(x => x.id === id);
         if(!p) return;
         currentViewingProduct = p;
+        closeCart();
 
         document.getElementById('detail-img').src = fixDriveUrl(getImageUrl(p));
         document.getElementById('detail-name').innerText = p.name.toUpperCase();
@@ -1484,20 +1496,38 @@
             badge.innerText = count;
             badge.style.display = count > 0 ? 'block' : 'none';
         }
+        const profileBadge = document.getElementById('cart-count-profile');
+        if(profileBadge) {
+            profileBadge.innerText = count;
+            profileBadge.style.display = count > 0 ? 'block' : 'none';
+        }
         renderCart();
     }
 
     function toggleCart() {
         const modal = document.getElementById('cart-modal');
         const isOpening = modal.style.display !== 'block';
-        modal.style.display = isOpening ? 'block' : 'none';
 
         if (isOpening) {
+            // Cerrar otros posibles overlays abiertos para evitar superposición
+            const modalsToClose = [
+                'auth-modal', 'admin-overlay', 'product-detail-modal',
+                'credits-modal', 'security-modal', 'quantity-modal',
+                'contact-choice-modal', 'edit-profile-overlay', 'credit-terms-modal',
+                'credit-request-modal', 'credit-status-modal', 'news-overlay'
+            ];
+            modalsToClose.forEach(id => {
+                const m = document.getElementById(id);
+                if(m) m.style.display = 'none';
+            });
+
             // Forzar resincronización si hay sesión
             const email = auth.currentUser?.email || currentUserData?.email;
             if(email) startCartListener(email);
             renderCart();
         }
+
+        modal.style.display = isOpening ? 'block' : 'none';
     }
 
     function closeCart() {
@@ -1648,8 +1678,9 @@
     }
 
     function openAdmin() {
-        // Ocultar novedades al abrir admin
+        // Ocultar novedades y carrito al abrir admin
         closeNewsOverlay();
+        closeCart();
         document.getElementById('admin-overlay').style.display = 'block';
         loadAdminUsers(); loadAdminInventory();
     }
@@ -2387,7 +2418,29 @@
         if(nameEl) nameEl.innerText = name;
 
         const statusEl = document.getElementById('profile-status');
-        if(statusEl) statusEl.innerText = status.toUpperCase();
+        if(statusEl) {
+            statusEl.innerText = status.toUpperCase();
+            const iconBg = document.getElementById('status-icon-bg');
+            const iconI = document.getElementById('status-icon-i');
+
+            if(status === 'active') {
+                statusEl.style.color = '#25D366';
+                if(iconBg) iconBg.style.background = 'rgba(37, 211, 102, 0.15)';
+                if(iconBg) iconBg.style.color = '#25D366';
+                if(iconI) iconI.setAttribute('data-lucide', 'shield-check');
+            } else if(status === 'unverified') {
+                statusEl.style.color = '#c5a059';
+                if(iconBg) iconBg.style.background = 'rgba(197, 160, 89, 0.15)';
+                if(iconBg) iconBg.style.color = '#c5a059';
+                if(iconI) iconI.setAttribute('data-lucide', 'shield-alert');
+            } else {
+                statusEl.style.color = '#ff4444';
+                if(iconBg) iconBg.style.background = 'rgba(255, 68, 68, 0.15)';
+                if(iconBg) iconBg.style.color = '#ff4444';
+                if(iconI) iconI.setAttribute('data-lucide', 'shield-x');
+            }
+            if(window.lucide) lucide.createIcons();
+        }
 
         const pointsEl = document.getElementById('user-points');
         if(pointsEl) pointsEl.innerText = points;
@@ -3358,7 +3411,7 @@
             const msg = `${pendingWhatsappMsg}\n\n✅ REPORTE DE PAGO:\nRef: ${ref}\nBanco: ${bank}\nMonto: ${amount} BSS\nFecha: ${finalDate}`;
 
             // Abrir WhatsApp con el reporte incluido
-            contactWhatsapp('+584244019899', msg);
+            contactWhatsapp('+584124136485', msg);
 
             document.getElementById('contact-choice-modal').style.display = 'none';
             isNewOrderCheckout = false;
@@ -3599,6 +3652,7 @@
             showNotification("Cargando datos de perfil...", "error");
             return;
         }
+        closeCart();
         document.getElementById('credits-modal').style.display = 'block';
         loadUserCredits();
         showNotification("Cargando calendario de pagos...");
@@ -3685,6 +3739,22 @@
         }
 
         userCredits = [...rawOrders, ...rawRequests];
+
+        // Actualizar contador de pagos pendientes
+        const activeDebts = userCredits.filter(c => c.status === "active_credit" || c.status === "awaiting_verification").length;
+        const pBadge = document.getElementById('payments-count');
+        if(pBadge) {
+            pBadge.innerText = activeDebts;
+            pBadge.style.display = activeDebts > 0 ? 'block' : 'none';
+        }
+
+        // Actualizar contador de estatus de crédito (solicitudes no finalizadas)
+        const activeRequests = userCredits.filter(c => c._collection === "solicitudes_credito" && c.status !== "paid" && c.status !== "denied").length;
+        const cBadge = document.getElementById('credits-status-count');
+        if(cBadge) {
+            cBadge.innerText = activeRequests;
+            cBadge.style.display = activeRequests > 0 ? 'block' : 'none';
+        }
 
         let hasOverdue = false;
         let overdueCount = 0;
