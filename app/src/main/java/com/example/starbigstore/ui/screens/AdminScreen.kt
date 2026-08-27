@@ -84,6 +84,7 @@ data class CustomerRegistration(
     val email: String = "",
     val phone: String = "",
     val address: String = "",
+    val idNumber: String = "",
     val status: String = "unverified",
     val photoUrl: String = "",
     val idCardUrl: String = ""
@@ -348,7 +349,17 @@ fun AdminListContent() {
         db.collection("registros_clientes").orderBy("timestamp", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, _ ->
                 if (snapshot != null) registrations = snapshot.documents.map { doc ->
-                    CustomerRegistration(id = doc.id, name = doc.getString("name") ?: "S/N", email = doc.getString("email") ?: "S/E", phone = doc.getString("phone") ?: "S/P", address = doc.getString("address") ?: "S/D", status = doc.getString("status") ?: "unverified", photoUrl = doc.getString("photoUrl") ?: "", idCardUrl = doc.getString("idCardUrl") ?: "")
+                    CustomerRegistration(
+                        id = doc.id, 
+                        name = doc.getString("name") ?: "S/N", 
+                        email = doc.getString("email") ?: "S/E", 
+                        phone = doc.getString("phone") ?: "S/P", 
+                        address = doc.getString("address") ?: "S/D", 
+                        idNumber = doc.getString("idNumber") ?: "S/C",
+                        status = doc.getString("status") ?: "unverified", 
+                        photoUrl = doc.getString("photoUrl") ?: "", 
+                        idCardUrl = doc.getString("idCardUrl") ?: ""
+                    )
                 }
             }
 
@@ -451,6 +462,7 @@ fun AdminListContent() {
                     Triple("PAGOS", Icons.Default.Payments, 3),
                     Triple("COBROS", Icons.Default.MonetizationOn, 4),
                     Triple("NOVEDAD", Icons.Default.Campaign, 5),
+                    Triple("OTORGADOS", Icons.Default.FactCheck, 7),
                     Triple("CRÉDITOS", Icons.Default.CreditCard, 6)
                 )
                 
@@ -459,7 +471,7 @@ fun AdminListContent() {
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(12.dp)
-                        .height(200.dp),
+                        .height(260.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -519,9 +531,14 @@ fun AdminListContent() {
                         onImageClick = { expandedImageUrl = it }
                     )
                     6 -> CreditRequestsSection(
-                        requests = creditRequests,
+                        requests = creditRequests.filter { it.status == "pending" },
                         onApprove = { req: CreditRequest, comment: String -> updateCreditRequest(req, "approved", comment, db, showModernToast) },
                         onDeny = { req: CreditRequest, comment: String -> updateCreditRequest(req, "denied", comment, db, showModernToast) }
+                    )
+                    7 -> CreditRequestsSection(
+                        requests = creditRequests.filter { it.status == "approved" },
+                        onApprove = { _, _ -> },
+                        onDeny = { _, _ -> }
                     )
                 }
             }
@@ -701,7 +718,7 @@ fun AdminListContent() {
                                 put("folderName", "NOVEDADES_STARBIG")
                                 put("data", org.json.JSONObject().apply {
                                     put("fecha", java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date()))
-                                    put("nombre", "FLYER APP")
+                                    put("nombre", "FLYER NOVEDAD")
                                     put("precio", 0)
                                 })
                             }
@@ -935,7 +952,8 @@ fun CustomerAdminCard(reg: CustomerRegistration, onApprove: () -> Unit, onReject
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
                     Text(reg.name.uppercase(), fontWeight = FontWeight.Black, color = Color.White, fontSize = 16.sp)
-                    Text(reg.email, color = Color(0xFFC5A059), fontSize = 11.sp)
+                    Text("C.I: ${reg.idNumber}", color = Color(0xFFC5A059), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(reg.email, color = Color.White.copy(0.4f), fontSize = 11.sp)
                     Spacer(modifier = Modifier.height(8.dp))
                     StatusBadge(reg.status)
                 }
@@ -1521,6 +1539,17 @@ fun AddNewsDialog(onDismiss: () -> Unit, onConfirm: (Uri) -> Unit) {
 
 private fun deleteNews(news: News, db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) {
     db.collection("novedades").document(news.id).delete().addOnSuccessListener {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val json = org.json.JSONObject().apply {
+                    put("action", "deleteProduct")
+                    put("sheetName", "NOVEDADES")
+                    put("nombre", "FLYER NOVEDAD")
+                    put("imageUrl", news.imageUrl)
+                }
+                OkHttpClient().newCall(Request.Builder().url(GOOGLE_SHEETS_URL).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
+            } catch (_: Exception) {}
+        }
         showToast("Novedad eliminada", false)
     }
 }
@@ -1613,6 +1642,23 @@ private fun updateCreditRequest(req: CreditRequest, status: String, comment: Str
         "adminComment", comment,
         "processedTimestamp", System.currentTimeMillis()
     ).addOnSuccessListener {
+        if (status == "approved") {
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val json = org.json.JSONObject().apply {
+                        put("action", "logCredit")
+                        put("name", req.customerName)
+                        put("idNumber", req.idNumber)
+                        put("amountUsd", req.amountUsd)
+                        put("amountBss", req.amountBss)
+                        put("plan", req.plan)
+                        put("reqId", req.id)
+                        put("comment", comment)
+                    }
+                    OkHttpClient().newCall(Request.Builder().url(GOOGLE_SHEETS_URL).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
+                } catch (_: Exception) {}
+            }
+        }
         showToast("✅ SOLICITUD ${status.uppercase()}", false)
     }
 }

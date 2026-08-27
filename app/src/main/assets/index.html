@@ -308,6 +308,9 @@
             <div id="adm-tab-sales" class="admin-nav-btn" onclick="switchAdminTab('sales')">
                 <i data-lucide="receipt"></i> COBRANZAS
             </div>
+            <div id="adm-tab-credits-history" class="admin-nav-btn" onclick="switchAdminTab('credits-history')">
+                <i data-lucide="fact-check"></i> OTORGADOS
+            </div>
             <div id="adm-tab-credits" class="admin-nav-btn" onclick="switchAdminTab('credits')">
                 <i data-lucide="credit-card"></i> CRÉDITOS
             </div>
@@ -382,8 +385,13 @@
         </div>
 
         <div id="admin-content-credits" class="admin-panel-section" style="display:none;">
-            <h3 style="color:white; margin-bottom:20px; font-weight:900; font-size:14px; letter-spacing:2px;">SOLICITUDES DE CRÉDITO</h3>
-            <div id="admin-credits-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;"></div>
+            <h3 style="color:white; margin-bottom:20px; font-weight:900; font-size:14px; letter-spacing:2px;">SOLICITUDES PENDIENTES</h3>
+            <div id="admin-credits-list-pending" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;"></div>
+        </div>
+
+        <div id="admin-content-credits-history" class="admin-panel-section" style="display:none;">
+            <h3 style="color:white; margin-bottom:20px; font-weight:900; font-size:14px; letter-spacing:2px;">CRÉDITOS OTORGADOS (HISTORIAL)</h3>
+            <div id="admin-credits-list-approved" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;"></div>
         </div>
     </div>
 </div>
@@ -1668,6 +1676,7 @@
         document.getElementById('admin-content-news').style.display = tab === 'news' ? 'block' : 'none';
         document.getElementById('admin-content-sales').style.display = tab === 'sales' ? 'block' : 'none';
         document.getElementById('admin-content-credits').style.display = tab === 'credits' ? 'block' : 'none';
+        document.getElementById('admin-content-credits-history').style.display = tab === 'credits-history' ? 'block' : 'none';
 
         const payPanel = document.getElementById('admin-content-payments');
         if (payPanel) payPanel.style.display = tab === 'payments' ? 'block' : 'none';
@@ -1678,7 +1687,7 @@
             'users': 'adm-tab-users', 'db': 'adm-tab-db',
             'inventory': 'adm-tab-inv', 'news': 'adm-tab-news',
             'sales': 'adm-tab-sales', 'payments': 'adm-tab-pay',
-            'credits': 'adm-tab-credits'
+            'credits': 'adm-tab-credits', 'credits-history': 'adm-tab-credits-history'
         };
         document.getElementById(tabIdMap[tab]).classList.add('active');
         lucide.createIcons();
@@ -1686,13 +1695,16 @@
         if(tab === 'news') loadAdminNews();
         if(tab === 'sales') loadAdminSales();
         if(tab === 'payments') loadAdminPayments();
-        if(tab === 'credits') loadAdminCreditRequests();
+        if(tab === 'credits' || tab === 'credits-history') loadAdminCreditRequests();
     }
 
     function loadAdminCreditRequests() {
         db.collection("solicitudes_credito").orderBy("timestamp", "desc").onSnapshot(snap => {
-            const list = document.getElementById('admin-credits-list');
-            list.innerHTML = "";
+            const listPending = document.getElementById('admin-credits-list-pending');
+            const listApproved = document.getElementById('admin-credits-list-approved');
+            listPending.innerHTML = "";
+            listApproved.innerHTML = "";
+
             snap.forEach(doc => {
                 const req = doc.data();
                 const date = new Date(req.timestamp).toLocaleString();
@@ -1731,7 +1743,9 @@
                         <div style="font-size:10px; color:#666; font-style:italic;"><strong>NOTA:</strong> ${req.adminComment || 'Sin comentarios'}</div>
                     `}
                 `;
-                list.appendChild(card);
+
+                if(req.status === 'approved') listApproved.appendChild(card);
+                else if(req.status === 'pending') listPending.appendChild(card);
             });
         });
     }
@@ -1739,11 +1753,33 @@
     async function updateCreditRequestWeb(id, status) {
         const comment = document.getElementById('note-' + id).value;
         try {
-            await db.collection("solicitudes_credito").doc(id).update({
+            const reqRef = db.collection("solicitudes_credito").doc(id);
+            const reqDoc = await reqRef.get();
+            const reqData = reqDoc.data();
+
+            await reqRef.update({
                 status: status,
                 adminComment: comment,
                 processedTimestamp: Date.now()
             });
+
+            // Si se aprueba, registrar en Google Sheets (CREDITOS_OTORGADOS)
+            if (status === 'approved') {
+                fetch(googleSheetsUrl, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: "logCredit",
+                        name: reqData.customerName,
+                        idNumber: reqData.idNumber,
+                        amountUsd: reqData.amountUsd,
+                        amountBss: reqData.amountBss,
+                        plan: reqData.plan,
+                        reqId: id,
+                        comment: comment
+                    })
+                });
+            }
+
             showNotification(`SOLICITUD ${status.toUpperCase()} CON ÉXITO`);
         } catch(e) {
             showNotification("Error al procesar solicitud", "error");
@@ -1781,18 +1817,22 @@
             snap.forEach(doc => {
                 const u = doc.data();
                 const card = `
-                    <div style="background:#121216; padding:15px; border:0.5px solid #c5a05944; color:white; margin-bottom:15px;">
+                    <div style="background:#121216; padding:15px; border:0.5px solid #c5a05944; color:white; margin-bottom:15px; border-radius:15px;">
                         <div style="display:flex; align-items:center; margin-bottom:10px;">
-                            <img src="${fixDriveUrl(u.photoUrl)}" onclick="expandImage('${u.photoUrl}')" style="width:60px; height:60px; object-fit:cover; border:1px solid #C5A059; margin-right:15px;" referrerpolicy="no-referrer">
-                            <div><div style="font-weight:bold;">${u.name.toUpperCase()}</div><div style="color:#C5A059; font-size:11px;">${u.email}</div></div>
+                            <img src="${fixDriveUrl(u.photoUrl)}" onclick="expandImage('${u.photoUrl}')" style="width:60px; height:60px; object-fit:cover; border:1px solid #C5A059; margin-right:15px; border-radius:10px;" referrerpolicy="no-referrer">
+                            <div>
+                                <div style="font-weight:bold; font-size:14px;">${u.name.toUpperCase()}</div>
+                                <div style="color:#C5A059; font-size:11px; font-weight:800; margin:2px 0;">ID: ${u.idNumber || 'NO REGISTRADO'}</div>
+                                <div style="color:#666; font-size:10px;">${u.email}</div>
+                            </div>
                         </div>
-                        <div style="font-size:10px; color:#aaa; margin-bottom:10px;"><strong>DIR:</strong> ${u.address}</div>
-                        <div style="background:#000; height:120px; display:flex; justify-content:center; align-items:center; border:1px dashed #444; margin-bottom:15px; cursor:pointer;" onclick="expandImage('${u.idCardUrl}')">
+                        <div style="font-size:10px; color:#aaa; margin-bottom:10px; background:rgba(255,255,255,0.02); padding:8px; border-radius:5px;"><strong>DIR:</strong> ${u.address}</div>
+                        <div style="background:#000; height:120px; display:flex; justify-content:center; align-items:center; border:1px dashed #444; margin-bottom:15px; cursor:pointer; border-radius:10px; overflow:hidden;" onclick="expandImage('${u.idCardUrl}')">
                             <img src="${fixDriveUrl(u.idCardUrl)}" style="max-width:100%; max-height:100%;" referrerpolicy="no-referrer">
                         </div>
                         <div style="display:flex; gap:10px;">
-                            ${u.status === 'unverified' ? `<button onclick="adminAction('${doc.id}', 'active', '${u.email}')" style="flex:1; background:#C5A059; border:none; padding:8px; font-weight:bold;">APROBAR</button>` : ''}
-                            <button onclick="adminAction('${doc.id}', 'delete', '${u.email}')" style="flex:1; background:transparent; color:#ff4444; border:1px solid #ff4444; padding:8px;">BORRAR</button>
+                            ${u.status === 'unverified' ? `<button onclick="adminAction('${doc.id}', 'active', '${u.email}')" style="flex:1; background:#C5A059; border:none; padding:10px; font-weight:bold; border-radius:8px; cursor:pointer; font-size:10px;">APROBAR CLIENTE</button>` : ''}
+                            <button onclick="adminAction('${doc.id}', 'delete', '${u.email}')" style="flex:1; background:transparent; color:#ff4444; border:1px solid #ff4444; padding:10px; border-radius:8px; cursor:pointer; font-size:10px;">BORRAR</button>
                         </div>
                     </div>`;
                 if(u.status === 'active') activeList.innerHTML += card; else pendingList.innerHTML += card;
@@ -3517,9 +3557,24 @@
                     <button class="delete-news-btn" style="background:none; border:none; color:#ff4444; cursor:pointer;"><i data-lucide="trash-2"></i></button>
                 </div>`;
             card.querySelector('.delete-news-btn').onclick = async () => {
-                if(confirm("¿Eliminar esta novedad?")) {
+                if(confirm("¿Eliminar esta novedad de Firebase y Excel?")) {
+                    const imageUrl = news.imageUrl;
+                    // 1. Borrar de Firestore inmediatamente para actualizar la App/Web
                     await db.collection("novedades").doc(news.id).delete();
-                    showNotification("Novedad eliminada");
+
+                    // 2. Borrar de Sheets y Drive usando la URL como ID
+                    fetch(googleSheetsUrl, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        body: JSON.stringify({
+                            action: "deleteProduct",
+                            sheetName: "NOVEDADES",
+                            nombre: "FLYER NOVEDAD",
+                            imageUrl: imageUrl
+                        })
+                    });
+
+                    showNotification("✅ NOVEDAD ELIMINADA POR COMPLETO");
                 }
             };
             list.appendChild(card);
