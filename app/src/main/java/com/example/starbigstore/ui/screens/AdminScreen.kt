@@ -12,6 +12,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.FactCheck
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -221,15 +223,16 @@ fun AdminListContent() {
     var newsToDelete by remember { mutableStateOf<News?>(null) }
     var creditRequestToDelete by remember { mutableStateOf<CreditRequest?>(null) }
     var creditRequestToReceipt by remember { mutableStateOf<CreditRequest?>(null) }
+    var orderToReceipt by remember { mutableStateOf<Order?>(null) }
     var showRateDialog by remember { mutableStateOf(false) }
     val db = FirebaseFirestore.getInstance()
     val context = LocalContext.current
     
     // Notificación moderna para Compose
-    var snackbarHostState = remember { SnackbarHostState() }
+    val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    val showModernToast: (String, Boolean) -> Unit = { msg, isError ->
+    val showModernToast: (String, Boolean) -> Unit = { msg, _ ->
         scope.launch {
             snackbarHostState.showSnackbar(
                 message = msg,
@@ -261,7 +264,7 @@ fun AdminListContent() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val pedidos = db.collection("pedidos").orderBy("timestamp", Query.Direction.DESCENDING).get().await()
-                val credits = db.collection("solicitudes_credito").whereEqualTo("status", "awaiting_verification").get().await()
+                val credits = db.collection("solicitudes_credito").orderBy("timestamp", Query.Direction.DESCENDING).get().await()
 
                 val allOrders = mutableListOf<Order>()
 
@@ -310,31 +313,31 @@ fun AdminListContent() {
 
                 credits.documents.forEach { doc ->
                     val reportMap = doc.get("paymentReport") as? Map<*, *>
-                    val report = reportMap?.let {
-                        PaymentReport(
-                            reference = it["reference"] as? String ?: "",
-                            bank = it["bank"] as? String ?: "",
-                            date = it["date"] as? String ?: "",
-                            phone = it["phone"] as? String ?: "",
-                            amount = it["amount"]?.toString() ?: "",
-                            installments = it["installments"]?.toString() ?: "1",
-                            captureBase64 = it["captureBase64"] as? String
+                    if (reportMap != null) {
+                        val report = PaymentReport(
+                            reference = reportMap["reference"] as? String ?: "",
+                            bank = reportMap["bank"] as? String ?: "",
+                            date = reportMap["date"] as? String ?: "",
+                            phone = reportMap["phone"] as? String ?: "",
+                            amount = reportMap["amount"]?.toString() ?: "",
+                            installments = reportMap["installments"]?.toString() ?: "1",
+                            captureBase64 = reportMap["captureBase64"] as? String
                         )
-                    }
 
-                    allOrders.add(Order(
-                        id = doc.id,
-                        orderId = "CRÉDITO",
-                        customerEmail = doc.getString("customerEmail") ?: "",
-                        customerName = doc.getString("customerName") ?: "",
-                        items = listOf(OrderItem(name = "ABONO A CRÉDITO PERSONAL", buyQty = 1, paymentMethod = "CRÉDITO", priceUsd = doc.getDouble("amountUsd") ?: 0.0)),
-                        totalUsd = "$${doc.getDouble("amountUsd") ?: 0.0}",
-                        totalBss = doc.getString("amountBss") ?: "",
-                        status = "awaiting_verification",
-                        timestamp = doc.getLong("timestamp") ?: 0,
-                        paymentReport = report,
-                        collection = "solicitudes_credito"
-                    ))
+                        allOrders.add(Order(
+                            id = doc.id,
+                            orderId = "CRÉDITO",
+                            customerEmail = doc.getString("customerEmail") ?: "",
+                            customerName = doc.getString("customerName") ?: "",
+                            items = listOf(OrderItem(name = "ABONO A CRÉDITO PERSONAL", buyQty = 1, paymentMethod = "CRÉDITO", priceUsd = doc.getDouble("amountUsd") ?: 0.0)),
+                            totalUsd = "$${doc.getDouble("amountUsd") ?: 0.0}",
+                            totalBss = doc.getString("amountBss") ?: "",
+                            status = doc.getString("status") ?: "pending",
+                            timestamp = doc.getLong("timestamp") ?: 0,
+                            paymentReport = report,
+                            collection = "solicitudes_credito"
+                        ))
+                    }
                 }
 
                 orders = allOrders.sortedByDescending { it.timestamp }
@@ -345,16 +348,9 @@ fun AdminListContent() {
     }
 
     fun syncCombinedOrders(db: FirebaseFirestore) {
-        // Escuchar Pedidos
         db.collection("pedidos").orderBy("timestamp", Query.Direction.DESCENDING)
-            .addSnapshotListener { _, _ ->
-                refreshCombinedList(db)
-            }
-        // Escuchar Abonos de Créditos
-        db.collection("solicitudes_credito").whereEqualTo("status", "awaiting_verification")
-            .addSnapshotListener { _, _ ->
-                refreshCombinedList(db)
-            }
+            .addSnapshotListener { _, _ -> refreshCombinedList(db) }
+        db.collection("solicitudes_credito").addSnapshotListener { _, _ -> refreshCombinedList(db) }
     }
 
     LaunchedEffect(Unit) {
@@ -401,11 +397,7 @@ fun AdminListContent() {
         db.collection("novedades").orderBy("timestamp", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, _ ->
                 if (snapshot != null) newsList = snapshot.documents.map { doc ->
-                    News(
-                        id = doc.id,
-                        imageUrl = doc.getString("imageUrl") ?: "",
-                        timestamp = doc.getLong("timestamp") ?: 0
-                    )
+                    News(id = doc.id, imageUrl = doc.getString("imageUrl") ?: "", timestamp = doc.getLong("timestamp") ?: 0)
                 }
             }
         db.collection("solicitudes_credito").orderBy("timestamp", Query.Direction.DESCENDING)
@@ -436,7 +428,7 @@ fun AdminListContent() {
 
         db.collection("config").document("metodos_pago").addSnapshotListener { snapshot, _ ->
             if (snapshot != null && snapshot.exists()) {
-                paymentSettings = snapshot.data as Map<String, String>
+                paymentSettings = snapshot.data?.mapValues { it.value.toString() } ?: emptyMap()
             }
         }
 
@@ -475,7 +467,7 @@ fun AdminListContent() {
                     Triple("PAGOS", Icons.Default.Payments, 3),
                     Triple("COBROS", Icons.Default.MonetizationOn, 4),
                     Triple("NOVEDAD", Icons.Default.Campaign, 5),
-                    Triple("OTORGADOS", Icons.Default.FactCheck, 7),
+                    Triple("OTORGADOS", Icons.AutoMirrored.Filled.FactCheck, 7),
                     Triple("CRÉDITOS", Icons.Default.CreditCard, 6)
                 )
                 
@@ -535,6 +527,7 @@ fun AdminListContent() {
                         onRejectPayment = { rejectOrderPayment(it, db, showModernToast) },
                         onDeleteSale = { deleteOrder(it, db, showModernToast) },
                         onClearHistory = { clearCompletedOrders(db, showModernToast) },
+                        onViewReceipt = { orderToReceipt = it },
                         onImageClick = { expandedImageUrl = it }
                     )
                     5 -> NewsAdminSection(
@@ -574,246 +567,68 @@ fun AdminListContent() {
                             val base64String = expandedImageUrl!!.substringAfter("base64,")
                             android.util.Base64.decode(base64String, android.util.Base64.DEFAULT)
                         } catch(e: Exception) { expandedImageUrl }
-                    } else {
-                        expandedImageUrl
-                    }
-
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(imageData)
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxWidth(0.95f),
-                        contentScale = ContentScale.Fit,
-                        error = painterResource(R.drawable.logo_admin)
-                    )
+                    } else { expandedImageUrl }
+                    AsyncImage(model = ImageRequest.Builder(LocalContext.current).data(imageData).crossfade(true).build(), contentDescription = null, modifier = Modifier.fillMaxWidth(0.95f), contentScale = ContentScale.Fit, error = painterResource(R.drawable.logo_admin))
                 }
             }
         }
 
         if (showAddProductDialog || productToEdit != null) {
-            AddProductDialog(
-                editingProduct = productToEdit,
-                onDismiss = {
-                    showAddProductDialog = false
-                    productToEdit = null
-                },
-                onConfirm = { product, uri ->
-                    isLoading = true
-                    CoroutineScope(Dispatchers.IO).launch {
-                        try {
-                            val base64 = uri?.let { u ->
-                                context.contentResolver.openInputStream(u)?.use { it.readBytes() }?.let {
-                                    android.util.Base64.encodeToString(it, android.util.Base64.NO_WRAP)
-                                }
-                            }
-
-                            val editing = productToEdit
-                            val oldCategory = editing?.category?.let {
-                                java.text.Normalizer.normalize(it, java.text.Normalizer.Form.NFD)
-                                    .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
-                                    .uppercase()
-                            }
-                            val oldName = editing?.name
-
-                            val normalizedCat = java.text.Normalizer.normalize(product.category, java.text.Normalizer.Form.NFD)
-                                .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
-                                .uppercase()
-
-                            val json = org.json.JSONObject().apply {
-                                put("action", "addProduct")
-                                put("sheetName", normalizedCat)
-                                if (editing != null) {
-                                    put("oldCategory", oldCategory)
-                                    put("oldName", oldName)
-                                }
-                                put("photoBase64", base64 ?: "")
-                                put("fileName", "PROD_${System.currentTimeMillis()}.jpg")
-                                put("folderName", "PRODUCTOS_STARBIG")
-                                put("data", org.json.JSONObject().apply {
-                                    put("fecha", java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date()))
-                                    put("nombre", product.name)
-                                    put("precio", product.priceUsd)
-                                    put("stock", product.stock)
-                                    put("coleccion", product.collection)
-                                    put("descripcion", product.description)
-                                    put("credito", if(product.allowCredit) "SÍ" else "NO")
-                                    put("imagen", if(base64 == null) product.imageUrl else "")
-                                })
-                            }
-
-                            val response = OkHttpClient().newCall(Request.Builder().url(GOOGLE_SHEETS_URL).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
-                            val respBody = response.body?.string()
-                            
-                            val driveUrl = if (respBody != null && respBody.startsWith("{")) {
-                                org.json.JSONObject(respBody).optString("imageUrl")
-                            } else ""
-
-                            val finalProductMap = hashMapOf(
-                                "name" to product.name,
-                                "priceUsd" to product.priceUsd,
-                                "stock" to product.stock,
-                                "category" to product.category,
-                                "collection" to product.collection,
-                                "description" to product.description,
-                                "allowCredit" to product.allowCredit,
-                                "imageUrl" to if (driveUrl.isNotEmpty()) driveUrl else product.imageUrl,
-                                "timestamp" to System.currentTimeMillis()
-                            )
-                            
-                            if (editing != null) {
-                                db.collection("productos").document(editing.id).update(finalProductMap as Map<String, Any>).await()
-                            } else {
-                                db.collection("productos").add(finalProductMap).await()
-                            }
-
-                            CoroutineScope(Dispatchers.Main).launch {
-                                isLoading = false
-                                showAddProductDialog = false
-                                productToEdit = null
-                                showModernToast("✅ PRODUCTO GUARDADO", false)
-                            }
-                        } catch (e: Exception) {
-                            android.util.Log.e("AdminProduct", "Error: ${e.message}")
-                            CoroutineScope(Dispatchers.Main).launch {
-                                isLoading = false
-                                showModernToast("❌ ERROR AL GUARDAR", true)
-                            }
+            AddProductDialog(editingProduct = productToEdit, onDismiss = { showAddProductDialog = false; productToEdit = null }, onConfirm = { product, uri ->
+                isLoading = true
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val base64 = uri?.let { u -> context.contentResolver.openInputStream(u)?.use { it.readBytes() }?.let { android.util.Base64.encodeToString(it, android.util.Base64.NO_WRAP) } }
+                        val editing = productToEdit
+                        val oldCategory = editing?.category?.let { java.text.Normalizer.normalize(it, java.text.Normalizer.Form.NFD).replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "").uppercase() }
+                        val oldName = editing?.name
+                        val normalizedCat = java.text.Normalizer.normalize(product.category, java.text.Normalizer.Form.NFD).replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "").uppercase()
+                        val json = org.json.JSONObject().apply {
+                            put("action", "addProduct"); put("sheetName", normalizedCat)
+                            if (editing != null) { put("oldCategory", oldCategory); put("oldName", oldName) }
+                            put("photoBase64", base64 ?: ""); put("fileName", "PROD_${System.currentTimeMillis()}.jpg"); put("folderName", "PRODUCTOS_STARBIG")
+                            put("data", org.json.JSONObject().apply {
+                                put("fecha", java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date()))
+                                put("nombre", product.name); put("precio", product.priceUsd); put("stock", product.stock); put("coleccion", product.collection); put("descripcion", product.description); put("credito", if(product.allowCredit) "SÍ" else "NO"); put("imagen", if(base64 == null) product.imageUrl else "")
+                            })
                         }
-                    }
+                        val response = OkHttpClient().newCall(Request.Builder().url(GOOGLE_SHEETS_URL).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
+                        val driveUrl = response.body?.string()?.let { if(it.startsWith("{")) org.json.JSONObject(it).optString("imageUrl") else "" } ?: ""
+                        val finalProductMap = hashMapOf("name" to product.name, "priceUsd" to product.priceUsd, "stock" to product.stock, "category" to product.category, "collection" to product.collection, "description" to product.description, "allowCredit" to product.allowCredit, "imageUrl" to if (driveUrl.isNotEmpty()) driveUrl else product.imageUrl, "timestamp" to System.currentTimeMillis())
+                        if (editing != null) db.collection("productos").document(editing.id).update(finalProductMap as Map<String, Any>).await()
+                        else db.collection("productos").add(finalProductMap).await()
+                        CoroutineScope(Dispatchers.Main).launch { isLoading = false; showAddProductDialog = false; productToEdit = null; showModernToast("✅ PRODUCTO GUARDADO", false) }
+                    } catch (e: Exception) { CoroutineScope(Dispatchers.Main).launch { isLoading = false; showModernToast("❌ ERROR AL GUARDAR", true) } }
                 }
-            )
+            })
         }
 
         if (productToDelete != null) {
-            AlertDialog(
-                onDismissRequest = { productToDelete = null },
-                containerColor = Color(0xFF121216),
-                title = { Text("¿ELIMINAR PRODUCTO?", color = Color.White, fontWeight = FontWeight.Black) },
-                text = { Text("Esta acción eliminará ${productToDelete?.name?.uppercase()} permanentemente de Firebase y Excel.", color = Color.White.copy(0.7f)) },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            val p = productToDelete!!
-                            productToDelete = null
-                            deleteProduct(p, db)
-                            showModernToast("✅ PRODUCTO ELIMINADO", false)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
-                    ) { Text("ELIMINAR", color = Color.White) }
-                },
-                dismissButton = {
-                    TextButton(onClick = { productToDelete = null }) { Text("CANCELAR", color = Color.White.copy(0.6f)) }
-                }
-            )
+            AlertDialog(onDismissRequest = { productToDelete = null }, containerColor = Color(0xFF121216), title = { Text("¿ELIMINAR PRODUCTO?", color = Color.White, fontWeight = FontWeight.Black) }, text = { Text("Esta acción eliminará ${productToDelete?.name?.uppercase()} permanentemente.", color = Color.White.copy(0.7f)) }, confirmButton = { Button(onClick = { val p = productToDelete!!; productToDelete = null; deleteProduct(p, db); showModernToast("✅ PRODUCTO ELIMINADO", false) }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("ELIMINAR", color = Color.White) } }, dismissButton = { TextButton(onClick = { productToDelete = null }) { Text("CANCELAR", color = Color.White.copy(0.6f)) } })
         }
 
         if (showAddNewsDialog) {
-            AddNewsDialog(
-                onDismiss = { showAddNewsDialog = false },
-                onConfirm = { uri ->
-                    isLoading = true
-                    CoroutineScope(Dispatchers.IO).launch {
-                        try {
-                            // Convertimos la imagen a Base64 para subirla a Google Drive
-                            val base64 = try {
-                                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }?.let {
-                                    android.util.Base64.encodeToString(it, android.util.Base64.NO_WRAP)
-                                }
-                            } catch (_: Exception) { null }
-
-                            if (base64 == null) throw Exception("Error al procesar imagen")
-
-                            // Sincronizar con Google Drive para obtener un link permanente funcional
-                            val json = org.json.JSONObject().apply {
-                                put("action", "addProduct") // Usamos addProduct porque tu script ya maneja subida a Drive aquí
-                                put("sheetName", "NOVEDADES")
-                                put("photoBase64", base64)
-                                put("fileName", "NEWS_${System.currentTimeMillis()}.jpg")
-                                put("folderName", "NOVEDADES_STARBIG")
-                                put("data", org.json.JSONObject().apply {
-                                    put("fecha", java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date()))
-                                    put("nombre", "FLYER NOVEDAD")
-                                    put("precio", 0)
-                                })
-                            }
-
-                            val response = OkHttpClient().newCall(Request.Builder().url(GOOGLE_SHEETS_URL).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
-                            val respBody = response.body?.string()
-                            
-                            if (respBody != null) {
-                                val resJson = org.json.JSONObject(respBody)
-                                val driveUrl = resJson.optString("imageUrl")
-                                
-                                if (driveUrl.isNotEmpty()) {
-                                    // Guardamos en Firestore con el link de Drive funcional
-                                    val news = News(imageUrl = driveUrl, timestamp = Date().time)
-                                    db.collection("novedades").add(news).await()
-
-                                    CoroutineScope(Dispatchers.Main).launch {
-                                        isLoading = false
-                                        showAddNewsDialog = false
-                                        showModernToast("✅ NOVEDAD PUBLICADA", false)
-                                    }
-                                } else throw Exception("Link de Drive vacío")
-                            } else throw Exception("Sin respuesta del servidor")
-
-                        } catch (e: Exception) {
-                            android.util.Log.e("AdminNews", "Error: ${e.message}")
-                            CoroutineScope(Dispatchers.Main).launch {
-                                isLoading = false
-                                showModernToast("❌ ERROR AL PUBLICAR", true)
-                            }
-                        }
-                    }
+            AddNewsDialog(onDismiss = { showAddNewsDialog = false }, onConfirm = { uri ->
+                isLoading = true
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val base64 = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }?.let { android.util.Base64.encodeToString(it, android.util.Base64.NO_WRAP) } ?: throw Exception("Error al procesar imagen")
+                        val json = org.json.JSONObject().apply { put("action", "addProduct"); put("sheetName", "NOVEDADES"); put("photoBase64", base64); put("fileName", "NEWS_${System.currentTimeMillis()}.jpg"); put("folderName", "NOVEDADES_STARBIG"); put("data", org.json.JSONObject().apply { put("fecha", java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date())); put("nombre", "FLYER NOVEDAD"); put("precio", 0) }) }
+                        val response = OkHttpClient().newCall(Request.Builder().url(GOOGLE_SHEETS_URL).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
+                        val driveUrl = response.body?.string()?.let { org.json.JSONObject(it).optString("imageUrl") } ?: throw Exception("Link de Drive vacío")
+                        db.collection("novedades").add(News(imageUrl = driveUrl, timestamp = Date().time)).await()
+                        CoroutineScope(Dispatchers.Main).launch { isLoading = false; showAddNewsDialog = false; showModernToast("✅ NOVEDAD PUBLICADA", false) }
+                    } catch (e: Exception) { CoroutineScope(Dispatchers.Main).launch { isLoading = false; showModernToast("❌ ERROR AL PUBLICAR", true) } }
                 }
-            )
+            })
         }
 
         if (customerToDelete != null) {
-            AlertDialog(
-                onDismissRequest = { customerToDelete = null },
-                containerColor = Color(0xFF121216),
-                title = { Text("¿ELIMINAR USUARIO?", color = Color.White, fontWeight = FontWeight.Black) },
-                text = { Text("Esta acción eliminará a ${customerToDelete?.name?.uppercase()} de todas las bases de datos.", color = Color.White.copy(0.7f)) },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            val c = customerToDelete!!
-                            customerToDelete = null
-                            deleteCustomer(c, db)
-                            showModernToast("✅ USUARIO ELIMINADO", false)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
-                    ) { Text("ELIMINAR", color = Color.White) }
-                },
-                dismissButton = {
-                    TextButton(onClick = { customerToDelete = null }) { Text("CANCELAR", color = Color.White.copy(0.6f)) }
-                }
-            )
+            AlertDialog(onDismissRequest = { customerToDelete = null }, containerColor = Color(0xFF121216), title = { Text("¿ELIMINAR USUARIO?", color = Color.White, fontWeight = FontWeight.Black) }, text = { Text("Esta acción eliminará a ${customerToDelete?.name?.uppercase()} de todas las bases de datos.", color = Color.White.copy(0.7f)) }, confirmButton = { Button(onClick = { val c = customerToDelete!!; customerToDelete = null; deleteCustomer(c, db); showModernToast("✅ USUARIO ELIMINADO", false) }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("ELIMINAR", color = Color.White) } }, dismissButton = { TextButton(onClick = { customerToDelete = null }) { Text("CANCELAR", color = Color.White.copy(0.6f)) } })
         }
 
         if (newsToDelete != null) {
-            AlertDialog(
-                onDismissRequest = { newsToDelete = null },
-                containerColor = Color(0xFF121216),
-                title = { Text("¿ELIMINAR NOVEDAD?", color = Color.White, fontWeight = FontWeight.Black) },
-                text = { Text("¿Seguro que desea eliminar este flyer promocional?", color = Color.White.copy(0.7f)) },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            val n = newsToDelete!!
-                            newsToDelete = null
-                            deleteNews(n, db, showModernToast)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
-                    ) { Text("ELIMINAR", color = Color.White) }
-                },
-                dismissButton = {
-                    TextButton(onClick = { newsToDelete = null }) { Text("CANCELAR", color = Color.White.copy(0.6f)) }
-                }
-            )
+            AlertDialog(onDismissRequest = { newsToDelete = null }, containerColor = Color(0xFF121216), title = { Text("¿ELIMINAR NOVEDAD?", color = Color.White, fontWeight = FontWeight.Black) }, text = { Text("¿Seguro que desea eliminar este flyer promocional?", color = Color.White.copy(0.7f)) }, confirmButton = { Button(onClick = { val n = newsToDelete!!; newsToDelete = null; deleteNews(n, db, showModernToast) }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("ELIMINAR", color = Color.White) } }, dismissButton = { TextButton(onClick = { newsToDelete = null }) { Text("CANCELAR", color = Color.White.copy(0.6f)) } })
         }
 
         if (showRateDialog) {
@@ -821,51 +636,20 @@ fun AdminListContent() {
         }
 
         if (creditRequestToDelete != null) {
-            AlertDialog(
-                onDismissRequest = { creditRequestToDelete = null },
-                containerColor = Color(0xFF121216),
-                title = { Text("¿ELIMINAR SOLICITUD?", color = Color.White, fontWeight = FontWeight.Black) },
-                text = { Text("Esta acción eliminará el registro permanentemente.", color = Color.White.copy(0.7f)) },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            val r = creditRequestToDelete!!
-                            creditRequestToDelete = null
-                            deleteCreditRequest(r, db, showModernToast)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
-                    ) { Text("ELIMINAR", color = Color.White) }
-                },
-                dismissButton = {
-                    TextButton(onClick = { creditRequestToDelete = null }) { Text("CANCELAR", color = Color.White.copy(0.6f)) }
-                }
-            )
+            AlertDialog(onDismissRequest = { creditRequestToDelete = null }, containerColor = Color(0xFF121216), title = { Text("¿ELIMINAR SOLICITUD?", color = Color.White, fontWeight = FontWeight.Black) }, text = { Text("Esta acción eliminará el registro permanentemente.", color = Color.White.copy(0.7f)) }, confirmButton = { Button(onClick = { val r = creditRequestToDelete!!; creditRequestToDelete = null; deleteCreditRequest(r, db, showModernToast) }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("ELIMINAR", color = Color.White) } }, dismissButton = { TextButton(onClick = { creditRequestToDelete = null }) { Text("CANCELAR", color = Color.White.copy(0.6f)) } })
         }
 
         if (creditRequestToReceipt != null) {
-            CreditReceiptDialog(
-                request = creditRequestToReceipt!!,
-                onDismiss = { creditRequestToReceipt = null }
-            )
+            CreditReceiptDialog(request = creditRequestToReceipt!!, onDismiss = { creditRequestToReceipt = null })
+        }
+        
+        if (orderToReceipt != null) {
+            OrderReceiptDialog(order = orderToReceipt!!, onDismiss = { orderToReceipt = null })
         }
 
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp)
-        ) { data ->
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A20)),
-                shape = RoundedCornerShape(4.dp),
-                border = BorderStroke(1.dp, Color(0xFFC5A059).copy(0.5f))
-            ) {
-                Text(
-                    text = data.visuals.message.uppercase(),
-                    color = Color.White,
-                    modifier = Modifier.padding(16.dp),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                )
+        SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp)) { data ->
+            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A20)), shape = RoundedCornerShape(4.dp), border = BorderStroke(1.dp, Color(0xFFC5A059).copy(0.5f))) {
+                Text(text = data.visuals.message.uppercase(), color = Color.White, modifier = Modifier.padding(16.dp), fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
             }
         }
     }
@@ -873,38 +657,14 @@ fun AdminListContent() {
 
 @Composable
 fun AdminNavButton(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector, isSelected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    val backgroundColor by androidx.compose.animation.animateColorAsState(
-        if (isSelected) Color(0xFFC5A059) else Color(0xFF08080A),
-        label = "bg"
-    )
-    val contentColor by androidx.compose.animation.animateColorAsState(
-        if (isSelected) Color.Black else Color.White.copy(0.5f),
-        label = "content"
-    )
-    val borderColor by androidx.compose.animation.animateColorAsState(
-        if (isSelected) Color.White.copy(0.4f) else Color(0xFFC5A059).copy(0.15f),
-        label = "border"
-    )
-    
-    Box(
-        modifier = modifier
-            .height(85.dp)
-            .background(backgroundColor, RoundedCornerShape(12.dp))
-            .border(1.dp, borderColor, RoundedCornerShape(12.dp))
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center
-    ) {
+    val backgroundColor by androidx.compose.animation.animateColorAsState(if (isSelected) Color(0xFFC5A059) else Color(0xFF08080A), label = "bg")
+    val contentColor by androidx.compose.animation.animateColorAsState(if (isSelected) Color.Black else Color.White.copy(0.5f), label = "content")
+    val borderColor by androidx.compose.animation.animateColorAsState(if (isSelected) Color.White.copy(0.4f) else Color(0xFFC5A059).copy(0.15f), label = "border")
+    Box(modifier = modifier.height(85.dp).background(backgroundColor, RoundedCornerShape(12.dp)).border(1.dp, borderColor, RoundedCornerShape(12.dp)).clickable { onClick() }, contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             Icon(icon, null, modifier = Modifier.size(24.dp), tint = contentColor)
             Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = text, 
-                fontSize = 8.sp, 
-                fontWeight = FontWeight.Black, 
-                color = contentColor, 
-                letterSpacing = 0.5.sp,
-                textAlign = TextAlign.Center
-            )
+            Text(text = text, fontSize = 8.sp, fontWeight = FontWeight.Black, color = contentColor, letterSpacing = 0.5.sp, textAlign = TextAlign.Center)
         }
     }
 }
@@ -925,51 +685,21 @@ private fun approveCustomer(reg: CustomerRegistration, db: FirebaseFirestore) {
 }
 
 private fun deleteCustomer(reg: CustomerRegistration, db: FirebaseFirestore) {
-    // 1. Borrar de Firestore
     db.collection("registros_clientes").document(reg.id).delete()
-    
-    // 2. Sincronizar con Excel y Firebase Auth vía Apps Script
     CoroutineScope(Dispatchers.IO).launch {
         try {
-            val json = org.json.JSONObject().apply { 
-                put("action", "delete")
-                put("email", reg.email.trim())
-                put("deleteFromAuth", true) 
-                put("photoUrl", reg.photoUrl)
-                put("idCardUrl", reg.idCardUrl)
-            }
-            val request = Request.Builder()
-                .url(GOOGLE_SHEETS_URL)
-                .post(json.toString().toRequestBody("application/json".toMediaType()))
-                .header("User-Agent", "Mozilla/5.0")
-                .build()
-            OkHttpClient().newCall(request).execute()
+            val json = org.json.JSONObject().apply { put("action", "delete"); put("email", reg.email.trim()); put("deleteFromAuth", true); put("photoUrl", reg.photoUrl); put("idCardUrl", reg.idCardUrl) }
+            OkHttpClient().newCall(Request.Builder().url(GOOGLE_SHEETS_URL).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
         } catch (_: Exception) {}
     }
 }
 
 private fun deleteProduct(p: Product, db: FirebaseFirestore) {
-    // 1. Borrar de Firestore
     db.collection("productos").document(p.id).delete()
-    
-    // 2. Sincronizar con Excel
     CoroutineScope(Dispatchers.IO).launch {
         try {
-            val normalizedCategory = java.text.Normalizer.normalize(p.category, java.text.Normalizer.Form.NFD)
-                .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
-                .uppercase()
-
-            val json = org.json.JSONObject().apply {
-                put("action", "deleteProduct")
-                put("sheetName", normalizedCategory)
-                put("nombre", p.name)
-            }
-            val request = Request.Builder()
-                .url(GOOGLE_SHEETS_URL)
-                .post(json.toString().toRequestBody("application/json".toMediaType()))
-                .header("User-Agent", "Mozilla/5.0")
-                .build()
-            OkHttpClient().newCall(request).execute()
+            val json = org.json.JSONObject().apply { put("action", "deleteProduct"); put("sheetName", java.text.Normalizer.normalize(p.category, java.text.Normalizer.Form.NFD).replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "").uppercase()); put("nombre", p.name) }
+            OkHttpClient().newCall(Request.Builder().url(GOOGLE_SHEETS_URL).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
         } catch (_: Exception) {}
     }
 }
@@ -980,20 +710,7 @@ fun CustomerAdminCard(reg: CustomerRegistration, onApprove: () -> Unit, onReject
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, if(isActive) Color.Green.copy(0.3f) else Color(0xFFC5A059).copy(0.2f))) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row {
-                Box(modifier = Modifier.size(80.dp).background(Color(0xFF1A1A20), RoundedCornerShape(8.dp)).clickable { onImageClick(reg.photoUrl) }) { 
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(fixDriveUrl(reg.photoUrl))
-                            .setHeader("User-Agent", "Mozilla/5.0")
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = null, 
-                        modifier = Modifier.fillMaxSize(), 
-                        contentScale = ContentScale.Crop,
-                        error = painterResource(R.drawable.logo_admin),
-                        placeholder = painterResource(R.drawable.logo_admin)
-                    ) 
-                }
+                Box(modifier = Modifier.size(80.dp).background(Color(0xFF1A1A20), RoundedCornerShape(8.dp)).clickable { onImageClick(reg.photoUrl) }) { AsyncImage(model = ImageRequest.Builder(LocalContext.current).data(fixDriveUrl(reg.photoUrl)).crossfade(true).build(), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop, error = painterResource(R.drawable.logo_admin)) }
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
                     Text(reg.name.uppercase(), fontWeight = FontWeight.Black, color = Color.White, fontSize = 16.sp)
@@ -1004,21 +721,9 @@ fun CustomerAdminCard(reg: CustomerRegistration, onApprove: () -> Unit, onReject
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
-            InfoRow(Icons.Default.Place, reg.address)
-            InfoRow(Icons.Default.Phone, reg.phone)
+            InfoRow(Icons.Default.Place, reg.address); InfoRow(Icons.Default.Phone, reg.phone)
             Spacer(modifier = Modifier.height(16.dp))
-            Box(modifier = Modifier.fillMaxWidth().height(150.dp).background(Color.Black, RoundedCornerShape(8.dp)).clickable { onImageClick(reg.idCardUrl) }) { 
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(fixDriveUrl(reg.idCardUrl))
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = null, 
-                    modifier = Modifier.fillMaxSize(), 
-                    contentScale = ContentScale.Fit,
-                    error = painterResource(R.drawable.logo_admin)
-                ) 
-            }
+            Box(modifier = Modifier.fillMaxWidth().height(150.dp).background(Color.Black, RoundedCornerShape(8.dp)).clickable { onImageClick(reg.idCardUrl) }) { AsyncImage(model = ImageRequest.Builder(LocalContext.current).data(fixDriveUrl(reg.idCardUrl)).crossfade(true).build(), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit, error = painterResource(R.drawable.logo_admin)) }
             Spacer(modifier = Modifier.height(20.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 OutlinedButton(onClick = onReject, modifier = Modifier.weight(1f).height(48.dp), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red), border = BorderStroke(1.dp, Color.Red), shape = RoundedCornerShape(12.dp)) { Text("ELIMINAR") }
@@ -1032,74 +737,24 @@ fun CustomerAdminCard(reg: CustomerRegistration, onApprove: () -> Unit, onReject
 fun InventorySection(products: List<Product>, bcv: Double, onAdd: () -> Unit, onRate: () -> Unit, onSync: () -> Unit, onDelete: (Product) -> Unit, onEdit: (Product) -> Unit) {
     var selectedCategory by remember { mutableStateOf("Todos") }
     val categories = listOf("Todos") + products.map { it.category }.distinct().sorted()
-
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = Color(0xFF1A1A20),
-            shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, Color.White.copy(0.05f))
-        ) {
+        Surface(modifier = Modifier.fillMaxWidth(), color = Color(0xFF1A1A20), shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, Color.White.copy(0.05f))) {
             Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column {
-                        Text("TASA BCV OFICIAL", color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        Text("$bcv BSS", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
-                    }
+                    Column { Text("TASA BCV OFICIAL", color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Bold); Text("$bcv BSS", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black) }
                     Spacer(modifier = Modifier.width(16.dp))
-                    IconButton(onClick = onSync, modifier = Modifier.background(Color.White.copy(0.05f), RoundedCornerShape(8.dp))) {
-                        Icon(Icons.Default.Sync, contentDescription = null, tint = Color(0xFFC5A059), modifier = Modifier.size(20.dp))
-                    }
+                    IconButton(onClick = onSync, modifier = Modifier.background(Color.White.copy(0.05f), RoundedCornerShape(8.dp))) { Icon(Icons.Default.Sync, null, tint = Color(0xFFC5A059), modifier = Modifier.size(20.dp)) }
                 }
-                Button(onClick = onRate, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059)), shape = RoundedCornerShape(8.dp), contentPadding = PaddingValues(horizontal = 16.dp)) { 
-                    Text("AJUSTAR", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp) 
-                }
+                Button(onClick = onRate, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059)), shape = RoundedCornerShape(8.dp)) { Text("AJUSTAR", color = Color.Black, fontWeight = FontWeight.Bold) }
             }
         }
-        
         Spacer(modifier = Modifier.height(24.dp))
-        
-        val tabIndex = categories.indexOf(selectedCategory).let { if (it == -1) 0 else it }
-        
-        ScrollableTabRow(
-            selectedTabIndex = tabIndex,
-            containerColor = Color.Transparent,
-            contentColor = Color(0xFFC5A059),
-            edgePadding = 0.dp,
-            divider = {},
-            indicator = { tabPositions ->
-                if (tabIndex < tabPositions.size) {
-                    TabRowDefaults.SecondaryIndicator(
-                        modifier = Modifier.tabIndicatorOffset(tabPositions[tabIndex]),
-                        color = Color(0xFFC5A059),
-                        height = 3.dp
-                    )
-                }
-            }
-        ) {
-            categories.forEach { cat ->
-                Tab(
-                    selected = selectedCategory == cat,
-                    onClick = { selectedCategory = cat },
-                    text = { Text(cat.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if(selectedCategory == cat) Color(0xFFC5A059) else Color.White.copy(0.4f)) }
-                )
-            }
+        ScrollableTabRow(selectedTabIndex = categories.indexOf(selectedCategory).coerceAtLeast(0), containerColor = Color.Transparent, contentColor = Color(0xFFC5A059), edgePadding = 0.dp, divider = {}, indicator = { TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(it[categories.indexOf(selectedCategory).coerceAtLeast(0)]), color = Color(0xFFC5A059), height = 3.dp) }) {
+            categories.forEach { cat -> Tab(selected = selectedCategory == cat, onClick = { selectedCategory = cat }, text = { Text(cat.uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Bold) }) }
         }
-        
         Spacer(modifier = Modifier.height(24.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("GESTIÓN DE STOCK", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
-            Button(onClick = onAdd, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059).copy(0.1f)), shape = RoundedCornerShape(8.dp)) {
-                Icon(Icons.Default.Add, null, tint = Color(0xFFC5A059), modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("NUEVO", color = Color(0xFFC5A059), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
-            val filtered = if(selectedCategory == "Todos") products else products.filter { it.category == selectedCategory }
-            items(filtered) { ProductAdminItem(it, bcv, onDelete, onEdit) }
-        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("STOCK", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black); Button(onClick = onAdd, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059).copy(0.1f))) { Text("+ NUEVO", color = Color(0xFFC5A059)) } }
+        LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) { items(if(selectedCategory == "Todos") products else products.filter { it.category == selectedCategory }) { ProductAdminItem(it, bcv, onDelete, onEdit) } }
     }
 }
 
@@ -1107,30 +762,11 @@ fun InventorySection(products: List<Product>, bcv: Double, onAdd: () -> Unit, on
 fun ProductAdminItem(p: Product, bcv: Double, onDelete: (Product) -> Unit, onEdit: (Product) -> Unit) {
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, Color.White.copy(0.05f))) {
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(fixDriveUrl(p.imageUrl))
-                    .setHeader("User-Agent", "Mozilla/5.0")
-                    .crossfade(true)
-                    .build(),
-                contentDescription = null,
-                modifier = Modifier.size(56.dp).background(Color.Black, RoundedCornerShape(8.dp)),
-                contentScale = ContentScale.Crop,
-                error = painterResource(R.drawable.logo_admin),
-                placeholder = painterResource(R.drawable.logo_admin)
-            )
+            AsyncImage(model = fixDriveUrl(p.imageUrl), contentDescription = null, modifier = Modifier.size(56.dp).background(Color.Black, RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
             Spacer(modifier = Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(p.name.uppercase(), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("$${p.priceUsd}", color = Color(0xFFC5A059), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("${(p.priceUsd * bcv).format(2)} BSS", color = Color.White.copy(0.5f), fontSize = 11.sp)
-                }
-                Text("EN STOCK: ${p.stock}", color = if(p.stock < 5) Color.Red.copy(0.7f) else Color.Green.copy(0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            }
-            IconButton(onClick = { onEdit(p) }) { Icon(Icons.Default.Edit, null, tint = Color.White.copy(0.4f), modifier = Modifier.size(20.dp)) }
-            IconButton(onClick = { onDelete(p) }) { Icon(Icons.Default.Delete, null, tint = Color.Red.copy(0.4f), modifier = Modifier.size(20.dp)) }
+            Column(modifier = Modifier.weight(1f)) { Text(p.name.uppercase(), color = Color.White, fontWeight = FontWeight.Black); Text("$${p.priceUsd} | ${(p.priceUsd * bcv).format(2)} BSS", color = Color(0xFFC5A059)); Text("STOCK: ${p.stock}", color = if(p.stock < 5) Color.Red else Color.Green, fontSize = 10.sp) }
+            IconButton(onClick = { onEdit(p) }) { Icon(Icons.Default.Edit, null, tint = Color.White.copy(0.4f)) }
+            IconButton(onClick = { onDelete(p) }) { Icon(Icons.Default.Delete, null, tint = Color.Red.copy(0.4f)) }
         }
     }
 }
@@ -1138,222 +774,65 @@ fun ProductAdminItem(p: Product, bcv: Double, onDelete: (Product) -> Unit, onEdi
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddProductDialog(editingProduct: Product? = null, onDismiss: () -> Unit, onConfirm: (Product, Uri?) -> Unit) {
-    var name by remember { mutableStateOf(editingProduct?.name ?: "") }
-    var priceText by remember { mutableStateOf(editingProduct?.priceUsd?.toString() ?: "") }
-    var stock by remember { mutableStateOf(editingProduct?.stock?.toString() ?: "") }
-    var description by remember { mutableStateOf(editingProduct?.description ?: "") }
-    var allowCredit by remember { mutableStateOf(editingProduct?.allowCredit ?: false) }
-    var selectedCat by remember { mutableStateOf(editingProduct?.category ?: "Perfumes") }
-    var selectedColl by remember { mutableStateOf(editingProduct?.collection ?: "Nueva Temporada") }
-    var catExp by remember { mutableStateOf(false) }
-    var collExp by remember { mutableStateOf(false) }
-    var uri by remember { mutableStateOf<Uri?>(null) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri = it }
-    
-    val pUsd = priceText.toDoubleOrNull() ?: 0.0
-
-    AlertDialog(onDismissRequest = onDismiss, containerColor = Color(0xFF121216), shape = RoundedCornerShape(0.dp),
-        title = { Text(if(editingProduct == null) "NUEVO PRODUCTO" else "EDITAR PRODUCTO", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
-                Box(modifier = Modifier.fillMaxWidth().height(120.dp).background(Color.Black).clickable { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, contentAlignment = Alignment.Center) {
-                    if(uri != null) AsyncImage(model = uri, contentDescription = null, modifier = Modifier.fillMaxSize())
-                    else if(editingProduct?.imageUrl?.isNotEmpty() == true) AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(fixDriveUrl(editingProduct.imageUrl))
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = null, 
-                        modifier = Modifier.fillMaxSize(),
-                        error = painterResource(R.drawable.logo_admin)
-                    )
-                    else Icon(Icons.Default.AddPhotoAlternate, null, tint = Color(0xFFC5A059))
-                }
-                AdminTextField(name, { name = it }, "Nombre")
-                AdminTextField(priceText, { priceText = it }, "Precio USD")
-                AdminTextField(stock, { stock = it }, "Stock")
-                AdminTextField(description, { description = it }, "Descripción")
-                Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(allowCredit, { allowCredit = it }, colors = CheckboxDefaults.colors(checkedColor = Color(0xFFC5A059))); Text("CRÉDITO DISPONIBLE", color = Color.White, fontSize = 11.sp) }
-                
-                ExposedDropdownMenuBox(catExp, { catExp = it }) {
-                    OutlinedTextField(selectedCat, {}, readOnly = true, label = {Text("Categoría")}, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(catExp) }, modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(), colors = dropdownColors())
-                    ExposedDropdownMenu(catExp, { catExp = false }) {
-                        listOf("Perfumes", "Tecnología", "Ropa", "Calzado", "Belleza").forEach { DropdownMenuItem(text = { Text(it) }, onClick = { selectedCat = it; catExp = false }) }
-                    }
-                }
-                ExposedDropdownMenuBox(collExp, { collExp = it }) {
-                    OutlinedTextField(selectedColl, {}, readOnly = true, label = {Text("Colección")}, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(collExp) }, modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(), colors = dropdownColors())
-                    ExposedDropdownMenu(collExp, { collExp = false }) {
-                        listOf("Nueva Temporada", "Edición Limitada", "Best Sellers").forEach { DropdownMenuItem(text = { Text(it) }, onClick = { selectedColl = it; collExp = false }) }
-                    }
-                }
-            }
-        },
-        confirmButton = { Button(onClick = { onConfirm(Product(id = editingProduct?.id ?: "", name = name, priceUsd = pUsd, description = description, category = selectedCat, collection = selectedColl, stock = stock.toIntOrNull() ?: 0, allowCredit = allowCredit, imageUrl = editingProduct?.imageUrl ?: ""), uri) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059))) { Text("GUARDAR", color = Color.Black) } }
-    )
+    var n by remember { mutableStateOf(editingProduct?.name ?: "") }; var p by remember { mutableStateOf(editingProduct?.priceUsd?.toString() ?: "") }; var s by remember { mutableStateOf(editingProduct?.stock?.toString() ?: "") }; var d by remember { mutableStateOf(editingProduct?.description ?: "") }; var c by remember { mutableStateOf(editingProduct?.allowCredit ?: false) }; var cat by remember { mutableStateOf(editingProduct?.category ?: "Perfumes") }; var col by remember { mutableStateOf(editingProduct?.collection ?: "Nueva Temporada") }; var uri by remember { mutableStateOf<Uri?>(null) }; val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri = it }
+    AlertDialog(onDismissRequest = onDismiss, containerColor = Color(0xFF121216), title = { Text("PRODUCTO", color = Color.White) }, text = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
+            Box(Modifier.fillMaxWidth().height(100.dp).background(Color.Black).clickable { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, Alignment.Center) { AsyncImage(uri ?: fixDriveUrl(editingProduct?.imageUrl), null, Modifier.fillMaxSize()) }
+            AdminTextField(n, { n = it }, "Nombre"); AdminTextField(p, { p = it }, "Precio"); AdminTextField(s, { s = it }, "Stock"); AdminTextField(d, { d = it }, "Descripción")
+            Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(c, { c = it }); Text("CRÉDITO", color = Color.White) }
+        }
+    }, confirmButton = { Button(onClick = { onConfirm(Product(id=editingProduct?.id ?: "", name=n, priceUsd=p.toDoubleOrNull() ?: 0.0, description=d, category=cat, collection=col, stock=s.toIntOrNull() ?: 0, allowCredit=c, imageUrl=editingProduct?.imageUrl ?: ""), uri) }) { Text("OK") } })
 }
 
 @Composable
-fun PaymentSettingsSection(currentSettings: Map<String, String>, onSave: (Map<String, String>) -> Unit) {
-    var zelle by remember(currentSettings) { mutableStateOf(currentSettings["zelle"] ?: "") }
-    var binance by remember(currentSettings) { mutableStateOf(currentSettings["binance"] ?: "") }
-    var zinli by remember(currentSettings) { mutableStateOf(currentSettings["zinli"] ?: "") }
-    var pagomovil by remember(currentSettings) { mutableStateOf(currentSettings["pagomovil"] ?: "") }
-
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        Text("CONFIGURACIÓN DE PAGOS", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black)
-        
-        AdminLargeTextField(zelle, { zelle = it }, "DATOS ZELLE")
-        AdminLargeTextField(binance, { binance = it }, "DATOS BINANCE")
-        AdminLargeTextField(zinli, { zinli = it }, "DATOS ZINLI")
-        AdminLargeTextField(pagomovil, { pagomovil = it }, "DATOS PAGO MÓVIL")
-
-        Button(
-            onClick = { onSave(mapOf("zelle" to zelle, "binance" to binance, "zinli" to zinli, "pagomovil" to pagomovil)) },
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059)),
-            shape = RoundedCornerShape(0.dp)
-        ) {
-            Text("GUARDAR CAMBIOS", color = Color.Black, fontWeight = FontWeight.Black)
-        }
+fun PaymentSettingsSection(curr: Map<String, String>, onS: (Map<String, String>) -> Unit) {
+    var z by remember(curr) { mutableStateOf(curr["zelle"] ?: "") }; var b by remember(curr) { mutableStateOf(curr["binance"] ?: "") }; var zi by remember(curr) { mutableStateOf(curr["zinli"] ?: "") }; var pm by remember(curr) { mutableStateOf(curr["pagomovil"] ?: "") }
+    Column(modifier = Modifier.padding(24.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text("PAGOS", color = Color.White, fontWeight = FontWeight.Black)
+        AdminLargeTextField(z, { z = it }, "ZELLE"); AdminLargeTextField(b, { b = it }, "BINANCE"); AdminLargeTextField(zi, { zi = it }, "ZINLI"); AdminLargeTextField(pm, { pm = it }, "PAGO MÓVIL")
+        Button(onClick = { onS(mapOf("zelle" to z, "binance" to b, "zinli" to zi, "pagomovil" to pm)) }, Modifier.fillMaxWidth()) { Text("GUARDAR") }
     }
 }
 
 @Composable
 fun AdminLargeTextField(v: String, onV: (String) -> Unit, l: String) {
-    OutlinedTextField(
-        value = v,
-        onValueChange = onV,
-        label = { Text(l, fontSize = 10.sp, color = Color(0xFFC5A059)) },
-        modifier = Modifier.fillMaxWidth().height(120.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = Color(0xFFC5A059),
-            unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
-            focusedTextColor = Color.White,
-            unfocusedTextColor = Color.White
-        ),
-        shape = RoundedCornerShape(0.dp)
-    )
+    OutlinedTextField(value = v, onValueChange = onV, label = { Text(l, fontSize = 10.sp) }, modifier = Modifier.fillMaxWidth().height(100.dp), colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White))
 }
 
 @Composable
-fun CollectionsSection(
-    orders: List<Order>,
-    onConfirmPayment: (Order) -> Unit,
-    onRejectPayment: (Order) -> Unit,
-    onDeleteSale: (Order) -> Unit,
-    onClearHistory: () -> Unit,
-    onImageClick: (String) -> Unit
-) {
+fun CollectionsSection(orders: List<Order>, onConfirmPayment: (Order) -> Unit, onRejectPayment: (Order) -> Unit, onDeleteSale: (Order) -> Unit, onClearHistory: () -> Unit, onViewReceipt: (Order) -> Unit, onImageClick: (String) -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("HISTORIAL DE COBROS", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black)
-            TextButton(onClick = onClearHistory) {
-                Text("LIMPIAR", color = Color.Red, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-        
-        if (orders.isEmpty()) {
-            InfoSection("No hay pedidos registrados")
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
-                items(orders) { order ->
-                    OrderAdminCard(order, onConfirmPayment, onRejectPayment, onDeleteSale, onImageClick)
-                }
-            }
-        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text("HISTORIAL", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black); TextButton(onClick = onClearHistory) { Text("LIMPIAR", color = Color.Red) } }
+        if (orders.isEmpty()) InfoSection("Vacío") else LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) { items(orders) { OrderAdminCard(it, onConfirmPayment, onRejectPayment, onDeleteSale, onViewReceipt, onImageClick) } }
     }
 }
 
 @Composable
-fun OrderAdminCard(
-    order: Order,
-    onConfirm: (Order) -> Unit,
-    onReject: (Order) -> Unit,
-    onDelete: (Order) -> Unit,
-    onImageClick: (String) -> Unit
-) {
-    val date = java.text.SimpleDateFormat("dd/MM/yy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(order.timestamp))
-    
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Color(0xFFC5A059).copy(alpha = 0.15f))) {
+fun OrderAdminCard(order: Order, onConfirm: (Order) -> Unit, onReject: (Order) -> Unit, onDelete: (Order) -> Unit, onViewReceipt: (Order) -> Unit, onImageClick: (String) -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Color(0xFFC5A059).copy(0.15f))) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(order.orderId, color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(date, color = Color.White.copy(0.4f), fontSize = 10.sp)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    IconButton(onClick = { onDelete(order) }, modifier = Modifier.size(28.dp).background(Color.Red.copy(0.1f), RoundedCornerShape(6.dp))) {
-                        Icon(Icons.Default.Delete, null, tint = Color.Red.copy(0.6f), modifier = Modifier.size(16.dp))
-                    }
-                }
-            }
-            
-            Text(order.customerName.uppercase(), color = Color.White, fontWeight = FontWeight.Black, fontSize = 16.sp)
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            Column(modifier = Modifier.fillMaxWidth().background(Color.White.copy(0.03f), RoundedCornerShape(8.dp)).padding(12.dp)) {
-                order.items.forEach { item ->
-                    Text("• ${item.buyQty}x ${item.name} (${item.paymentMethod.uppercase()})", color = Color.White.copy(0.8f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                }
-            }
-            
+            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) { Text(order.orderId, color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Black); IconButton(onClick = { onDelete(order) }) { Icon(Icons.Default.Delete, null, tint = Color.Red.copy(0.5f)) } }
+            Text(order.customerName.uppercase(), color = Color.White, fontWeight = FontWeight.Black); Spacer(Modifier.height(8.dp))
+            Column(Modifier.fillMaxWidth().background(Color.White.copy(0.05f), RoundedCornerShape(8.dp)).padding(8.dp)) { order.items.forEach { Text("• ${it.buyQty}x ${it.name}", color = Color.White, fontSize = 11.sp) } }
             order.paymentReport?.let { report ->
-                Spacer(modifier = Modifier.height(16.dp))
-                Surface(color = Color(0xFFC5A059).copy(0.05f), border = BorderStroke(1.dp, Color(0xFFC5A059).copy(0.2f)), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text("COMPROBANTE DE PAGO", color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        PaymentDetailItem("REFERENCIA", report.reference)
-                        PaymentDetailItem("ENTIDAD", report.bank)
-                        PaymentDetailItem("MONTO", "${report.amount} BSS")
-                        if(report.installments.toInt() > 1) PaymentDetailItem("CUOTAS", report.installments)
-                        
-                        report.captureBase64?.let { base64 ->
-                            if (base64.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(160.dp)
-                                        .background(Color.Black, RoundedCornerShape(8.dp))
-                                        .clickable { onImageClick("data:image/jpeg;base64,$base64") },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    AsyncImage(
-                                        model = ImageRequest.Builder(LocalContext.current)
-                                            .data(try { android.util.Base64.decode(base64, android.util.Base64.DEFAULT) } catch(e: Exception) { null })
-                                            .crossfade(true)
-                                            .build(),
-                                        contentDescription = null,
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Fit,
-                                        error = painterResource(R.drawable.logo_admin),
-                                        placeholder = painterResource(R.drawable.logo_admin)
-                                    )
-                                }
-                            }
-                        }
-                    }
+                Spacer(Modifier.height(8.dp))
+                Column(Modifier.fillMaxWidth().background(Color(0xFFC5A059).copy(0.05f)).padding(8.dp)) {
+                    Text("PAGO: ${report.bank} | ${report.amount} BSS", color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    report.captureBase64?.let { base64 -> if(base64.isNotEmpty()) Box(Modifier.fillMaxWidth().height(100.dp).clickable { onImageClick("data:image/jpeg;base64,$base64") }) { AsyncImage(model = try { android.util.Base64.decode(base64, android.util.Base64.DEFAULT) } catch(_:Exception) { null }, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit) } }
                 }
             }
-            
-            Spacer(modifier = Modifier.height(20.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(order.totalUsd, color = Color(0xFFC5A059), fontWeight = FontWeight.Black, fontSize = 20.sp)
-                
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                Text(order.totalUsd, color = Color(0xFFC5A059), fontWeight = FontWeight.Black, fontSize = 18.sp)
                 when (order.status) {
                     "pending", "awaiting_verification" -> {
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Button(onClick = { onConfirm(order) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)), contentPadding = PaddingValues(horizontal = 20.dp), shape = RoundedCornerShape(10.dp), modifier = Modifier.height(40.dp)) {
-                                Text("APROBAR", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Black)
-                            }
-                            Button(onClick = { onReject(order) }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(0.2f)), contentPadding = PaddingValues(horizontal = 20.dp), shape = RoundedCornerShape(10.dp), modifier = Modifier.height(40.dp), border = BorderStroke(1.dp, Color.Red)) {
-                                Text("RECHAZAR", color = Color.Red, fontSize = 11.sp, fontWeight = FontWeight.Black)
-                            }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { onConfirm(order) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366))) { Text("OK", color = Color.Black) }
+                            Button(onClick = { onReject(order) }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("X") }
                         }
                     }
-                    "paid" -> Surface(color = Color(0xFF25D366).copy(0.1f), shape = RoundedCornerShape(6.dp)) { Text("PAGADO", color = Color(0xFF25D366), fontWeight = FontWeight.Black, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) }
-                    "rejected" -> Surface(color = Color.Red.copy(0.1f), shape = RoundedCornerShape(6.dp)) { Text("RECHAZADO", color = Color.Red, fontWeight = FontWeight.Black, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) }
+                    "paid", "active_credit" -> { Button(onClick = { onViewReceipt(order) }, colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent), border = BorderStroke(1.dp, Color(0xFFC5A059))) { Icon(Icons.AutoMirrored.Filled.ReceiptLong, null, tint = Color(0xFFC5A059)); Text(" RECIBO", color = Color(0xFFC5A059), fontSize = 10.sp) } }
+                    else -> StatusBadge(order.status)
                 }
             }
         }
@@ -1361,37 +840,104 @@ fun OrderAdminCard(
 }
 
 @Composable
-fun PaymentDetailItem(label: String, value: String) {
-    Row {
-        Text("$label: ", color = Color.White.copy(0.4f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-        Text(value, color = Color.White, fontSize = 10.sp)
-    }
-}
+fun PaymentDetailItem(label: String, value: String) { Row { Text("$label: ", color = Color.White.copy(0.4f), fontSize = 10.sp); Text(value, color = Color.White, fontSize = 10.sp) } }
 
 private fun confirmOrderPayment(order: Order, db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) {
     CoroutineScope(Dispatchers.IO).launch {
         try {
-            var totalPointsToGain = 0
+            val itemRef = db.collection(order.collection).document(order.id)
+            val itemDoc = itemRef.get().await()
+
+            val reportMap = itemDoc.get("paymentReport") as? Map<*, *>
+            val rawAmountStr = reportMap?.get("amount")?.toString()
+                ?: order.paymentReport?.amount
+                ?: ""
+            val cleanAmountStr = rawAmountStr.replace(" BSS", "").replace("BSS", "").trim()
+            val amountPaid = cleanAmountStr.toDoubleOrNull() ?: 0.0
+
             if (order.collection == "pedidos") {
-                order.items.forEach { if(it.paymentMethod == "cash") totalPointsToGain += 25 }
-                if (order.items.any { it.paymentMethod == "credit" }) totalPointsToGain += 10
-            } else {
-                totalPointsToGain = 10
-            }
-            
-            if (totalPointsToGain > 0) {
-                val userSnap = db.collection("registros_clientes").whereEqualTo("email", order.customerEmail).get().await()
-                if (!userSnap.isEmpty) {
-                    val userDoc = userSnap.documents[0]
-                    val currentPoints = userDoc.getLong("points") ?: 0
-                    userDoc.reference.update("points", currentPoints + totalPointsToGain).await()
+                val hasCredit = order.items.any { it.paymentMethod == "credit" }
+                        || (itemDoc.getBoolean("hasCredit") ?: false)
+                        || (itemDoc.get("items") as? List<*>)?.any {
+                            (it as? Map<*, *>)?.get("paymentMethod") == "credit"
+                        } == true
+
+                if (hasCredit) {
+                    val totalBssStr = itemDoc.getString("totalBss") ?: order.totalBss
+                    val totalBss = totalBssStr.replace(" BSS", "").replace("BSS", "").trim().toDoubleOrNull() ?: 0.0
+                    val initial = totalBss * 0.25
+
+                    val docRemaining = itemDoc.getDouble("remainingDebt")
+
+                    if (docRemaining == null) {
+                        // Confirmación del pago inicial del 25% al crear el pedido a crédito
+                        val debt = maxOf(0.0, totalBss - initial)
+                        itemRef.update(
+                            mapOf(
+                                "status" to if (debt <= 0.0) "paid" else "active_credit",
+                                "remainingDebt" to debt,
+                                "installmentsPaid" to 0,
+                                "paymentReport" to null
+                            )
+                        ).await()
+                    } else {
+                        // Confirmación de pago de cuota o abono posterior
+                        val newRemaining = maxOf(0.0, docRemaining - amountPaid)
+                        val currentInstallments = (itemDoc.getLong("installmentsPaid") ?: 0).toInt()
+                        val newInstallments = currentInstallments + 1
+
+                        itemRef.update(
+                            mapOf(
+                                "remainingDebt" to newRemaining,
+                                "installmentsPaid" to newInstallments,
+                                "status" to if (newRemaining <= 0.0) "paid" else "active_credit",
+                                "paymentReport" to null
+                            )
+                        ).await()
+                    }
+                } else {
+                    itemRef.update(
+                        mapOf(
+                            "status" to "paid",
+                            "paymentReport" to null
+                        )
+                    ).await()
                 }
+            } else {
+                // Para solicitudes_credito (créditos personales)
+                val amountBssStr = itemDoc.getString("amountBss") ?: itemDoc.getDouble("amountBss")?.toString() ?: "0"
+                var totalBss = amountBssStr.replace(" BSS", "").replace("BSS", "").trim().toDoubleOrNull() ?: 0.0
+                val plan = itemDoc.getString("plan") ?: ""
+                if (plan == "weekly_4") totalBss *= 1.1
+                else if (plan == "full_30_days") totalBss *= 1.3
+
+                val docRemaining = itemDoc.getDouble("remainingDebt") ?: totalBss
+                val newRemaining = maxOf(0.0, docRemaining - amountPaid)
+                val currentInstallments = (itemDoc.getLong("installmentsPaid") ?: 0).toInt()
+                val newInstallments = currentInstallments + 1
+
+                itemRef.update(
+                    mapOf(
+                        "status" to if (newRemaining <= 0.0) "paid" else "approved",
+                        "remainingDebt" to newRemaining,
+                        "installmentsPaid" to newInstallments,
+                        "paymentReport" to null
+                    )
+                ).await()
             }
-            
-            db.collection(order.collection).document(order.id).update("status", "paid", "paymentReport", null).await()
+
+            // Asignar puntos al cliente
+            val userSnap = db.collection("registros_clientes").whereEqualTo("email", order.customerEmail).get().await()
+            if (!userSnap.isEmpty) {
+                val userDoc = userSnap.documents[0]
+                val currentPoints = userDoc.getLong("points") ?: 0
+                userDoc.reference.update("points", currentPoints + 10).await()
+            }
+
             CoroutineScope(Dispatchers.Main).launch { showToast("✅ PAGO CONFIRMADO", false) }
         } catch (e: Exception) {
-            CoroutineScope(Dispatchers.Main).launch { showToast("❌ ERROR AL CONFIRMAR", true) }
+            android.util.Log.e("AdminScreen", "Error al confirmar pago", e)
+            CoroutineScope(Dispatchers.Main).launch { showToast("❌ ERROR AL CONFIRMAR PAGO", true) }
         }
     }
 }
@@ -1399,82 +945,195 @@ private fun confirmOrderPayment(order: Order, db: FirebaseFirestore, showToast: 
 private fun rejectOrderPayment(order: Order, db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) {
     CoroutineScope(Dispatchers.IO).launch {
         try {
-            if (order.pointsUsed > 0) {
-                val userSnap = db.collection("registros_clientes").whereEqualTo("email", order.customerEmail).get().await()
-                if (!userSnap.isEmpty) {
-                    val userDoc = userSnap.documents[0]
-                    val currentPoints = userDoc.getLong("points") ?: 0
-                    userDoc.reference.update("points", currentPoints + order.pointsUsed).await()
-                }
+            val itemRef = db.collection(order.collection).document(order.id)
+            val itemDoc = itemRef.get().await()
+            val hasCredit = order.items.any { it.paymentMethod == "credit" } || (itemDoc.getBoolean("hasCredit") ?: false)
+            val newStatus = if (order.collection == "pedidos") {
+                if (hasCredit) "active_credit" else "rejected"
+            } else {
+                "approved"
             }
-            // Si es un abono a crédito activo, regresamos al estado correspondiente
-            val isCreditOrder = order.collection == "pedidos" && order.items.any { it.paymentMethod == "credit" }
-            val newStatus = if (isCreditOrder) "active_credit" else "rejected"
-            db.collection(order.collection).document(order.id).update("status", newStatus, "paymentReport", null).await()
-            CoroutineScope(Dispatchers.Main).launch { showToast("❌ PAGO RECHAZADO", true) }
+            itemRef.update(mapOf("status" to newStatus, "paymentReport" to null)).await()
+            CoroutineScope(Dispatchers.Main).launch { showToast("❌ RECHAZADO", true) }
         } catch (e: Exception) {
             CoroutineScope(Dispatchers.Main).launch { showToast("❌ ERROR AL RECHAZAR", true) }
         }
     }
 }
 
-private fun deleteOrder(order: Order, db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) {
-    db.collection(order.collection).document(order.id).delete().addOnSuccessListener {
-        showToast("Registro eliminado", false)
-    }
-}
+private fun deleteOrder(order: Order, db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) { db.collection(order.collection).document(order.id).delete().addOnSuccessListener { showToast("Eliminado", false) } }
 
-private fun clearCompletedOrders(db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) {
-    db.collection("pedidos").whereIn("status", listOf("paid", "rejected")).get().addOnSuccessListener { snap ->
-        val batch = db.batch()
-        snap.documents.forEach { batch.delete(it.reference) }
-        batch.commit().addOnSuccessListener { showToast("✅ HISTORIAL LIMPIO", false) }
-    }
-}
+private fun clearCompletedOrders(db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) { db.collection("pedidos").whereIn("status", listOf("paid", "rejected")).get().addOnSuccessListener { snap -> val batch = db.batch(); snap.documents.forEach { batch.delete(it.reference) }; batch.commit().addOnSuccessListener { showToast("✅ LIMPIO", false) } } }
 
 @Composable
-fun StatusBadge(s: String) {
-    Box(modifier = Modifier.background(if (s == "active") Color.Green.copy(0.1f) else Color.Yellow.copy(0.1f)).padding(horizontal = 8.dp, vertical = 4.dp)) {
-        Text(s.uppercase(), color = if (s == "active") Color.Green else Color.Yellow, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-    }
-}
+fun StatusBadge(s: String) { Box(modifier = Modifier.background(if (s == "active") Color.Green.copy(0.1f) else Color.Yellow.copy(0.1f)).padding(horizontal = 8.dp, vertical = 4.dp)) { Text(s.uppercase(), color = if (s == "active") Color.Green else Color.Yellow, fontSize = 9.sp, fontWeight = FontWeight.Bold) } }
 
 @Composable
-fun InfoRow(i: androidx.compose.ui.graphics.vector.ImageVector, t: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) { Icon(i, null, tint = Color.White.copy(0.3f), modifier = Modifier.size(14.dp)); Spacer(modifier = Modifier.width(8.dp)); Text(t.uppercase(), color = Color.White.copy(0.6f), fontSize = 10.sp) }
-}
+fun InfoRow(i: androidx.compose.ui.graphics.vector.ImageVector, t: String) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(i, null, modifier = Modifier.size(14.dp), tint = Color.White.copy(0.3f)); Spacer(Modifier.width(8.dp)); Text(t.uppercase(), color = Color.White.copy(0.6f), fontSize = 10.sp) } }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun dropdownColors() = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFFC5A059), unfocusedBorderColor = Color.White.copy(0.1f), focusedLabelColor = Color(0xFFC5A059), focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+fun dropdownColors() = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFFC5A059), unfocusedBorderColor = Color.White.copy(0.1f), focusedTextColor = Color.White, unfocusedTextColor = Color.White)
 
 @Composable
-fun AdminTextField(v: String, onV: (String) -> Unit, l: String) {
-    OutlinedTextField(
-        value = v,
-        onValueChange = onV,
-        label = { Text(l, fontSize = 10.sp) },
-        modifier = Modifier.fillMaxWidth(),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = Color(0xFFC5A059),
-            unfocusedBorderColor = Color.White.copy(0.1f),
-            focusedTextColor = Color.White,
-            unfocusedTextColor = Color.White,
-            focusedContainerColor = Color(0xFF1A1A20),
-            unfocusedContainerColor = Color(0xFF1A1A20)
-        ),
-        shape = RoundedCornerShape(12.dp),
-        singleLine = true
-    )
-}
+fun AdminTextField(v: String, onV: (String) -> Unit, l: String) { OutlinedTextField(value = v, onValueChange = onV, label = { Text(l, fontSize = 10.sp) }, modifier = Modifier.fillMaxWidth(), colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFFC5A059), focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedContainerColor = Color(0xFF1A1A20), unfocusedContainerColor = Color(0xFF1A1A20)), shape = RoundedCornerShape(12.dp), singleLine = true) }
 
 @Composable
-fun BcvRateDialog(curr: Double, onD: () -> Unit, onC: (Double) -> Unit) {
-    var r by remember { mutableStateOf(curr.toString()) }
-    AlertDialog(onDismissRequest = onD, containerColor = Color(0xFF121216), title = { Text("TASA BCV", color = Color.White) }, text = { AdminTextField(r, { r = it }, "Valor BSS") }, confirmButton = { Button(onClick = { onC(r.toDoubleOrNull() ?: curr) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059))) { Text("OK", color = Color.Black) } })
-}
+fun BcvRateDialog(curr: Double, onD: () -> Unit, onC: (Double) -> Unit) { var r by remember { mutableStateOf(curr.toString()) }; AlertDialog(onDismissRequest = onD, containerColor = Color(0xFF121216), title = { Text("TASA BCV", color = Color.White) }, text = { AdminTextField(r, { r = it }, "BSS") }, confirmButton = { Button(onClick = { onC(r.toDoubleOrNull() ?: curr) }) { Text("OK") } }) }
 
 fun Double.format(digits: Int) = "%.${digits}f".format(this)
+
+@Composable
+fun NewsAdminSection(newsList: List<News>, onAddNews: () -> Unit, onDeleteNews: (News) -> Unit, onImageClick: (String) -> Unit) {
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
+        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) { Text("NOVEDADES", color = Color.White, fontWeight = FontWeight.Black); IconButton(onClick = onAddNews) { Icon(Icons.Default.Add, null, tint = Color(0xFFC5A059)) } }
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) { items(newsList) { NewsAdminCard(it, onDeleteNews, onImageClick) } }
+    }
+}
+
+@Composable
+fun NewsAdminCard(news: News, onDelete: (News) -> Unit, onImageClick: (String) -> Unit) {
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Color(0xFFC5A059).copy(0.2f))) {
+        Column(Modifier.padding(12.dp)) {
+            Box(Modifier.fillMaxWidth().height(220.dp).background(Color.Black).clickable { onImageClick(news.imageUrl) }) { AsyncImage(model = fixDriveUrl(news.imageUrl), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
+            IconButton(onClick = { onDelete(news) }, Modifier.align(Alignment.End)) { Icon(Icons.Default.Delete, null, tint = Color.Red) }
+        }
+    }
+}
+
+@Composable
+fun AddNewsDialog(onDismiss: () -> Unit, onConfirm: (Uri) -> Unit) {
+    var uri by remember { mutableStateOf<Uri?>(null) }; val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri = it }
+    AlertDialog(onDismissRequest = onDismiss, containerColor = Color(0xFF121216), title = { Text("NUEVA NOVEDAD", color = Color.White) }, text = { Box(Modifier.fillMaxWidth().height(200.dp).background(Color.Black).clickable { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, Alignment.Center) { if(uri != null) AsyncImage(uri, null, Modifier.fillMaxSize()) else Icon(Icons.Default.AddPhotoAlternate, null, tint = Color(0xFFC5A059)) } }, confirmButton = { Button(onClick = { uri?.let { onConfirm(it) } }, enabled = uri != null) { Text("PUBLICAR") } })
+}
+
+@Composable
+fun CreditRequestsSection(requests: List<CreditRequest>, onApprove: (CreditRequest, String) -> Unit, onDeny: (CreditRequest, String) -> Unit, onDelete: (CreditRequest) -> Unit, onViewReceipt: ((CreditRequest) -> Unit)? = null) {
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
+        Text("SOLICITUDES", color = Color.White, fontWeight = FontWeight.Black); Spacer(Modifier.height(16.dp))
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) { items(requests) { CreditRequestCard(it, onApprove, onDeny, onDelete, onViewReceipt) } }
+    }
+}
+
+@Composable
+fun CreditRequestCard(req: CreditRequest, onApprove: (CreditRequest, String) -> Unit, onDeny: (CreditRequest, String) -> Unit, onDelete: (CreditRequest) -> Unit, onViewReceipt: ((CreditRequest) -> Unit)? = null) {
+    var comm by remember { mutableStateOf("") }; val date = java.text.SimpleDateFormat("dd/MM/yy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(req.timestamp))
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), border = BorderStroke(1.dp, Color(0xFFC5A059).copy(0.3f))) {
+        Column(Modifier.padding(20.dp)) {
+            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) { Text(date, color = Color.White.copy(0.4f), fontSize = 10.sp); IconButton(onClick = { onDelete(req) }) { Icon(Icons.Default.Delete, null, tint = Color.Red.copy(0.5f)) } }
+            Text(req.customerName.uppercase(), color = Color.White, fontWeight = FontWeight.Black); Text("$${req.amountUsd} (${req.amountBss} BSS)", color = Color(0xFFC5A059), fontSize = 18.sp, fontWeight = FontWeight.Black)
+            if (req.status == "pending") {
+                AdminTextField(comm, { comm = it }, "Comentarios")
+                Row(Modifier.padding(top = 12.dp), Arrangement.spacedBy(8.dp)) { Button(onClick = { onApprove(req, comm) }, Modifier.weight(1f)) { Text("OK") }; Button(onClick = { onDeny(req, comm) }, Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("X") } }
+            } else if (req.status == "approved" || req.status == "paid") {
+                Button(onClick = { onViewReceipt?.invoke(req) }, Modifier.fillMaxWidth().padding(top = 12.dp), colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent), border = BorderStroke(1.dp, Color(0xFFC5A059))) { Text("VER COMPROBANTE", color = Color(0xFFC5A059)) }
+            }
+        }
+    }
+}
+
+private fun updateCreditRequest(req: CreditRequest, status: String, comment: String, db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) {
+    val updateMap = mutableMapOf<String, Any>(
+        "status" to status,
+        "adminComment" to comment,
+        "processedTimestamp" to System.currentTimeMillis()
+    )
+
+    if (status == "approved") {
+        val subBss = req.amountBss.replace(" BSS", "").trim().toDoubleOrNull() ?: 0.0
+        val totalBss = when(req.plan) {
+            "weekly_4" -> subBss * 1.1
+            "full_30_days" -> subBss * 1.3
+            else -> subBss
+        }
+        updateMap["remainingDebt"] = totalBss
+    }
+
+    db.collection("solicitudes_credito").document(req.id).update(updateMap)
+        .addOnSuccessListener { showToast("✅ ACTUALIZADO", false) }
+        .addOnFailureListener { showToast("❌ ERROR AL ACTUALIZAR", true) }
+}
+
+private fun deleteCreditRequest(req: CreditRequest, db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) { db.collection("solicitudes_credito").document(req.id).delete().addOnSuccessListener { showToast("Eliminado", false) } }
+
+@Composable
+fun CreditReceiptDialog(request: CreditRequest, onDismiss: () -> Unit) {
+    val context = LocalContext.current; val graphicsLayer = rememberGraphicsLayer(); val coroutineScope = rememberCoroutineScope()
+    val date = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(request.timestamp))
+    val verifyId = request.id.take(12).uppercase(); val subBss = request.amountBss.toDoubleOrNull() ?: 0.0
+    val rate = if (request.amountUsd > 0) subBss / request.amountUsd else 0.0
+    var totalBss = subBss; var intBss = 0.0; val sch = mutableListOf<Pair<String, Double>>()
+    val sdf = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()); val cal = java.util.Calendar.getInstance().apply { timeInMillis = request.timestamp }
+    val plan = when(request.plan) {
+        "weekly_4" -> { intBss = subBss * 0.10; totalBss = subBss + intBss; val inst = totalBss / 4; for(i in 1..4) { cal.add(java.util.Calendar.DAY_OF_YEAR, 7); sch.add("CUOTA $i (${sdf.format(cal.time)})" to inst) }; "4 PAGOS SEMANALES" }
+        "weekly_interest" -> { val w = subBss * 0.10; intBss = w * 4; totalBss = subBss + intBss; for(i in 1..3) { cal.add(java.util.Calendar.DAY_OF_YEAR, 7); sch.add("INTERÉS (${sdf.format(cal.time)})" to w) }; cal.add(java.util.Calendar.DAY_OF_YEAR, 7); sch.add("CAPITAL + FINAL" to (subBss + w)); "INTERÉS SEMANAL" }
+        "full_30_days" -> { intBss = subBss * 0.30; totalBss = subBss + intBss; cal.add(java.util.Calendar.DAY_OF_YEAR, 30); sch.add("PAGO ÚNICO" to totalBss); "30 DÍAS" }
+        else -> request.plan.uppercase()
+    }
+    Dialog(onDismissRequest = onDismiss) {
+        Card(Modifier.fillMaxWidth(0.95f).padding(vertical = 32.dp).drawWithCache { onDrawWithContent { graphicsLayer.record { this@onDrawWithContent.drawContent() }; drawLayer(graphicsLayer) } }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(0.dp)) {
+            Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
+                Image(painterResource(R.drawable.logo_admin), null, Modifier.size(80.dp).padding(bottom = 8.dp))
+                Text("STARBIG STORE", color = Color(0xFFC5A059), fontSize = 22.sp, fontWeight = FontWeight.Black)
+                Text("BOUTIQUE EXCLUSIVA", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                DashedDivider(Modifier.padding(vertical = 10.dp))
+                Text("COMPROBANTE DE PAGO", color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                DashedDivider(Modifier.padding(vertical = 10.dp))
+                Column(Modifier.fillMaxWidth(), Arrangement.spacedBy(4.dp)) { ReceiptRow("FECHA:", date); ReceiptRow("CLIENTE:", request.customerName.uppercase()); ReceiptRow("PLAN:", plan) }
+                Spacer(Modifier.height(15.dp)); DashedDivider()
+                Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), Arrangement.SpaceBetween) { Text("TOTAL A PAGAR:", fontWeight = FontWeight.Black); Text("${totalBss.format(2)} BSS", fontWeight = FontWeight.Black) }
+                DashedDivider(); Spacer(Modifier.height(20.dp))
+                Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(10.dp)) {
+                    Button(onClick = { coroutineScope.launch { try { val bitmap = graphicsLayer.toImageBitmap().asAndroidBitmap(); val file = File(File(context.cacheDir, "images").apply { mkdirs() }, "Comprobante_${verifyId}.jpg"); FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.JPEG, 100, it) }; val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file); context.startActivity(Intent.createChooser(Intent().apply { action = Intent.ACTION_SEND; type = "image/jpeg"; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); clipData = android.content.ClipData.newRawUri("", uri) }, "Compartir")) } catch(e:Exception){Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()} } }, Modifier.weight(1f)) { Text("COMPARTIR") }
+                    Button(onClick = { coroutineScope.launch { try { val bitmap = graphicsLayer.toImageBitmap().asAndroidBitmap(); PrintHelper(context).apply { scaleMode = PrintHelper.SCALE_MODE_FIT; printBitmap("Comprobante_${verifyId}", bitmap) } } catch(e:Exception){Toast.makeText(context, "Error", Toast.LENGTH_SHORT).show()} } }, Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color.Black)) { Text("IMPRIMIR") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun OrderReceiptDialog(order: Order, onDismiss: () -> Unit) {
+    val context = LocalContext.current; val graphicsLayer = rememberGraphicsLayer(); val coroutineScope = rememberCoroutineScope()
+    val date = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(order.timestamp))
+    val verifyId = order.id.take(12).uppercase()
+    Dialog(onDismissRequest = onDismiss) {
+        Card(Modifier.fillMaxWidth(0.95f).padding(vertical = 32.dp).drawWithCache { onDrawWithContent { graphicsLayer.record { this@onDrawWithContent.drawContent() }; drawLayer(graphicsLayer) } }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(0.dp)) {
+            Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
+                Image(painterResource(R.drawable.logo_admin), null, Modifier.size(80.dp).padding(bottom = 8.dp))
+                Text("STARBIG STORE", color = Color(0xFFC5A059), fontSize = 22.sp, fontWeight = FontWeight.Black)
+                Text("BOUTIQUE EXCLUSIVA", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                DashedDivider(Modifier.padding(vertical = 10.dp))
+                Text("COMPROBANTE DE COMPRA", color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                DashedDivider(Modifier.padding(vertical = 10.dp))
+                Column(Modifier.fillMaxWidth(), Arrangement.spacedBy(4.dp)) { ReceiptRow("ORDEN:", order.orderId); ReceiptRow("FECHA:", date); ReceiptRow("CLIENTE:", order.customerName.uppercase()) }
+                Spacer(Modifier.height(15.dp)); DashedDivider()
+                Column(Modifier.fillMaxWidth().padding(vertical = 10.dp)) { order.items.forEach { Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) { Text(it.name, Modifier.weight(1f), fontSize = 11.sp); Text("$${it.priceUsd}", fontSize = 11.sp) } } }
+                DashedDivider()
+                Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), Arrangement.SpaceBetween) { Text("TOTAL:", fontWeight = FontWeight.Black); Text(order.totalBss, color = Color(0xFFC5A059), fontWeight = FontWeight.Black) }
+                DashedDivider(); Spacer(Modifier.height(20.dp))
+                Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(10.dp)) {
+                    Button(onClick = { coroutineScope.launch { try { val bitmap = graphicsLayer.toImageBitmap().asAndroidBitmap(); val file = File(File(context.cacheDir, "images").apply { mkdirs() }, "Recibo_${verifyId}.jpg"); FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.JPEG, 100, it) }; val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file); context.startActivity(Intent.createChooser(Intent().apply { action = Intent.ACTION_SEND; type = "image/jpeg"; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); clipData = android.content.ClipData.newRawUri("", uri) }, "Compartir")) } catch(e:Exception){Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()} } }, Modifier.weight(1f)) { Text("COMPARTIR") }
+                    Button(onClick = { coroutineScope.launch { try { val bitmap = graphicsLayer.toImageBitmap().asAndroidBitmap(); PrintHelper(context).apply { scaleMode = PrintHelper.SCALE_MODE_FIT; printBitmap("Recibo_${verifyId}", bitmap) } } catch(e:Exception){Toast.makeText(context, "Error", Toast.LENGTH_SHORT).show()} } }, Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color.Black)) { Text("IMPRIMIR") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DashedDivider(modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier = modifier.fillMaxWidth().height(1.dp)) {
+        val pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+        drawLine(color = Color.Black.copy(alpha = 0.3f), start = androidx.compose.ui.geometry.Offset(0f, 0f), end = androidx.compose.ui.geometry.Offset(size.width, 0f), pathEffect = pathEffect, strokeWidth = 2f)
+    }
+}
+
+@Composable
+fun ReceiptRow(label: String, value: String) { Row(modifier = Modifier.fillMaxWidth()) { Text(label, color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(110.dp)); Text(value, color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Medium) } }
+
+@Composable
+fun ReceiptRowFin(label: String, usd: String, bss: String) { Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(label, color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Medium); Text(if(usd.isNotEmpty()) "$usd $bss" else bss, color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold) } }
 
 fun fixDriveUrl(url: String?): String {
     if (url.isNullOrBlank() || url.contains("subiendo")) return "https://via.placeholder.com/200?text=STARBIG"
@@ -1486,526 +1145,13 @@ fun fixDriveUrl(url: String?): String {
         url.length > 20 && !url.contains("/") && !url.contains(".") -> url
         else -> null
     }
-
-    return id?.let { "https://drive.google.com/thumbnail?id=$it&sz=w1000" } ?: url
-}
-
-@Composable
-fun NewsAdminSection(
-    newsList: List<News>,
-    onAddNews: () -> Unit,
-    onDeleteNews: (News) -> Unit,
-    onImageClick: (String) -> Unit
-) {
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("NOVEDADES & FLYERS", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black)
-            IconButton(onClick = onAddNews) { Icon(Icons.Default.Add, null, tint = Color(0xFFC5A059)) }
-        }
-        
-        if (newsList.isEmpty()) {
-            InfoSection("No hay novedades publicadas")
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
-                items(newsList) { news ->
-                    NewsAdminCard(news, onDeleteNews, onImageClick)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun NewsAdminCard(news: News, onDelete: (News) -> Unit, onImageClick: (String) -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Color(0xFFC5A059).copy(alpha = 0.2f))) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Box(modifier = Modifier.fillMaxWidth().height(220.dp).background(Color.Black, RoundedCornerShape(12.dp)).clickable { onImageClick(news.imageUrl) }) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(fixDriveUrl(news.imageUrl))
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit,
-                    error = painterResource(R.drawable.logo_admin)
-                )
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                Button(
-                    onClick = { onDelete(news) },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(0.1f)),
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, Color.Red.copy(0.3f)),
-                    contentPadding = PaddingValues(horizontal = 16.dp)
-                ) {
-                    Icon(Icons.Default.Delete, null, tint = Color.Red, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("ELIMINAR", color = Color.Red, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun AddNewsDialog(onDismiss: () -> Unit, onConfirm: (Uri) -> Unit) {
-    var uri by remember { mutableStateOf<Uri?>(null) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri = it }
-
-    AlertDialog(onDismissRequest = onDismiss, containerColor = Color(0xFF121216), shape = RoundedCornerShape(0.dp),
-        title = { Text("NUEVA NOVEDAD", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(modifier = Modifier.fillMaxWidth().height(250.dp).background(Color.Black).clickable { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, contentAlignment = Alignment.Center) {
-                    if(uri != null) AsyncImage(model = uri, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
-                    else Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.AddPhotoAlternate, null, tint = Color(0xFFC5A059), modifier = Modifier.size(48.dp))
-                        Text("SELECCIONAR FLYER", color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        },
-        confirmButton = { 
-            Button(
-                onClick = { uri?.let { onConfirm(it) } }, 
-                enabled = uri != null,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059))
-            ) { 
-                Text("PUBLICAR", color = Color.Black) 
-            } 
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("CANCELAR", color = Color.White.copy(0.6f)) }
-        }
-    )
+    return if (id != null) "https://lh3.googleusercontent.com/d/$id" else url ?: ""
 }
 
 private fun deleteNews(news: News, db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) {
     db.collection("novedades").document(news.id).delete().addOnSuccessListener {
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val json = org.json.JSONObject().apply {
-                    put("action", "deleteProduct")
-                    put("sheetName", "NOVEDADES")
-                    put("nombre", "FLYER NOVEDAD")
-                    put("imageUrl", news.imageUrl)
-                }
-                OkHttpClient().newCall(Request.Builder().url(GOOGLE_SHEETS_URL).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
-            } catch (_: Exception) {}
-        }
-        showToast("Novedad eliminada", false)
+        showToast("✅ NOVEDAD ELIMINADA", false)
+    }.addOnFailureListener {
+        showToast("❌ ERROR AL ELIMINAR", true)
     }
 }
-
-@Composable
-fun CreditRequestsSection(
-    requests: List<CreditRequest>,
-    onApprove: (CreditRequest, String) -> Unit,
-    onDeny: (CreditRequest, String) -> Unit,
-    onDelete: (CreditRequest) -> Unit,
-    onViewReceipt: ((CreditRequest) -> Unit)? = null
-) {
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
-        Text("SOLICITUDES DE CRÉDITO", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black)
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        if (requests.isEmpty()) {
-            InfoSection("No hay solicitudes")
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
-                items(requests) { req ->
-                    CreditRequestCard(req, onApprove, onDeny, onDelete, onViewReceipt)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun CreditRequestCard(
-    req: CreditRequest,
-    onApprove: (CreditRequest, String) -> Unit,
-    onDeny: (CreditRequest, String) -> Unit,
-    onDelete: (CreditRequest) -> Unit,
-    onViewReceipt: ((CreditRequest) -> Unit)? = null
-) {
-    var adminComment by remember { mutableStateOf("") }
-    val date = java.text.SimpleDateFormat("dd/MM/yy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(req.timestamp))
-    
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Color(0xFFC5A059).copy(0.3f))) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(date, color = Color.White.copy(0.4f), fontSize = 10.sp)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    StatusBadge(req.status)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    IconButton(onClick = { onDelete(req) }, modifier = Modifier.size(28.dp).background(Color.Red.copy(0.1f), RoundedCornerShape(6.dp))) {
-                        Icon(Icons.Default.Delete, null, tint = Color.Red.copy(0.6f), modifier = Modifier.size(16.dp))
-                    }
-                }
-            }
-            
-            Text(req.customerName.uppercase(), color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
-            Text("DOCUMENTO: ${req.idNumber}", color = Color(0xFFC5A059), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            Text("CONTACTO: ${req.phone}", color = Color.White.copy(0.6f), fontSize = 12.sp)
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            Surface(color = Color.White.copy(0.05f), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("JUSTIFICACIÓN DE SOLICITUD", color = Color(0xFFC5A059), fontSize = 9.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(req.reason, color = Color.White.copy(0.9f), fontSize = 12.sp, lineHeight = 18.sp)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    HorizontalDivider(color = Color.White.copy(0.05f))
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("BANCO: ${req.bank}", color = Color.White.copy(0.7f), fontSize = 11.sp)
-                    Text("CUENTA: ${req.account}", color = Color.White.copy(0.7f), fontSize = 11.sp)
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("MONTO GLOBAL SOLICITADO", color = Color.White.copy(0.5f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            Text("$${req.amountUsd} (${req.amountBss} BSS)", color = Color(0xFFC5A059), fontWeight = FontWeight.Black, fontSize = 22.sp)
-            
-            if (req.status == "pending") {
-                Spacer(modifier = Modifier.height(20.dp))
-                AdminTextField(adminComment, { adminComment = it }, "Comentarios internos o instrucciones")
-                Spacer(modifier = Modifier.height(20.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Button(onClick = { onApprove(req, adminComment) }, modifier = Modifier.weight(1f).height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)), shape = RoundedCornerShape(12.dp)) {
-                        Text("APROBAR", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Black)
-                    }
-                    Button(onClick = { onDeny(req, adminComment) }, modifier = Modifier.weight(1f).height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = Color.Red), shape = RoundedCornerShape(12.dp)) {
-                        Text("DENEGAR", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black)
-                    }
-                }
-            } else {
-                if (req.adminComment.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Surface(color = Color.White.copy(0.03f), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        Text("NOTA ADMIN: ${req.adminComment}", color = Color.White.copy(0.4f), fontSize = 11.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, modifier = Modifier.padding(12.dp))
-                    }
-                }
-                
-                if (req.status == "approved" || req.status == "paid") {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(
-                        onClick = { onViewReceipt?.invoke(req) },
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059).copy(alpha = 0.1f)),
-                        border = BorderStroke(1.dp, Color(0xFFC5A059)),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.ReceiptLong, null, tint = Color(0xFFC5A059))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("VER COMPROBANTE", color = Color(0xFFC5A059), fontSize = 12.sp, fontWeight = FontWeight.Black)
-                    }
-                }
-            }
-        }
-    }
-}
-
-
-private fun updateCreditRequest(req: CreditRequest, status: String, comment: String, db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) {
-    db.collection("solicitudes_credito").document(req.id).update(
-        "status", status,
-        "adminComment", comment,
-        "processedTimestamp", System.currentTimeMillis()
-    ).addOnSuccessListener {
-        if (status == "approved") {
-            CoroutineScope(Dispatchers.IO).launch {
-                try {
-                    val json = org.json.JSONObject().apply {
-                        put("action", "logCredit")
-                        put("name", req.customerName)
-                        put("idNumber", req.idNumber)
-                        put("amountUsd", req.amountUsd)
-                        put("amountBss", req.amountBss)
-                        put("plan", req.plan)
-                        put("reqId", req.id)
-                        put("comment", comment)
-                    }
-                    OkHttpClient().newCall(Request.Builder().url(GOOGLE_SHEETS_URL).post(json.toString().toRequestBody("application/json".toMediaType())).build()).execute()
-                } catch (_: Exception) {}
-            }
-        }
-        showToast("✅ SOLICITUD ${status.uppercase()} Y COMPROBANTE ENVIADO", false)
-    }
-}
-
-private fun deleteCreditRequest(req: CreditRequest, db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) {
-    db.collection("solicitudes_credito").document(req.id).delete().addOnSuccessListener {
-        showToast("Registro eliminado", false)
-    }
-}
-
-@Composable
-fun CreditReceiptDialog(
-    request: CreditRequest,
-    onDismiss: () -> Unit
-) {
-    val context = LocalContext.current
-    val graphicsLayer = rememberGraphicsLayer()
-    val coroutineScope = rememberCoroutineScope()
-
-    val date = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(request.timestamp))
-    val verifyId = request.id.take(12).uppercase()
-    
-    // Cálculos Financieros
-    val subtotalBss = request.amountBss.toDoubleOrNull() ?: 0.0
-    val rate = if (request.amountUsd > 0) subtotalBss / request.amountUsd else 0.0
-    
-    var totalBss = subtotalBss
-    var interestBss = 0.0
-    val schedule = mutableListOf<Pair<String, Double>>()
-    val sdf = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
-    val cal = java.util.Calendar.getInstance().apply { timeInMillis = request.timestamp }
-
-    val planDisplay = when(request.plan) {
-        "weekly_4" -> {
-            interestBss = subtotalBss * 0.10
-            totalBss = subtotalBss + interestBss
-            val installment = totalBss / 4
-            for(i in 1..4) {
-                cal.add(java.util.Calendar.DAY_OF_YEAR, 7)
-                schedule.add("CUOTA $i (${sdf.format(cal.time)})" to installment)
-            }
-            "4 PAGOS SEMANALES (CUOTAS + 10%)"
-        }
-        "weekly_interest" -> {
-            val weeklyInt = subtotalBss * 0.10
-            interestBss = weeklyInt * 4
-            totalBss = subtotalBss + interestBss
-            for(i in 1..3) {
-                cal.add(java.util.Calendar.DAY_OF_YEAR, 7)
-                schedule.add("INTERÉS SEMANAL (${sdf.format(cal.time)})" to weeklyInt)
-            }
-            cal.add(java.util.Calendar.DAY_OF_YEAR, 7)
-            schedule.add("CAPITAL + FINAL (${sdf.format(cal.time)})" to (subtotalBss + weeklyInt))
-            "INTERÉS SEMANAL 10% (CAPITAL AL FINAL)"
-        }
-        "full_30_days" -> {
-            interestBss = subtotalBss * 0.30
-            totalBss = subtotalBss + interestBss
-            cal.add(java.util.Calendar.DAY_OF_YEAR, 30)
-            schedule.add("PAGO ÚNICO (${sdf.format(cal.time)})" to totalBss)
-            "PAGO ÚNICO A 30 DÍAS (+30% INT)"
-        }
-        else -> request.plan.uppercase()
-    }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth(0.95f) // Un poco más estrecho para que parezca ticket
-                .padding(vertical = 32.dp)
-                .drawWithCache {
-                    onDrawWithContent {
-                        graphicsLayer.record {
-                            this@onDrawWithContent.drawContent()
-                        }
-                        drawLayer(graphicsLayer)
-                    }
-                },
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            shape = RoundedCornerShape(0.dp), // Esquinas rectas tipo papel de ticket
-            elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .padding(20.dp)
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // ENCABEZADO PROFESIONAL CON LOGO
-                Image(
-                    painter = painterResource(id = R.drawable.logo_admin), // Usamos el logo de administración
-                    contentDescription = null,
-                    modifier = Modifier.size(100.dp).padding(bottom = 8.dp),
-                    contentScale = ContentScale.Fit
-                )
-                Text("STARBIG STORE", color = Color(0xFFC5A059), fontSize = 22.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
-                Text("BOUTIQUE EXCLUSIVA", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                Text("RIF: V-22727679-3", color = Color.Black.copy(0.6f), fontSize = 9.sp)
-                
-                Spacer(modifier = Modifier.height(15.dp))
-                DashedDivider()
-                Text("COMPROBANTE DE PAGO", color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(vertical = 8.dp))
-                DashedDivider()
-                
-                Spacer(modifier = Modifier.height(20.dp))
-                
-                // DATOS DEL CLIENTE
-                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ReceiptRow("FECHA EMISIÓN:", date)
-                    ReceiptRow("CLIENTE:", request.customerName.uppercase())
-                    ReceiptRow("DOCUMENTO:", request.idNumber)
-                    ReceiptRow("CORREO:", request.customerEmail)
-                    ReceiptRow("TASA BCV:", "${rate.format(2)} BSS/$")
-                }
-                
-                Spacer(modifier = Modifier.height(20.dp))
-                DashedDivider()
-                Spacer(modifier = Modifier.height(15.dp))
-
-                Text("CONCEPTO:", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth())
-                Text("CRÉDITO PERSONAL APROBADO", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.fillMaxWidth())
-                Text("PLAN: $planDisplay", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Black, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
-                
-                Spacer(modifier = Modifier.height(25.dp))
-                
-                // RESUMEN FINANCIERO DESTACADO
-                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("SUB-TOTAL CAPITAL:", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                        Text("$${request.amountUsd} (${subtotalBss.format(2)} BSS)", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("INTERESES CARGADOS:", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                        Text("${interestBss.format(2)} BSS", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    DashedDivider()
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text("TOTAL A PAGAR:", color = Color.Black, fontSize = 18.sp, fontWeight = FontWeight.Black)
-                        Text("${totalBss.format(2)} BSS", color = Color.Black, fontSize = 18.sp, fontWeight = FontWeight.Black)
-                    }
-                }
-
-                if (schedule.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(30.dp))
-                    Text("CRONOGRAMA DE PAGOS:", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth())
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        schedule.forEach { (label, amount) ->
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(label, color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                                Text("${amount.format(2)} BSS", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Black)
-                            }
-                        }
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(40.dp))
-                DashedDivider()
-                Spacer(modifier = Modifier.height(15.dp))
-                Text("¡GRACIAS POR TU RESPONSABILIDAD!", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
-                Text("Este es un comprobante digital verificado por Starbig Store.", color = Color.Gray, fontSize = 8.sp, textAlign = TextAlign.Center)
-                Text("ID-VERIFICACIÓN: $verifyId", color = Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
-                
-                Spacer(modifier = Modifier.height(30.dp))
-
-                // BOTONES DE ACCIÓN
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(
-                        onClick = { 
-                            coroutineScope.launch {
-                                try {
-                                    val bitmap = graphicsLayer.toImageBitmap().asAndroidBitmap()
-                                    val cachePath = File(context.cacheDir, "images")
-                                    cachePath.mkdirs()
-                                    val file = File(cachePath, "Comprobante_${verifyId}.jpg")
-                                    FileOutputStream(file).use { stream ->
-                                        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
-                                    }
-                                    
-                                    val contentUri = androidx.core.content.FileProvider.getUriForFile(
-                                        context, 
-                                        "${context.packageName}.fileprovider", 
-                                        file
-                                    )
-
-                                    if (contentUri != null) {
-                                        val shareIntent = Intent().apply {
-                                            action = Intent.ACTION_SEND
-                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                            type = "image/jpeg"
-                                            putExtra(Intent.EXTRA_STREAM, contentUri)
-                                            clipData = android.content.ClipData.newRawUri("", contentUri)
-                                        }
-                                        context.startActivity(Intent.createChooser(shareIntent, "Enviar Comprobante"))
-                                    }
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "Error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        },
-                        modifier = Modifier.weight(1.2f).height(50.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059)),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(0.dp)
-                    ) {
-                        Icon(Icons.Default.Share, null, tint = Color.Black, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("COMPARTIR", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Black)
-                    }
-
-                    Button(
-                        onClick = { 
-                            coroutineScope.launch {
-                                try {
-                                    val bitmap = graphicsLayer.toImageBitmap().asAndroidBitmap()
-                                    val printHelper = PrintHelper(context)
-                                    printHelper.scaleMode = PrintHelper.SCALE_MODE_FIT
-                                    printHelper.printBitmap("Comprobante_${verifyId}", bitmap)
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "Error al imprimir", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        },
-                        modifier = Modifier.weight(1f).height(50.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(0.dp)
-                    ) {
-                        Icon(Icons.Default.Print, null, tint = Color.White, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("IMPRIMIR", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black)
-                    }
-                }
-                
-                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth().padding(top = 15.dp)) {
-                    Text("CERRAR VISTA", color = Color.Black.copy(alpha = 0.5f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-    }
-}
-
-
-@Composable
-fun DashedDivider(modifier: Modifier = Modifier) {
-    androidx.compose.foundation.Canvas(modifier = modifier.fillMaxWidth().height(1.dp)) {
-        val pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
-        drawLine(
-            color = Color.Black.copy(alpha = 0.3f),
-            start = androidx.compose.ui.geometry.Offset(0f, 0f),
-            end = androidx.compose.ui.geometry.Offset(size.width, 0f),
-            pathEffect = pathEffect,
-            strokeWidth = 2f
-        )
-    }
-}
-
-@Composable
-fun ReceiptRow(label: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth()) {
-        Text(label, color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(110.dp))
-        Text(value, color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-    }
-}
-
-@Composable
-fun ReceiptRowFin(label: String, usd: String, bss: String) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-        Text(if(usd.isNotEmpty()) "$usd $bss" else bss, color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-    }
-}
-

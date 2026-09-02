@@ -968,6 +968,35 @@
     </div>
 </div>
 
+<!-- MODAL ÉXITO DE REPORTE DE PAGO Y ENVÍO A WHATSAPP DE VENTAS -->
+<div id="post-payment-success-modal" class="modal" style="background:rgba(0,0,0,0.92); z-index:9999;">
+    <div class="modal-content" style="max-width: 480px; padding: 35px 25px; text-align: center; border: 1px solid #C5A059; border-radius: 20px; background:#121216;">
+        <i data-lucide="check-circle-2" style="width: 55px; height: 55px; color: #25D366; margin-bottom: 15px;"></i>
+        <h2 style="color:white; margin-bottom:8px; font-weight: 900; letter-spacing: 1px;">¡REPORTE REGISTRADO!</h2>
+        <p style="color:#C5A059; font-size: 0.8rem; font-weight: 800; margin-bottom: 20px;">TU PAGO SE HA PROCESADO CON ÉXITO</p>
+
+        <div style="background: rgba(255, 255, 255, 0.03); padding: 15px; border-radius: 12px; margin-bottom: 20px; border: 1px solid rgba(197, 160, 89, 0.2); text-align: left;">
+            <p style="color: #bbb; font-size: 0.75rem; line-height: 1.5; margin-bottom: 10px;">
+                Envía los datos de pago al <strong>WhatsApp de Ventas</strong> para acelerar la verificación:
+            </p>
+            <div id="post-payment-summary-box" style="font-size: 0.7rem; color: #25D366; background: #000; padding: 10px; border-radius: 8px; font-family: monospace; white-space: pre-wrap; margin-bottom: 10px; max-height: 120px; overflow-y: auto;"></div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px;">
+            <button onclick="sendPaymentToWhatsapp('sales')" class="btn-primary full-width" style="background:#25D366; color:white; height: 48px; font-weight: 900;">
+                <i data-lucide="message-circle" style="vertical-align: middle; margin-right: 5px;"></i> ENVIAR A WHATSAPP VENTAS
+            </button>
+            <button onclick="sendPaymentToWhatsapp('tech')" class="btn-primary full-width" style="background:#1a1a24; border: 1px solid #25D366; color:#25D366; height: 44px; font-weight: 800;">
+                <i data-lucide="message-circle" style="vertical-align: middle; margin-right: 5px;"></i> ENVIAR A SOPORTE TÉCNICO
+            </button>
+        </div>
+
+        <button onclick="closePostPaymentAndGoHome()" class="btn-secondary full-width" style="border: none; color: #888; font-size: 0.75rem; text-decoration: underline;">
+            IR AL INICIO DE LA TIENDA
+        </button>
+    </div>
+</div>
+
 <script>
     const firebaseConfig = { apiKey: "AIzaSyAdKUDDG7c6jf_QWn7DVwnm8BIZbiIXgcg", authDomain: "starbigstore.firebaseapp.com", projectId: "starbigstore", storageBucket: "starbigstore.firebasestorage.app", messagingSenderId: "94012933332", appId: "1:94012933332:web:a245585b5465666f" };
     firebase.initializeApp(firebaseConfig);
@@ -1523,23 +1552,27 @@
         renderCart();
     }
 
+    function closeAllModals() {
+        const modalIds = [
+            'auth-modal', 'contact-choice-modal', 'admin-overlay', 'add-prod-overlay',
+            'add-news-overlay', 'news-overlay', 'product-detail-modal', 'quantity-modal',
+            'cart-modal', 'security-modal', 'credits-modal', 'debt-pay-modal',
+            'crop-modal', 'receipt-modal', 'edit-profile-overlay', 'credit-terms-modal',
+            'credit-request-modal', 'credit-status-modal', 'credit-confirmation-modal',
+            'post-payment-success-modal'
+        ];
+        modalIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+        });
+    }
+
     function toggleCart() {
         const modal = document.getElementById('cart-modal');
         const isOpening = modal.style.display !== 'block';
 
         if (isOpening) {
-            // Cerrar otros posibles overlays abiertos para evitar superposición
-            const modalsToClose = [
-                'auth-modal', 'admin-overlay', 'product-detail-modal',
-                'credits-modal', 'security-modal', 'quantity-modal',
-                'contact-choice-modal', 'edit-profile-overlay', 'credit-terms-modal',
-                'credit-request-modal', 'credit-status-modal', 'news-overlay'
-            ];
-            modalsToClose.forEach(id => {
-                const m = document.getElementById(id);
-                if(m) m.style.display = 'none';
-            });
-
+            closeAllModals();
             // Forzar resincronización si hay sesión
             const email = auth.currentUser?.email || currentUserData?.email;
             if(email) startCartListener(email);
@@ -1836,11 +1869,23 @@
             const reqDoc = await reqRef.get();
             const reqData = reqDoc.data();
 
-            await reqRef.update({
+            let totalBss = parseFloat(reqData.amountBss) || 0;
+            if (reqData.plan === 'weekly_4') totalBss *= 1.1;
+            else if (reqData.plan === 'full_30_days') totalBss *= 1.3;
+            // Si es weekly_interest, el capital queda igual y los intereses se cobran aparte,
+            // pero para simplificar, el admin manejará el abono.
+
+            const updateData = {
                 status: status,
                 adminComment: comment,
                 processedTimestamp: Date.now()
-            });
+            };
+
+            if (status === 'approved') {
+                updateData.remainingDebt = totalBss;
+            }
+
+            await reqRef.update(updateData);
 
             // Si se aprueba, registrar en Google Sheets (CREDITOS_OTORGADOS)
             if (status === 'approved') {
@@ -2128,13 +2173,19 @@
     async function renderCombinedAdminSales() {
         const list = document.getElementById('admin-sales-list');
 
-        // Obtenemos datos de ambas colecciones
-        const pedidosSnap = await db.collection("pedidos").orderBy("timestamp", "desc").get();
-        const creditsSnap = await db.collection("solicitudes_credito").where("status", "==", "awaiting_verification").get();
+        // Obtenemos datos de ambas colecciones: Pedidos (todos) y Créditos (pendientes y pagados)
+        const pedidosSnap = await db.collection("pedidos").orderBy("timestamp", "desc").limit(50).get();
+        const creditsSnap = await db.collection("solicitudes_credito").orderBy("timestamp", "desc").limit(50).get();
 
         let allItems = [];
         pedidosSnap.forEach(doc => allItems.push({...doc.data(), id: doc.id, _collection: "pedidos"}));
-        creditsSnap.forEach(doc => allItems.push({...doc.data(), id: doc.id, _collection: "solicitudes_credito"}));
+        creditsSnap.forEach(doc => {
+            const data = doc.data();
+            // Mostrar si está esperando verificación o si ya tiene un historial de pagos/status relevante
+            if (data.status === "awaiting_verification" || data.status === "paid" || data.status === "approved") {
+                allItems.push({...data, id: doc.id, _collection: "solicitudes_credito"});
+            }
+        });
 
         // Ordenar por tiempo (más reciente primero)
         allItems.sort((a, b) => b.timestamp - a.timestamp);
@@ -2171,8 +2222,6 @@
                         <div style="color:#C5A059; font-weight:800; margin-bottom:5px;">DETALLES DEL PAGO:</div>
                         <div><strong>REF:</strong> ${item.paymentReport.reference}</div>
                         <div><strong>BANCO:</strong> ${item.paymentReport.bank}</div>
-                        <div><strong>FECHA:</strong> ${item.paymentReport.date}</div>
-                        <div><strong>TLF:</strong> ${item.paymentReport.phone}</div>
                         <div><strong>MONTO:</strong> ${item.paymentReport.amount} BSS</div>
                         ${item.paymentReport.captureBase64 ? `
                             <div style="margin-top:10px; height:100px; background:#000; display:flex; justify-content:center; align-items:center; cursor:pointer;" onclick="expandImage('data:image/jpeg;base64,${item.paymentReport.captureBase64}')">
@@ -2188,7 +2237,9 @@
                         ${(item.status === 'pending' || item.status === 'awaiting_verification') ? `
                             <button onclick="confirmPayment('${item.id}', '${item._collection}')" style="background:#25D366; color:black; border:none; padding:5px 10px; font-size:9px; font-weight:bold; cursor:pointer; border-radius:4px;">APROBAR</button>
                             <button onclick="rejectPayment('${item.id}', '${item._collection}')" style="background:#ff4444; color:white; border:none; padding:5px 10px; font-size:9px; font-weight:bold; cursor:pointer; border-radius:4px;">RECHAZAR</button>
-                        ` : item.status === 'paid' ? '<span style="color:#25D366; font-size:9px; font-weight:bold;">PAGADO</span>' : '<span style="color:#ff4444; font-size:9px; font-weight:bold;">RECHAZADO</span>'}
+                        ` : item.status === 'paid' || item.status === 'active_credit' ? `
+                            <button onclick="generateDigitalReceipt('${item.id}', '${item._collection}')" style="background:rgba(197, 160, 89, 0.1); color:#C5A059; border:1px solid #C5A059; padding:5px 10px; font-size:9px; font-weight:bold; cursor:pointer; border-radius:4px;">VER RECIBO</button>
+                        ` : '<span style="color:#ff4444; font-size:9px; font-weight:bold;">RECHAZADO</span>'}
                     </div>
                 </div>`;
             list.appendChild(card);
@@ -2213,6 +2264,7 @@
             const itemRef = db.collection(collection).doc(id);
             const itemDoc = await itemRef.get();
             const item = itemDoc.data();
+            const amountPaid = parseFloat(item.paymentReport?.amount) || 0;
 
             // Lógica de Puntos Starbig
             let totalPointsToGain = 0;
@@ -2239,46 +2291,68 @@
                 }
             }
 
-            // LÓGICA DE ACTUALIZACIÓN DE ESTADO
+            // LÓGICA DE ACTUALIZACIÓN DE ESTADO Y DEUDA
             if (collection === "pedidos") {
-                const hasCredit = item.items.some(it => it.paymentMethod === 'credit');
+                const hasCredit = item.items && item.items.some(it => it.paymentMethod === 'credit');
                 if (hasCredit) {
-                    if (item.status === "pending" || (item.status === "awaiting_verification" && (item.installmentsPaid || 0) === 0)) {
-                        const totalBss = parseFloat(item.totalBss.replace(" BSS", "")) || 0;
-                        const initial = totalBss * 0.25;
+                    const totalBss = parseFloat((item.totalBss || "0").toString().replace(" BSS", "")) || 0;
+                    const initial = totalBss * 0.25;
+
+                    if (item.remainingDebt === undefined || item.remainingDebt === null) {
+                        // Confirmación del pago inicial de la orden (25%)
+                        const debt = Math.max(0, totalBss - initial);
                         await itemRef.update({
-                            status: "active_credit",
-                            remainingDebt: totalBss - initial,
+                            status: debt <= 0 ? "paid" : "active_credit",
+                            remainingDebt: debt,
                             installmentsPaid: 0,
                             paymentReport: null
                         });
                     } else {
-                        const amountPaid = parseFloat(item.paymentReport.amount) || 0;
-                        const remaining = item.remainingDebt - amountPaid;
+                        // Confirmación de abono o cuota de crédito posterior
+                        const remaining = (item.remainingDebt || 0) - amountPaid;
+                        const newRemaining = Math.max(0, remaining);
+                        const newInstallments = (item.installmentsPaid || 0) + 1;
                         await itemRef.update({
-                            remainingDebt: Math.max(0, remaining),
-                            installmentsPaid: (item.installmentsPaid || 0) + 1,
-                            status: remaining <= 0 ? "paid" : "active_credit",
+                            remainingDebt: newRemaining,
+                            installmentsPaid: newInstallments,
+                            status: newRemaining <= 0 ? "paid" : "active_credit",
                             paymentReport: null
                         });
                     }
                 } else {
-                    await itemRef.update({ status: "paid" });
-                }
-            } else {
-                // Para solicitudes de crédito personal
-                // Asumimos pago completo para simplificar o abono si es plan semanal
-                if (item.plan === "weekly_4" || item.plan === "weekly_interest") {
-                     // Lógica de abono similar a pedidos...
-                     const amountPaid = parseFloat(item.paymentReport.amount) || 0;
-                     const totalBss = parseFloat(item.amountBss) * (item.plan === "weekly_4" ? 1.1 : 1.0);
-                     // Si es un abono, restamos del total. Si es el último pago, marcamos como pagado.
-                     // Por ahora, para simplificar al admin:
-                     await itemRef.update({ status: "paid", paymentReport: null });
-                } else {
                     await itemRef.update({ status: "paid", paymentReport: null });
                 }
+            } else {
+                // Para solicitudes de crédito personal (solicitudes_credito)
+                let totalBss = parseFloat(item.amountBss) || 0;
+                if (item.plan === 'weekly_4') totalBss *= 1.1;
+                else if (item.plan === 'full_30_days') totalBss *= 1.3;
+
+                const currentRemaining = (item.remainingDebt !== undefined && item.remainingDebt !== null) ? item.remainingDebt : totalBss;
+                const newRemaining = Math.max(0, currentRemaining - amountPaid);
+                const newInstallments = (item.installmentsPaid || 0) + 1;
+
+                await itemRef.update({
+                    status: newRemaining <= 0 ? "paid" : "approved",
+                    remainingDebt: newRemaining,
+                    installmentsPaid: newInstallments,
+                    paymentReport: null
+                });
             }
+
+            // LOG A GOOGLE SHEETS PARA REGISTRO HISTÓRICO DE COBRANZA
+            fetch(googleSheetsUrl, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: "logSale",
+                    id: id,
+                    orderId: item.orderId || "CRED-PERSONAL",
+                    customer: item.customerName,
+                    amount: amountPaid,
+                    status: "PAGO_CONFIRMADO",
+                    date: new Date().toLocaleString()
+                })
+            });
 
             showNotification("✅ PAGO CONFIRMADO");
         } catch(e) {
@@ -2303,9 +2377,9 @@
                 }
             }
 
-            // Si es un abono a crédito activo, regresamos al estado anterior
-            const newStatus = (collection === "pedidos" && item.hasCredit) ? "active_credit" : "rejected";
-            await itemRef.update({ status: newStatus });
+            // Si es un abono a crédito activo, regresamos al estado anterior y limpiamos el reporte
+            const newStatus = (collection === "pedidos" && item.hasCredit) ? "active_credit" : (collection === "solicitudes_credito" ? "approved" : "rejected");
+            await itemRef.update({ status: newStatus, paymentReport: null });
             showNotification("❌ PAGO RECHAZADO", "error");
         } catch(e) {
             showNotification("Error al rechazar", "error");
@@ -2766,87 +2840,112 @@
         showNotification("GENERANDO COMPROBANTE...");
 
         try {
-            const doc = await db.collection(type === 'credit' ? "solicitudes_credito" : "pedidos").doc(id).get();
+            const collection = (type === 'credit' || type === 'solicitudes_credito') ? "solicitudes_credito" : "pedidos";
+            const doc = await db.collection(collection).doc(id).get();
+            if(!doc.exists) throw new Error("No se encontró el registro");
+
             const data = doc.data();
-            const date = new Date(data.timestamp).toLocaleString();
+            const date = new Date(data.timestamp || Date.now()).toLocaleString();
+            document.getElementById('receipt-verify-id').innerText = id.substring(0,12).toUpperCase();
 
-            const subtotalBss = parseFloat(data.amountBss || data.totalBss?.replace(" BSS", "") || 0);
-            const amountUsd = parseFloat(data.amountUsd || data.totalUsd?.replace("$", "") || 0);
-            const rate = amountUsd > 0 ? subtotalBss / amountUsd : tasaBcv;
+            let html = "";
 
-            let totalBss = subtotalBss;
-            let interestBss = 0;
-            let planText = type === 'credit' ? data.plan : "CONTADO";
-            let scheduleHtml = "";
+            if (type === 'credit' || type === 'solicitudes_credito') {
+                // RECIBO PARA CRÉDITO PERSONAL (EFECTIVO)
+                const subtotalBss = parseFloat(data.amountBss || 0);
+                const amountUsd = parseFloat(data.amountUsd || 0);
+                const rate = amountUsd > 0 ? subtotalBss / amountUsd : tasaBcv;
 
-            if (type === 'credit') {
-                const baseDate = new Date(data.timestamp);
+                let totalBss = subtotalBss;
+                let interestBss = 0;
+                let planText = data.plan || "ÚNICO";
+                let scheduleHtml = "";
+
                 if (data.plan === 'weekly_4') {
                     interestBss = subtotalBss * 0.10;
                     totalBss = subtotalBss + interestBss;
-                    planText = "4 PAGOS SEMANALES (CUOTAS + 10%)";
+                    planText = "4 PAGOS SEMANALES (+10%)";
                     const inst = totalBss / 4;
+                    const baseDate = new Date(data.timestamp);
                     for(let i=1; i<=4; i++) {
                         baseDate.setDate(baseDate.getDate() + 7);
-                        scheduleHtml += `<div style="display:flex; justify-content:space-between;"><span>Cuota ${i} (${baseDate.toLocaleDateString()}):</span> <strong>${inst.toFixed(2)} BSS</strong></div>`;
+                        scheduleHtml += `<div style="display:flex; justify-content:space-between;"><span>Cuota ${i}:</span> <strong>${inst.toFixed(2)} BSS</strong></div>`;
                     }
                 } else if (data.plan === 'weekly_interest') {
                     const weeklyInt = subtotalBss * 0.10;
                     interestBss = weeklyInt * 4;
                     totalBss = subtotalBss + interestBss;
-                    planText = "INTERÉS SEMANAL 10% (CAPITAL AL FINAL)";
-                    for(let i=1; i<=3; i++) {
-                        baseDate.setDate(baseDate.getDate() + 7);
-                        scheduleHtml += `<div style="display:flex; justify-content:space-between;"><span>Interés Sem. (${baseDate.toLocaleDateString()}):</span> <strong>${weeklyInt.toFixed(2)} BSS</strong></div>`;
-                    }
-                    baseDate.setDate(baseDate.getDate() + 7);
-                    scheduleHtml += `<div style="display:flex; justify-content:space-between;"><span>Capital + Final (${baseDate.toLocaleDateString()}):</span> <strong>${(subtotalBss + weeklyInt).toFixed(2)} BSS</strong></div>`;
+                    planText = "INT. SEMANAL (CAPITAL AL FINAL)";
                 } else if (data.plan === 'full_30_days') {
                     interestBss = subtotalBss * 0.30;
                     totalBss = subtotalBss + interestBss;
-                    planText = "PAGO ÚNICO A 30 DÍAS (+30% INT)";
-                    baseDate.setDate(baseDate.getDate() + 30);
-                    scheduleHtml += `<div style="display:flex; justify-content:space-between;"><span>Pago Único (${baseDate.toLocaleDateString()}):</span> <strong>${totalBss.toFixed(2)} BSS</strong></div>`;
+                    planText = "PAGO ÚNICO 30 DÍAS (+30%)";
                 }
+
+                html = `
+                    <div style="margin-bottom:15px;">
+                        <div><strong>FECHA:</strong> ${date}</div>
+                        <div><strong>CLIENTE:</strong> ${data.customerName.toUpperCase()}</div>
+                        <div><strong>TASA:</strong> ${rate.toFixed(2)} BSS</div>
+                    </div>
+                    <div style="margin-bottom:10px; border-top:1px solid #eee; padding-top:10px;">
+                        <strong>CONCEPTO:</strong> CRÉDITO PERSONAL<br>
+                        <strong>PLAN:</strong> ${planText}
+                    </div>
+                    <div style="background:#f9f9f9; padding:10px; border-radius:5px; margin-bottom:10px;">
+                        <div style="display:flex; justify-content:space-between; font-size:10px;">
+                            <span>CAPITAL ORIGINAL:</span> <span>$${amountUsd.toFixed(2)} (${subtotalBss.toFixed(2)} BSS)</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; font-size:10px;">
+                            <span>TOTAL CON INTERÉS:</span> <span>${totalBss.toFixed(2)} BSS</span>
+                        </div>
+                        <div style="border-top:1px solid #ddd; margin:5px 0; padding-top:5px; display:flex; justify-content:space-between; font-size:12px; font-weight:bold; color: ${data.remainingDebt <= 0 ? '#25D366' : '#000'};">
+                            <span>SALDO PENDIENTE:</span> <span>${(data.remainingDebt !== undefined ? data.remainingDebt : totalBss).toFixed(2)} BSS</span>
+                        </div>
+                        ${data.remainingDebt <= 0 ? '<div style="text-align:center; font-size:10px; font-weight:bold; color:#25D366; margin-top:5px;">¡LIQUIDADO!</div>' : ''}
+                    </div>
+                    ${scheduleHtml ? `<div style="font-size:9px; border-top:1px dashed #ccc; padding-top:5px;">${scheduleHtml}</div>` : ''}
+                `;
+            } else {
+                // RECIBO PARA COMPRAS (ARTÍCULOS)
+                const items = data.items || [];
+                const totalBss = parseFloat(data.totalBss?.replace(" BSS", "") || 0);
+                const totalUsd = data.totalUsd || "$0.00";
+                const remaining = data.remainingDebt !== undefined ? data.remainingDebt : (data.hasCredit ? totalBss * 0.75 : 0);
+
+                let itemsHtml = items.map(it => `
+                    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+                        <span>${it.buyQty}x ${it.name.substring(0,20)}</span>
+                        <span>$${it.priceUsd}</span>
+                    </div>
+                `).join('');
+
+                html = `
+                    <div style="margin-bottom:15px;">
+                        <div><strong>ORDEN:</strong> ${data.orderId || 'N/A'}</div>
+                        <div><strong>FECHA:</strong> ${date}</div>
+                        <div><strong>CLIENTE:</strong> ${data.customerName.toUpperCase()}</div>
+                    </div>
+                    <div style="border-top:1px solid #eee; padding-top:10px; margin-bottom:10px;">
+                        <strong>DETALLE PRODUCTOS:</strong>
+                        <div style="font-size:10px; margin-top:5px;">${itemsHtml}</div>
+                    </div>
+                    <div style="background:#f9f9f9; padding:10px; border-radius:5px; border:1px solid #eee;">
+                        <div style="display:flex; justify-content:space-between; font-weight:900;">
+                            <span>TOTAL USD:</span> <span>${totalUsd}</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; color:#c5a059; font-weight:900;">
+                            <span>TOTAL BSS:</span> <span>${totalBss.toFixed(2)} BSS</span>
+                        </div>
+                        <div style="border-top:1px solid #ddd; margin:5px 0; padding-top:5px; display:flex; justify-content:space-between; font-size:11px; font-weight:bold; color: ${remaining <= 0 ? '#25D366' : '#ff4444'};">
+                            <span>SALDO PENDIENTE:</span> <span>${remaining.toFixed(2)} BSS</span>
+                        </div>
+                    </div>
+                    <div style="margin-top:10px; font-size:9px; color:#666;">
+                        MODALIDAD: ${data.hasCredit ? 'CRÉDITO' : 'CONTADO'}
+                    </div>
+                `;
             }
-
-            document.getElementById('receipt-verify-id').innerText = id.substring(0,12).toUpperCase();
-
-            let html = `
-                <div style="margin-bottom:15px;">
-                    <div><strong>FECHA EMISIÓN:</strong> ${date}</div>
-                    <div><strong>CLIENTE:</strong> ${data.customerName.toUpperCase()}</div>
-                    <div><strong>DOCUMENTO:</strong> ${data.idNumber || 'N/A'}</div>
-                    <div><strong>TASA BCV:</strong> ${rate.toFixed(2)} BSS/$</div>
-                </div>
-
-                <div style="margin-bottom:15px; border-top:1px solid #eee; padding-top:10px;">
-                    <div style="font-weight:bold; font-size:10px; color:#666;">PLAN ELEGIDO:</div>
-                    <div style="font-weight:bold; font-size:11px;">${planText.toUpperCase()}</div>
-                </div>
-
-                <div style="background:#f9f9f9; padding:10px; border-radius:5px; margin-bottom:15px;">
-                    <div style="display:flex; justify-content:space-between; font-size:10px;">
-                        <span>SUB-TOTAL CAPITAL:</span>
-                        <span>$${amountUsd.toFixed(2)} (${subtotalBss.toFixed(2)} BSS)</span>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; font-size:10px;">
-                        <span>INTERESES CARGADOS:</span>
-                        <span>${interestBss.toFixed(2)} BSS</span>
-                    </div>
-                    <div style="border-top:1px solid #ddd; margin:5px 0; padding-top:5px; display:flex; justify-content:space-between; font-size:13px; font-weight:bold;">
-                        <span>TOTAL A PAGAR:</span>
-                        <span>${totalBss.toFixed(2)} BSS</span>
-                    </div>
-                </div>
-
-                ${scheduleHtml ? `
-                <div style="border-top:1px solid #eee; padding-top:10px;">
-                    <div style="font-weight:bold; font-size:10px; color:#666; margin-bottom:5px;">CRONOGRAMA DE PAGOS:</div>
-                    <div style="font-size:10px; line-height:1.6;">${scheduleHtml}</div>
-                </div>
-                ` : ''}
-            `;
 
             container.innerHTML = html;
             modal.style.display = 'block';
@@ -3257,10 +3356,54 @@
             if(!file) { resolve(""); return; }
             const reader = new FileReader();
             reader.readAsDataURL(file);
-            reader.onload = () => {
-                let result = reader.result;
-                if (result.includes(',')) result = result.split(',')[1];
-                resolve(result);
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    try {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width;
+                        let height = img.height;
+                        const maxDim = 800;
+
+                        if (width > maxDim || height > maxDim) {
+                            if (width > height) {
+                                height = Math.round((height * maxDim) / width);
+                                width = maxDim;
+                            } else {
+                                width = Math.round((width * maxDim) / height);
+                                height = maxDim;
+                            }
+                        }
+
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+
+                        let dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+                        if (dataUrl.includes(',')) dataUrl = dataUrl.split(',')[1];
+                        resolve(dataUrl || "");
+                    } catch(ex) {
+                        console.error("Canvas compression error:", ex);
+                        let result = reader.result;
+                        if (typeof result === 'string' && result.includes(',')) {
+                            result = result.split(',')[1];
+                        }
+                        resolve(result || "");
+                    }
+                };
+                img.onerror = () => {
+                    let result = reader.result;
+                    if (typeof result === 'string' && result.includes(',')) {
+                        result = result.split(',')[1];
+                    }
+                    resolve(result || "");
+                };
+                img.src = e.target.result;
+            };
+            reader.onerror = (err) => {
+                console.error("FileReader error:", err);
+                resolve("");
             };
         });
     }
@@ -3436,8 +3579,8 @@
         const totalBssValue = currentOrderTotalBss;
         const amountInput = document.getElementById('report-amount');
 
-        // Determinar si el pedido actual contiene crédito
-        const hasCredit = currentOrderHasCredit;
+        // Determinar si el pedido actual es un checkout nuevo con artículos a crédito
+        const hasCredit = isNewOrderCheckout && currentOrderHasCredit;
 
         let summaryHtml = "";
         if(hasCredit) {
@@ -3505,13 +3648,19 @@
     }
 
     async function submitPaymentReport() {
-        const ref = document.getElementById('report-ref').value.trim();
-        const bank = document.getElementById('report-bank').value;
-        const phonePrefix = document.getElementById('report-phone-prefix').value;
-        const phoneBody = document.getElementById('report-phone').value.trim();
-        const amount = document.getElementById('report-amount').value;
+        const refEl = document.getElementById('report-ref');
+        const bankEl = document.getElementById('report-bank');
+        const phonePrefixEl = document.getElementById('report-phone-prefix');
+        const phoneBodyEl = document.getElementById('report-phone');
+        const amountEl = document.getElementById('report-amount');
         const fileInput = document.getElementById('report-capture');
-        const file = fileInput.files[0];
+
+        const ref = refEl ? refEl.value.trim() : "";
+        const bank = bankEl ? bankEl.value : "";
+        const phonePrefix = phonePrefixEl ? phonePrefixEl.value : "0412";
+        const phoneBody = phoneBodyEl ? phoneBodyEl.value.trim() : "";
+        const amount = amountEl ? amountEl.value : "";
+        const file = (fileInput && fileInput.files) ? fileInput.files[0] : null;
 
         if(!ref || !bank || !amount || !phoneBody) {
             showNotification("POR FAVOR, LLENE TODOS LOS CAMPOS", "error");
@@ -3535,25 +3684,27 @@
         const collectionName = currentOrderCollection || "pedidos";
 
         try {
-            let capture64 = file ? await getBase64(file) : null;
-            const finalDate = document.getElementById('report-date-calendar').value || selectedReportDate;
+            let capture64 = file ? await getBase64(file) : "";
+            const calEl = document.getElementById('report-date-calendar');
+            const finalDate = (calEl && calEl.value) ? calEl.value : (selectedReportDate || new Date().toISOString().split('T')[0]);
 
             // Si es un pedido nuevo desde el carrito, lo guardamos ahora en Firebase
             if (isNewOrderCheckout && pendingOrderData) {
                 console.log("Creando nueva orden en:", collectionName, currentOrderId);
-                await db.collection(collectionName).doc(currentOrderId).set(pendingOrderData);
+                await db.collection(collectionName).doc(currentOrderId).set(pendingOrderData, { merge: true });
 
                 // Restar puntos si usó recompensa
-                if(pendingOrderData.pointsUsed > 0 && currentUserData.docId) {
+                if(pendingOrderData.pointsUsed > 0 && currentUserData && currentUserData.docId) {
                     const newPoints = (currentUserData.points || 0) - pendingOrderData.pointsUsed;
                     const updateData = { points: Math.max(0, newPoints) };
                     if(pendingOrderData.usedRewardNow) {
                         updateData.lastRewardDate = Date.now();
                         currentUserData.lastRewardDate = updateData.lastRewardDate;
                     }
-                    await db.collection("registros_clientes").doc(currentUserData.docId).update(updateData);
+                    await db.collection("registros_clientes").doc(currentUserData.docId).set(updateData, { merge: true });
                     currentUserData.points = Math.max(0, newPoints);
-                    document.getElementById('user-points').innerText = currentUserData.points;
+                    const pointsEl = document.getElementById('user-points');
+                    if(pointsEl) pointsEl.innerText = currentUserData.points;
                 }
 
                 // Limpiar carrito solo después de reportar pago exitosamente
@@ -3563,33 +3714,69 @@
                 if(document.getElementById('cart-modal').style.display === 'block') toggleCart();
             }
 
-            console.log("Actualizando reporte en:", collectionName, currentOrderId);
-            await db.collection(collectionName).doc(currentOrderId).update({
-                paymentReport: {
-                    reference: ref,
-                    bank: bank,
-                    date: finalDate,
-                    phone: phone,
-                    amount: amount,
-                    captureBase64: capture64,
-                    timestamp: Date.now()
-                },
+            const cleanPaymentReport = {
+                reference: String(ref || ""),
+                bank: String(bank || ""),
+                date: String(finalDate || ""),
+                phone: String(phone || ""),
+                amount: String(amount || "0"),
+                captureBase64: String(capture64 || ""),
+                timestamp: Date.now()
+            };
+
+            console.log("Actualizando reporte en:", collectionName, currentOrderId, cleanPaymentReport);
+            await db.collection(collectionName).doc(currentOrderId).set({
+                paymentReport: cleanPaymentReport,
                 status: "awaiting_verification"
-            });
+            }, { merge: true });
 
             const msg = `${pendingWhatsappMsg}\n\n✅ REPORTE DE PAGO:\nRef: ${ref}\nBanco: ${bank}\nMonto: ${amount} BSS\nFecha: ${finalDate}`;
 
-            // Abrir WhatsApp con el reporte incluido
-            contactWhatsapp('+584124136485', msg);
-
-            document.getElementById('contact-choice-modal').style.display = 'none';
+            // Limpiar formulario y reiniciar estados
+            if(refEl) refEl.value = "";
+            if(phoneBodyEl) phoneBodyEl.value = "";
+            if(fileInput) fileInput.value = "";
             isNewOrderCheckout = false;
             pendingOrderData = null;
+
+            // Ir al inicio y cerrar todas las ventanas/modales de pago anteriores
+            closeAllModals();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            // Mostrar el modal con las opciones para enviar los datos al WhatsApp de ventas/soporte
+            showPostPaymentSuccessModal(msg);
+
+            // Abrir automáticamente el WhatsApp de ventas
+            sendPaymentToWhatsapp('sales');
+
             showNotification("✅ ORDEN Y REPORTE ENVIADOS CORRECTAMENTE");
         } catch(e) {
             console.error("Error al enviar reporte:", e);
             showNotification("ERROR DB: " + (e.message || "FIREBASE ERROR"), "error");
         }
+    }
+
+    let lastPaymentWhatsappMsg = "";
+
+    function showPostPaymentSuccessModal(msg) {
+        lastPaymentWhatsappMsg = msg;
+        const summaryBox = document.getElementById('post-payment-summary-box');
+        if (summaryBox) summaryBox.innerText = msg;
+        const modal = document.getElementById('post-payment-success-modal');
+        if (modal) {
+            modal.style.display = 'block';
+            if (window.lucide) lucide.createIcons();
+        }
+    }
+
+    function sendPaymentToWhatsapp(type) {
+        const number = type === 'sales' ? '+584124136485' : '+584244019899';
+        contactWhatsapp(number, lastPaymentWhatsappMsg);
+    }
+
+    function closePostPaymentAndGoHome() {
+        closeAllModals();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function copyPaymentData() {
@@ -3889,7 +4076,7 @@
         // Escuchador para Solicitudes de Crédito (Efectivo/Transferencia)
         db.collection("solicitudes_credito")
             .where("customerEmail", "==", email)
-            .where("status", "==", "approved")
+            .where("status", "in", ["approved", "awaiting_verification", "paid"])
             .onSnapshot(snap => {
                 processUserCredits(snap, "solicitudes");
             });
@@ -3910,7 +4097,7 @@
         userCredits = [...rawOrders, ...rawRequests];
 
         // Actualizar contador de pagos pendientes
-        const activeDebts = userCredits.filter(c => c.status === "active_credit" || c.status === "awaiting_verification").length;
+        const activeDebts = userCredits.filter(c => (c.status === "active_credit" || c.status === "awaiting_verification" || c.status === "approved") && (c.remainingDebt === undefined || c.remainingDebt > 0)).length;
         const pBadge = document.getElementById('payments-count');
         if(pBadge) {
             pBadge.innerText = activeDebts;
@@ -3931,6 +4118,9 @@
         today.setHours(0,0,0,0);
 
         userCredits.forEach(credit => {
+            if (credit.status === "paid" || (credit.remainingDebt !== undefined && credit.remainingDebt <= 0)) {
+                return;
+            }
             // Lógica de alerta para pedidos activos
             if (credit.status === "active_credit") {
                 const t = credit.timestamp;
@@ -3945,13 +4135,26 @@
             }
 
             // Lógica de alerta para solicitudes de crédito aprobadas (30 días)
-            if (credit.status === "approved" && credit.plan === "full_30_days") {
-                const t = credit.processedTimestamp;
-                if(t) {
-                    const approvalDate = new Date(t);
-                    const dueDate = new Date(approvalDate);
-                    dueDate.setDate(dueDate.getDate() + 30);
-                    if (today > dueDate) { hasOverdue = true; overdueCount++; }
+            if ((credit.status === "approved" || credit.status === "awaiting_verification") && credit.plan === "full_30_days") {
+                const paid = credit.installmentsPaid || 0;
+                if (paid < 1) {
+                    const t = credit.processedTimestamp;
+                    if(t || credit.dueDate) {
+                        let dueDate;
+                        if (credit.dueDate) {
+                            const parts = credit.dueDate.split('-');
+                            if (parts.length === 3) {
+                                dueDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                            } else {
+                                dueDate = new Date(credit.dueDate);
+                            }
+                        } else {
+                            const approvalDate = new Date(t);
+                            dueDate = new Date(approvalDate);
+                            dueDate.setDate(dueDate.getDate() + 30);
+                        }
+                        if (today > dueDate) { hasOverdue = true; overdueCount++; }
+                    }
                 }
             }
         });
@@ -3995,6 +4198,11 @@
             const baseDate = (t && t.toDate) ? t.toDate() : new Date(t);
             if (isNaN(baseDate.getTime())) return;
 
+            // Si el crédito está completamente pagado o tiene remainingDebt <= 0, no mostrar fechas
+            if (credit.status === 'paid' || (credit.remainingDebt !== undefined && credit.remainingDebt <= 0)) {
+                return;
+            }
+
             if (isPedido) {
                 // LÓGICA DE PEDIDOS (ARTÍCULOS)
                 const isCredit = credit.items.some(i => i.paymentMethod === 'credit');
@@ -4003,7 +4211,7 @@
                     const paid = credit.installmentsPaid || 0;
 
                     for(let i=1; i<=numCuotas; i++) {
-                        if (i <= paid) continue;
+                        if (i <= paid) continue; // Omitir cuotas ya pagadas
                         const d = new Date(baseDate);
                         d.setDate(d.getDate() + (i * 16));
                         d.setHours(0,0,0,0);
@@ -4025,18 +4233,32 @@
                 }
             } else {
                 // LÓGICA DE SOLICITUDES DE CRÉDITO (EFECTIVO)
-                if (credit.status === "approved") {
+                if (credit.status === "approved" || credit.status === "awaiting_verification") {
+                    const paid = credit.installmentsPaid || 0;
                     if (credit.plan === "full_30_days") {
-                        const d = new Date(baseDate);
-                        d.setDate(d.getDate() + 30);
+                        if (paid >= 1) return; // Ya pagó la cuota única
+                        let d;
+                        if (credit.dueDate) {
+                            const parts = credit.dueDate.split('-');
+                            if (parts.length === 3) {
+                                d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                            } else {
+                                d = new Date(credit.dueDate);
+                            }
+                        } else {
+                            d = new Date(baseDate);
+                            d.setDate(d.getDate() + 30);
+                        }
                         d.setHours(0,0,0,0);
                         if(d.getMonth() === calendarDate.getMonth() && d.getFullYear() === calendarDate.getFullYear()) {
                             const day = d.getDate();
                             if(!dayCredits[day]) dayCredits[day] = [];
-                            dayCredits[day].push({ orderId: "CRÉDITO", installment: parseFloat(credit.amountBss) * 1.3, item: "PAGO ÚNICO CRÉDITO (+30%)", isLate: d < today });
+                            const remaining = (credit.remainingDebt !== undefined) ? credit.remainingDebt : (parseFloat(credit.amountBss) * 1.3);
+                            dayCredits[day].push({ orderId: "CRÉDITO", installment: remaining, item: "PAGO ÚNICO CRÉDITO (+30%)", isLate: d < today });
                         }
                     } else if (credit.plan === "weekly_4") {
                         for(let i=1; i<=4; i++) {
+                            if (i <= paid) continue; // Omitir cuotas pagadas
                             const d = new Date(baseDate);
                             d.setDate(d.getDate() + (i * 7));
                             d.setHours(0,0,0,0);
@@ -4048,8 +4270,8 @@
                             }
                         }
                     } else if (credit.plan === "weekly_interest") {
-                        // 4 semanas de intereses + capital al final (semana 4)
                         for(let i=1; i<=4; i++) {
+                            if (i <= paid) continue; // Omitir cuotas pagadas
                             const d = new Date(baseDate);
                             d.setDate(d.getDate() + (i * 7));
                             d.setHours(0,0,0,0);
@@ -4116,27 +4338,38 @@
         const container = document.getElementById('active-credits-list');
         container.innerHTML = "";
 
-        if(userCredits.length === 0) {
+        const activeList = userCredits.filter(c => {
+            if (c.status === 'paid') return false;
+            const totalBss = parseFloat(c.totalBss?.toString().replace(" BSS", "") || c.amountBss?.toString() || "0") || 0;
+            const isPedido = !!c.items;
+            const initial = isPedido ? totalBss * 0.25 : 0;
+            const remaining = (c.remainingDebt !== undefined) ? c.remainingDebt : (totalBss - initial);
+            return remaining > 0;
+        });
+
+        if(activeList.length === 0) {
             container.innerHTML = "<p style='color:#666; font-size:0.7rem; text-align:center;'>NO TIENES DEUDAS ACTIVAS</p>";
             return;
         }
 
-        userCredits.forEach(credit => {
+        activeList.forEach(credit => {
             const totalBss = parseFloat(credit.totalBss?.toString().replace(" BSS", "") || credit.amountBss?.toString() || "0") || 0;
-            const initial = totalBss * 0.25;
+            const isPedido = !!credit.items;
+            const initial = isPedido ? totalBss * 0.25 : 0;
             const remaining = (credit.remainingDebt !== undefined) ? credit.remainingDebt : (totalBss - initial);
 
-            if(remaining <= 0) return; // Ya pagada
-
             const extraCuotas = Math.floor((credit.userPointsAtPurchase || 0) / 550);
-            const numCuotas = Math.min(12, 2 + extraCuotas);
+            const numCuotas = credit.numCuotas || Math.min(12, 2 + extraCuotas);
             const installment = (totalBss - initial) / numCuotas;
+
+            const dateVal = credit.timestamp || credit.processedTimestamp;
+            const dateStr = dateVal ? new Date(dateVal).toLocaleDateString() : "";
 
             container.innerHTML += `
                 <div style="background:#121216; padding:15px; border-radius:12px; border:1px solid rgba(197, 160, 89, 0.2); margin-bottom:15px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
                         <span style="color:#C5A059; font-weight:800; font-size:0.75rem;">ORDEN: ${credit.orderId || 'CRÉDITO'}</span>
-                        <span style="color:#888; font-size:0.6rem;">${new Date(credit.timestamp).toLocaleDateString()}</span>
+                        <span style="color:#888; font-size:0.6rem;">${dateStr}</span>
                     </div>
                     <div style="color:white; font-size:0.8rem; margin-bottom:15px;">
                         DEUDA RESTANTE: <strong style="color:#C5A059;">${remaining.toFixed(2)} BSS</strong>
@@ -4242,6 +4475,7 @@
         currentOrderCollection = currentPayingDebt.collection;
         currentOrderTotalBss = amount;
         isNewOrderCheckout = false;
+        currentOrderHasCredit = false;
 
         document.getElementById('debt-pay-modal').style.display = 'none';
         document.getElementById('credits-modal').style.display = 'none';
