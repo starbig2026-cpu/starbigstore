@@ -1360,6 +1360,14 @@
     }
 
     function setPaymentMethod(method) {
+        const qty = parseInt(document.getElementById('buy-quantity').value) || 1;
+        const subtotalUsd = currentViewingProduct ? currentViewingProduct.priceUsd * qty : 0;
+
+        if (method === 'credit' && subtotalUsd < 10) {
+            showNotification("MÍNIMO $10 PARA CRÉDITO", "error");
+            return;
+        }
+
         selectedPaymentMethod = method;
         const btnCash = document.getElementById('btn-pay-cash');
         const btnCredit = document.getElementById('btn-pay-credit');
@@ -1382,7 +1390,13 @@
         if(!currentViewingProduct) return;
         const qty = parseInt(document.getElementById('buy-quantity').value) || 1;
         const priceUsd = currentViewingProduct.priceUsd;
-        const totalBss = priceUsd * qty * tasaBcv;
+        const subtotalUsd = priceUsd * qty;
+        const totalBss = subtotalUsd * tasaBcv;
+
+        if (selectedPaymentMethod === 'credit' && subtotalUsd < 10) {
+            setPaymentMethod('cash');
+            return;
+        }
 
         const cashDetails = document.getElementById('qty-cash-details');
         const creditDetails = document.getElementById('qty-credit-details');

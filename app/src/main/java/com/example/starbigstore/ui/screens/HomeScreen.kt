@@ -278,11 +278,13 @@ fun QuantitySelectorDialog(
     onDismiss: () -> Unit,
     onConfirm: (Int, String, Int) -> Unit
 ) {
+    val context = LocalContext.current
     var quantity by remember { mutableIntStateOf(1) }
     var isCredit by remember { mutableStateOf(false) }
     var initialPercent by remember { mutableIntStateOf(25) }
     
     val totalCashBss = product.priceUsd * quantity * bcvRate
+    val subtotalUsd = product.priceUsd * quantity
     val totalCreditBss = totalCashBss * 1.1
     val initialPayBss = totalCreditBss * (initialPercent / 100f)
     val remainingBss = totalCreditBss - initialPayBss
@@ -291,6 +293,13 @@ fun QuantitySelectorDialog(
     val numCuotas = (2 + extraCuotas).coerceAtMost(12)
     val installmentVal = remainingBss / numCuotas
     val installmentPerc = if (numCuotas > 0) ((remainingBss / totalCreditBss) / numCuotas) * 100 else 0f
+
+    // Forzar contado si la compra es menor a 10$
+    LaunchedEffect(subtotalUsd) {
+        if (subtotalUsd < 10.0) {
+            isCredit = false
+        }
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -344,7 +353,13 @@ fun QuantitySelectorDialog(
                         ) { Text("CONTADO", fontSize = 10.sp, fontWeight = FontWeight.Bold) }
                         
                         Button(
-                            onClick = { isCredit = true },
+                            onClick = { 
+                                if (subtotalUsd >= 10.0) {
+                                    isCredit = true
+                                } else {
+                                    Toast.makeText(context, "MÍNIMO $10 PARA CRÉDITO", Toast.LENGTH_SHORT).show()
+                                }
+                            },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.buttonColors(
@@ -352,6 +367,15 @@ fun QuantitySelectorDialog(
                                 contentColor = if(isCredit) Color.Black else Color.White.copy(0.4f)
                             )
                         ) { Text("CRÉDITO", fontSize = 10.sp, fontWeight = FontWeight.Bold) }
+                    }
+                    
+                    if (subtotalUsd < 10.0) {
+                        Text(
+                            "Crédito disponible desde $10", 
+                            color = Color.White.copy(0.4f), 
+                            fontSize = 8.sp, 
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
                     }
 
                     if (isCredit) {
