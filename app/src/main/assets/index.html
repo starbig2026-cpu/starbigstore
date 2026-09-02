@@ -54,7 +54,18 @@
             <form id="login-form">
                 <div class="input-group"><label for="login-email">Email</label><input type="email" id="login-email" required></div>
                 <div class="input-group"><label for="login-pass">Contraseña</label><input type="password" id="login-pass" required></div>
+
+                <div style="display:flex; align-items:center; gap:8px; margin-top:10px; margin-bottom:15px;">
+                    <input type="checkbox" id="remember-me-checkbox" checked style="width:16px; height:16px; accent-color:#C5A059; cursor:pointer;">
+                    <label for="remember-me-checkbox" style="color:white; font-size:11px; cursor:pointer; font-weight:bold;">
+                        RECORDAR SESIÓN / INGRESAR CON HUELLA O PATRÓN
+                    </label>
+                </div>
+
                 <button type="submit" class="btn-primary full-width">ENTRAR</button>
+                <button type="button" onclick="loginWithBiometrics()" id="biometric-login-btn" class="btn-secondary full-width" style="margin-top:10px; border-color:#C5A059; color:#C5A059;">
+                    <i data-lucide="fingerprint" style="width:14px; height:14px; vertical-align:middle; margin-right:5px;"></i> INGRESAR CON HUELLA / PATRÓN
+                </button>
             </form>
             <p style="text-align: center; margin-top: 15px;">
                 <span onclick="changePassword()" style="color: #888; cursor: pointer; font-size: 0.8rem; text-decoration: underline;">¿OLVIDASTE TU CONTRASEÑA?</span>
@@ -1534,6 +1545,20 @@
     function confirmAddToCart() {
         const qty = parseInt(document.getElementById('buy-quantity').value) || 1;
         if(currentViewingProduct) {
+            const availableStock = parseInt(currentViewingProduct.stock || 0);
+
+            if (availableStock <= 0) {
+                showNotification("❌ YA NO HAY ARTÍCULOS DISPONIBLES PARA LA VENTA", "error");
+                alert("❌ Sin disponibilidad:\n\nYa no hay artículos disponibles de este producto para la venta.");
+                return;
+            }
+
+            if (qty > availableStock) {
+                showNotification(`⚠️ SOLO QUEDAN ${availableStock} ARTÍCULO(S) DISPONIBLES`, "error");
+                alert(`⚠️ Stock Insuficiente:\n\nSolo quedan ${availableStock} artículo(s) disponibles para la venta de ${currentViewingProduct.name.toUpperCase()}.`);
+                return;
+            }
+
             const cartItem = {
                 ...currentViewingProduct,
                 buyQty: qty,
@@ -1554,6 +1579,7 @@
 
             // Descontar stock inmediatamente al agregar al carrito
             changeProductStockInFirestore(currentViewingProduct.id, currentViewingProduct.name, -qty);
+            currentViewingProduct.stock = availableStock - qty;
 
             updateCartUI();
             saveCartToFirestore(); // Sincronizar con Firebase
@@ -1573,6 +1599,20 @@
 
         const p = allProducts.find(x => x.id === productId);
         if (p) {
+            const availableStock = parseInt(p.stock || 0);
+
+            if (availableStock <= 0) {
+                showNotification("❌ YA NO HAY ARTÍCULOS DISPONIBLES PARA LA VENTA", "error");
+                alert("❌ Sin disponibilidad:\n\nYa no hay artículos disponibles de este producto para la venta.");
+                return;
+            }
+
+            if (qty > availableStock) {
+                showNotification(`⚠️ SOLO QUEDAN ${availableStock} ARTÍCULO(S) DISPONIBLES`, "error");
+                alert(`⚠️ Stock Insuficiente:\n\nSolo quedan ${availableStock} artículo(s) disponibles para la venta de ${p.name.toUpperCase()}.`);
+                return;
+            }
+
             const method = paymentMethod.toLowerCase().includes('crédito') ? 'credit' : 'cash';
             const cartItem = {
                 ...p,
@@ -1589,8 +1629,9 @@
                 cart.push(cartItem);
             }
 
-            // Descontar stock inmediatamente al agregar al carrito desde el catálogo nativo
+            // Descontar stock inmediatamente
             changeProductStockInFirestore(p.id, p.name, -qty);
+            p.stock = availableStock - qty;
 
             updateCartUI();
             saveCartToFirestore(); // Sincronizar
@@ -2506,7 +2547,7 @@
                 });
             }
 
-            // LOG A GOOGLE SHEETS PARA REGISTRO HISTÓRICO DE COBRANZA
+            // LOG Y NOTIFICACIÓN POR CORREO DE PAGO CONFIRMADO
             fetch(googleSheetsUrl, {
                 method: 'POST',
                 body: JSON.stringify({
@@ -2515,12 +2556,13 @@
                     orderId: item.orderId || "CRED-PERSONAL",
                     customer: item.customerName,
                     amount: amountPaid,
+                    customerEmail: item.customerEmail,
                     status: "PAGO_CONFIRMADO",
                     date: new Date().toLocaleString()
                 })
-            });
+            }).catch(e => console.log("Email notification log error:", e));
 
-            showNotification("✅ PAGO CONFIRMADO");
+            showNotification("✅ PAGO CONFIRMADO - NOTIFICACIÓN ENVIADA AL CLIENTE", "success");
         } catch(e) {
             console.error(e);
             showNotification("Error al confirmar pago", "error");
@@ -2543,10 +2585,24 @@
                 }
             }
 
+            // NOTIFICACIÓN POR CORREO AL CLIENTE DE PAGO RECHAZADO
+            fetch(googleSheetsUrl, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: "notifyPaymentRejected",
+                    id: id,
+                    orderId: item.orderId || "ORDEN",
+                    customerName: item.customerName,
+                    customerEmail: item.customerEmail,
+                    status: "RECHAZADO",
+                    date: new Date().toLocaleString()
+                })
+            }).catch(e => console.log("Email notification error:", e));
+
             // Si es un abono a crédito activo, regresamos al estado anterior y limpiamos el reporte
             const newStatus = (collection === "pedidos" && item.hasCredit) ? "active_credit" : (collection === "solicitudes_credito" ? "approved" : "rejected");
             await itemRef.update({ status: newStatus, paymentReport: null });
-            showNotification("❌ PAGO RECHAZADO", "error");
+            showNotification("❌ PAGO RECHAZADO - NOTIFICACIÓN ENVIADA AL CLIENTE", "error");
         } catch(e) {
             showNotification("Error al rechazar", "error");
         }
@@ -2673,11 +2729,33 @@
         }, 2500); // Tiempo reducido
     }
 
+    function loginWithBiometrics() {
+        if (window.AndroidApp && window.AndroidApp.requestBiometric) {
+            window.AndroidApp.requestBiometric();
+        } else {
+            showNotification("BIOMETRÍA SOLO DISPONIBLE EN DISPOSITIVOS ANDROID", "error");
+        }
+    }
+
     document.getElementById('login-form').onsubmit = (e) => {
         e.preventDefault();
         const emailInput = document.getElementById('login-email').value.trim();
         const email = emailInput.toLowerCase();
         const pass = document.getElementById('login-pass').value;
+        const rememberEl = document.getElementById('remember-me-checkbox');
+        const remember = rememberEl ? rememberEl.checked : true;
+
+        if (remember) {
+            localStorage.setItem('remember_credentials', 'true');
+            if (window.AndroidApp && window.AndroidApp.setRememberCredentials) {
+                window.AndroidApp.setRememberCredentials(true);
+            }
+        } else {
+            localStorage.setItem('remember_credentials', 'false');
+            if (window.AndroidApp && window.AndroidApp.setRememberCredentials) {
+                window.AndroidApp.setRememberCredentials(false);
+            }
+        }
 
         showNotification("Autenticando...");
 

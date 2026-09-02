@@ -245,15 +245,51 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    private fun showBiometricPrompt() {
+    private var isAuthenticatingOnResume = false
+
+    override fun onResume() {
+        super.onResume()
+        val prefs = getSharedPreferences("starbig_auth", MODE_PRIVATE)
+        val remember = prefs.getBoolean("remember_credentials", true)
+        val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+
+        if (currentUser != null && remember && !isAuthenticatingOnResume) {
+            isAuthenticatingOnResume = true
+            showBiometricPrompt {
+                isAuthenticatingOnResume = false
+            }
+        }
+    }
+
+    fun showBiometricPrompt(onSuccess: (() -> Unit)? = null) {
         val executor = ContextCompat.getMainExecutor(this)
         val biometricPrompt = BiometricPrompt(this, executor, object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                 super.onAuthenticationSucceeded(result)
-                Toast.makeText(applicationContext, "Bienvenido", Toast.LENGTH_SHORT).show()
+                Toast.makeText(applicationContext, "✅ Autenticación Exitosa", Toast.LENGTH_SHORT).show()
+                onSuccess?.invoke()
+            }
+
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                super.onAuthenticationError(errorCode, errString)
+                onSuccess?.invoke()
+            }
+
+            override fun onAuthenticationFailed() {
+                super.onAuthenticationFailed()
+                Toast.makeText(applicationContext, "Intente nuevamente", Toast.LENGTH_SHORT).show()
             }
         })
-        val promptInfo = BiometricPrompt.PromptInfo.Builder().setTitle("Starbig Auth").setSubtitle("Usa tu huella").setNegativeButtonText("Cancelar").build()
+
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Autenticación Starbig Store")
+            .setSubtitle("Ingresa con tu huella, rostro, patrón de bloqueo o PIN")
+            .setAllowedAuthenticators(
+                androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
+            )
+            .build()
+
         biometricPrompt.authenticate(promptInfo)
     }
 }

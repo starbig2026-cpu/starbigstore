@@ -231,6 +231,12 @@ class WebAppInterface(
     fun requestBiometric() { onBiometricRequest() }
 
     @JavascriptInterface
+    fun setRememberCredentials(remember: Boolean) {
+        val prefs = mContext.getSharedPreferences("starbig_auth", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("remember_credentials", remember).apply()
+    }
+
+    @JavascriptInterface
     fun print(jobName: String) {
         android.util.Log.d("WebScreen", "Print requested: $jobName")
         webView.post {

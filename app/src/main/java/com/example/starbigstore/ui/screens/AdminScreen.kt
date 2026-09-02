@@ -1321,7 +1321,17 @@ private fun confirmOrderPayment(order: Order, db: FirebaseFirestore, showToast: 
                 userDoc.reference.update("points", currentPoints + 10).await()
             }
 
-            CoroutineScope(Dispatchers.Main).launch { showToast("✅ PAGO CONFIRMADO", false) }
+            // Notificación por correo al cliente
+            notifyEmail(mapOf(
+                "action" to "confirmPaymentNotification",
+                "customerEmail" to order.customerEmail,
+                "customerName" to order.customerName,
+                "orderId" to order.orderId,
+                "amount" to amountPaid,
+                "status" to "APROBADO"
+            ))
+
+            CoroutineScope(Dispatchers.Main).launch { showToast("✅ PAGO CONFIRMADO - CORREO ENVIADO", false) }
         } catch (e: Exception) {
             android.util.Log.e("AdminScreen", "Error al confirmar pago", e)
             CoroutineScope(Dispatchers.Main).launch { showToast("❌ ERROR AL CONFIRMAR PAGO", true) }
@@ -1341,7 +1351,17 @@ private fun rejectOrderPayment(order: Order, db: FirebaseFirestore, showToast: (
                 "approved"
             }
             itemRef.update(mapOf("status" to newStatus, "paymentReport" to null)).await()
-            CoroutineScope(Dispatchers.Main).launch { showToast("❌ RECHAZADO", true) }
+
+            // Notificación por correo al cliente
+            notifyEmail(mapOf(
+                "action" to "rejectPaymentNotification",
+                "customerEmail" to order.customerEmail,
+                "customerName" to order.customerName,
+                "orderId" to order.orderId,
+                "status" to "RECHAZADO"
+            ))
+
+            CoroutineScope(Dispatchers.Main).launch { showToast("❌ RECHAZADO - CORREO ENVIADO AL CLIENTE", true) }
         } catch (e: Exception) {
             CoroutineScope(Dispatchers.Main).launch { showToast("❌ ERROR AL RECHAZAR", true) }
         }
@@ -1984,6 +2004,20 @@ fun CreditRequestCard(
     }
 }
 
+private val googleSheetsUrlNotification = "https://script.google.com/macros/s/AKfycbzTKwRkgCmy_m42ZeKjPbczOMr0YHmRKiSmrHPCSEdKixHzI9MG3fhEfEU3pChr45exvw/exec"
+
+private fun notifyEmail(jsonMap: Map<String, Any>) {
+    try {
+        val json = org.json.JSONObject(jsonMap)
+        val body = json.toString().toRequestBody("application/json".toMediaType())
+        val req = Request.Builder().url(googleSheetsUrlNotification).post(body).build()
+        OkHttpClient().newCall(req).enqueue(object : okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {}
+            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {}
+        })
+    } catch (_: Exception) {}
+}
+
 private fun updateCreditRequest(req: CreditRequest, status: String, comment: String, db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) {
     val updateMap = mutableMapOf<String, Any>(
         "status" to status,
@@ -2002,7 +2036,19 @@ private fun updateCreditRequest(req: CreditRequest, status: String, comment: Str
     }
 
     db.collection("solicitudes_credito").document(req.id).update(updateMap)
-        .addOnSuccessListener { showToast("✅ ACTUALIZADO", false) }
+        .addOnSuccessListener {
+            notifyEmail(mapOf(
+                "action" to "creditStatusNotification",
+                "customerEmail" to req.customerEmail,
+                "customerName" to req.customerName,
+                "status" to status.uppercase(),
+                "amountUsd" to req.amountUsd,
+                "amountBss" to req.amountBss,
+                "plan" to req.plan,
+                "comment" to comment
+            ))
+            showToast("✅ ACTUALIZADO - CORREO ENVIADO AL CLIENTE", false)
+        }
         .addOnFailureListener { showToast("❌ ERROR AL ACTUALIZAR", true) }
 }
 
