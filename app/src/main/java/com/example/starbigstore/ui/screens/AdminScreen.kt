@@ -48,6 +48,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.util.Date
+import android.graphics.Bitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.draw.drawWithCache
+import androidx.print.PrintHelper
+import java.io.File
+import java.io.FileOutputStream
+import android.content.Intent
+
 import java.util.UUID
 
 private const val GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/AKfycbzTKwRkgCmy_m42ZeKjPbczOMr0YHmRKiSmrHPCSEdKixHzI9MG3fhEfEU3pChr45exvw/exec"
@@ -209,6 +219,8 @@ fun AdminListContent() {
     var productToDelete by remember { mutableStateOf<Product?>(null) }
     var customerToDelete by remember { mutableStateOf<CustomerRegistration?>(null) }
     var newsToDelete by remember { mutableStateOf<News?>(null) }
+    var creditRequestToDelete by remember { mutableStateOf<CreditRequest?>(null) }
+    var creditRequestToReceipt by remember { mutableStateOf<CreditRequest?>(null) }
     var showRateDialog by remember { mutableStateOf(false) }
     val db = FirebaseFirestore.getInstance()
     val context = LocalContext.current
@@ -412,7 +424,8 @@ fun AdminListContent() {
                         amountBss = doc.getString("amountBss") ?: "",
                         status = doc.getString("status") ?: "pending",
                         timestamp = doc.getLong("timestamp") ?: 0,
-                        adminComment = doc.getString("adminComment") ?: ""
+                        adminComment = doc.getString("adminComment") ?: "",
+                        plan = doc.getString("plan") ?: ""
                     )
                 }
             }
@@ -531,14 +544,17 @@ fun AdminListContent() {
                         onImageClick = { expandedImageUrl = it }
                     )
                     6 -> CreditRequestsSection(
-                        requests = creditRequests.filter { it.status == "pending" },
+                        requests = creditRequests.filter { it.status == "pending" || it.status == "denied" },
                         onApprove = { req: CreditRequest, comment: String -> updateCreditRequest(req, "approved", comment, db, showModernToast) },
-                        onDeny = { req: CreditRequest, comment: String -> updateCreditRequest(req, "denied", comment, db, showModernToast) }
+                        onDeny = { req: CreditRequest, comment: String -> updateCreditRequest(req, "denied", comment, db, showModernToast) },
+                        onDelete = { creditRequestToDelete = it }
                     )
                     7 -> CreditRequestsSection(
-                        requests = creditRequests.filter { it.status == "approved" },
+                        requests = creditRequests.filter { it.status == "approved" || it.status == "paid" },
                         onApprove = { _, _ -> },
-                        onDeny = { _, _ -> }
+                        onDeny = { _, _ -> },
+                        onDelete = { creditRequestToDelete = it },
+                        onViewReceipt = { creditRequestToReceipt = it }
                     )
                 }
             }
@@ -802,6 +818,35 @@ fun AdminListContent() {
 
         if (showRateDialog) {
             BcvRateDialog(bcvRate, { showRateDialog = false }, { db.collection("config").document("tasa_bcv").set(mapOf("valor" to it)); showRateDialog = false })
+        }
+
+        if (creditRequestToDelete != null) {
+            AlertDialog(
+                onDismissRequest = { creditRequestToDelete = null },
+                containerColor = Color(0xFF121216),
+                title = { Text("¿ELIMINAR SOLICITUD?", color = Color.White, fontWeight = FontWeight.Black) },
+                text = { Text("Esta acción eliminará el registro permanentemente.", color = Color.White.copy(0.7f)) },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val r = creditRequestToDelete!!
+                            creditRequestToDelete = null
+                            deleteCreditRequest(r, db, showModernToast)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                    ) { Text("ELIMINAR", color = Color.White) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { creditRequestToDelete = null }) { Text("CANCELAR", color = Color.White.copy(0.6f)) }
+                }
+            )
+        }
+
+        if (creditRequestToReceipt != null) {
+            CreditReceiptDialog(
+                request = creditRequestToReceipt!!,
+                onDismiss = { creditRequestToReceipt = null }
+            )
         }
 
         SnackbarHost(
@@ -1558,7 +1603,9 @@ private fun deleteNews(news: News, db: FirebaseFirestore, showToast: (String, Bo
 fun CreditRequestsSection(
     requests: List<CreditRequest>,
     onApprove: (CreditRequest, String) -> Unit,
-    onDeny: (CreditRequest, String) -> Unit
+    onDeny: (CreditRequest, String) -> Unit,
+    onDelete: (CreditRequest) -> Unit,
+    onViewReceipt: ((CreditRequest) -> Unit)? = null
 ) {
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
         Text("SOLICITUDES DE CRÉDITO", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black)
@@ -1569,7 +1616,7 @@ fun CreditRequestsSection(
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
                 items(requests) { req ->
-                    CreditRequestCard(req, onApprove, onDeny)
+                    CreditRequestCard(req, onApprove, onDeny, onDelete, onViewReceipt)
                 }
             }
         }
@@ -1580,16 +1627,24 @@ fun CreditRequestsSection(
 fun CreditRequestCard(
     req: CreditRequest,
     onApprove: (CreditRequest, String) -> Unit,
-    onDeny: (CreditRequest, String) -> Unit
+    onDeny: (CreditRequest, String) -> Unit,
+    onDelete: (CreditRequest) -> Unit,
+    onViewReceipt: ((CreditRequest) -> Unit)? = null
 ) {
     var adminComment by remember { mutableStateOf("") }
     val date = java.text.SimpleDateFormat("dd/MM/yy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(req.timestamp))
     
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF121216)), shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, Color(0xFFC5A059).copy(0.3f))) {
         Column(modifier = Modifier.padding(20.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(date, color = Color.White.copy(0.4f), fontSize = 10.sp)
-                StatusBadge(req.status)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    StatusBadge(req.status)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    IconButton(onClick = { onDelete(req) }, modifier = Modifier.size(28.dp).background(Color.Red.copy(0.1f), RoundedCornerShape(6.dp))) {
+                        Icon(Icons.Default.Delete, null, tint = Color.Red.copy(0.6f), modifier = Modifier.size(16.dp))
+                    }
+                }
             }
             
             Text(req.customerName.uppercase(), color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
@@ -1626,15 +1681,33 @@ fun CreditRequestCard(
                         Text("DENEGAR", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black)
                     }
                 }
-            } else if (req.adminComment.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Surface(color = Color.White.copy(0.03f), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Text("NOTA ADMIN: ${req.adminComment}", color = Color.White.copy(0.4f), fontSize = 11.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, modifier = Modifier.padding(12.dp))
+            } else {
+                if (req.adminComment.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Surface(color = Color.White.copy(0.03f), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        Text("NOTA ADMIN: ${req.adminComment}", color = Color.White.copy(0.4f), fontSize = 11.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, modifier = Modifier.padding(12.dp))
+                    }
+                }
+                
+                if (req.status == "approved" || req.status == "paid") {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = { onViewReceipt?.invoke(req) },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059).copy(alpha = 0.1f)),
+                        border = BorderStroke(1.dp, Color(0xFFC5A059)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.ReceiptLong, null, tint = Color(0xFFC5A059))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("VER COMPROBANTE", color = Color(0xFFC5A059), fontSize = 12.sp, fontWeight = FontWeight.Black)
+                    }
                 }
             }
         }
     }
 }
+
 
 private fun updateCreditRequest(req: CreditRequest, status: String, comment: String, db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) {
     db.collection("solicitudes_credito").document(req.id).update(
@@ -1659,6 +1732,280 @@ private fun updateCreditRequest(req: CreditRequest, status: String, comment: Str
                 } catch (_: Exception) {}
             }
         }
-        showToast("✅ SOLICITUD ${status.uppercase()}", false)
+        showToast("✅ SOLICITUD ${status.uppercase()} Y COMPROBANTE ENVIADO", false)
     }
 }
+
+private fun deleteCreditRequest(req: CreditRequest, db: FirebaseFirestore, showToast: (String, Boolean) -> Unit) {
+    db.collection("solicitudes_credito").document(req.id).delete().addOnSuccessListener {
+        showToast("Registro eliminado", false)
+    }
+}
+
+@Composable
+fun CreditReceiptDialog(
+    request: CreditRequest,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val graphicsLayer = rememberGraphicsLayer()
+    val coroutineScope = rememberCoroutineScope()
+
+    val date = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(request.timestamp))
+    val verifyId = request.id.take(12).uppercase()
+    
+    // Cálculos Financieros
+    val subtotalBss = request.amountBss.toDoubleOrNull() ?: 0.0
+    val rate = if (request.amountUsd > 0) subtotalBss / request.amountUsd else 0.0
+    
+    var totalBss = subtotalBss
+    var interestBss = 0.0
+    val schedule = mutableListOf<Pair<String, Double>>()
+    val sdf = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+    val cal = java.util.Calendar.getInstance().apply { timeInMillis = request.timestamp }
+
+    val planDisplay = when(request.plan) {
+        "weekly_4" -> {
+            interestBss = subtotalBss * 0.10
+            totalBss = subtotalBss + interestBss
+            val installment = totalBss / 4
+            for(i in 1..4) {
+                cal.add(java.util.Calendar.DAY_OF_YEAR, 7)
+                schedule.add("CUOTA $i (${sdf.format(cal.time)})" to installment)
+            }
+            "4 PAGOS SEMANALES (CUOTAS + 10%)"
+        }
+        "weekly_interest" -> {
+            val weeklyInt = subtotalBss * 0.10
+            interestBss = weeklyInt * 4
+            totalBss = subtotalBss + interestBss
+            for(i in 1..3) {
+                cal.add(java.util.Calendar.DAY_OF_YEAR, 7)
+                schedule.add("INTERÉS SEMANAL (${sdf.format(cal.time)})" to weeklyInt)
+            }
+            cal.add(java.util.Calendar.DAY_OF_YEAR, 7)
+            schedule.add("CAPITAL + FINAL (${sdf.format(cal.time)})" to (subtotalBss + weeklyInt))
+            "INTERÉS SEMANAL 10% (CAPITAL AL FINAL)"
+        }
+        "full_30_days" -> {
+            interestBss = subtotalBss * 0.30
+            totalBss = subtotalBss + interestBss
+            cal.add(java.util.Calendar.DAY_OF_YEAR, 30)
+            schedule.add("PAGO ÚNICO (${sdf.format(cal.time)})" to totalBss)
+            "PAGO ÚNICO A 30 DÍAS (+30% INT)"
+        }
+        else -> request.plan.uppercase()
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.95f) // Un poco más estrecho para que parezca ticket
+                .padding(vertical = 32.dp)
+                .drawWithCache {
+                    onDrawWithContent {
+                        graphicsLayer.record {
+                            this@onDrawWithContent.drawContent()
+                        }
+                        drawLayer(graphicsLayer)
+                    }
+                },
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            shape = RoundedCornerShape(0.dp), // Esquinas rectas tipo papel de ticket
+            elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // ENCABEZADO PROFESIONAL CON LOGO
+                Image(
+                    painter = painterResource(id = R.drawable.logo_admin), // Usamos el logo de administración
+                    contentDescription = null,
+                    modifier = Modifier.size(100.dp).padding(bottom = 8.dp),
+                    contentScale = ContentScale.Fit
+                )
+                Text("STARBIG STORE", color = Color(0xFFC5A059), fontSize = 22.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
+                Text("BOUTIQUE EXCLUSIVA", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                Text("RIF: V-22727679-3", color = Color.Black.copy(0.6f), fontSize = 9.sp)
+                
+                Spacer(modifier = Modifier.height(15.dp))
+                DashedDivider()
+                Text("COMPROBANTE DE PAGO", color = Color.Black, fontSize = 14.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(vertical = 8.dp))
+                DashedDivider()
+                
+                Spacer(modifier = Modifier.height(20.dp))
+                
+                // DATOS DEL CLIENTE
+                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ReceiptRow("FECHA EMISIÓN:", date)
+                    ReceiptRow("CLIENTE:", request.customerName.uppercase())
+                    ReceiptRow("DOCUMENTO:", request.idNumber)
+                    ReceiptRow("CORREO:", request.customerEmail)
+                    ReceiptRow("TASA BCV:", "${rate.format(2)} BSS/$")
+                }
+                
+                Spacer(modifier = Modifier.height(20.dp))
+                DashedDivider()
+                Spacer(modifier = Modifier.height(15.dp))
+
+                Text("CONCEPTO:", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth())
+                Text("CRÉDITO PERSONAL APROBADO", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.fillMaxWidth())
+                Text("PLAN: $planDisplay", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Black, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
+                
+                Spacer(modifier = Modifier.height(25.dp))
+                
+                // RESUMEN FINANCIERO DESTACADO
+                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("SUB-TOTAL CAPITAL:", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        Text("$${request.amountUsd} (${subtotalBss.format(2)} BSS)", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("INTERESES CARGADOS:", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        Text("${interestBss.format(2)} BSS", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    DashedDivider()
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text("TOTAL A PAGAR:", color = Color.Black, fontSize = 18.sp, fontWeight = FontWeight.Black)
+                        Text("${totalBss.format(2)} BSS", color = Color.Black, fontSize = 18.sp, fontWeight = FontWeight.Black)
+                    }
+                }
+
+                if (schedule.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(30.dp))
+                    Text("CRONOGRAMA DE PAGOS:", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth())
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        schedule.forEach { (label, amount) ->
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(label, color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                Text("${amount.format(2)} BSS", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Black)
+                            }
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(40.dp))
+                DashedDivider()
+                Spacer(modifier = Modifier.height(15.dp))
+                Text("¡GRACIAS POR TU RESPONSABILIDAD!", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
+                Text("Este es un comprobante digital verificado por Starbig Store.", color = Color.Gray, fontSize = 8.sp, textAlign = TextAlign.Center)
+                Text("ID-VERIFICACIÓN: $verifyId", color = Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                
+                Spacer(modifier = Modifier.height(30.dp))
+
+                // BOTONES DE ACCIÓN
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        onClick = { 
+                            coroutineScope.launch {
+                                try {
+                                    val bitmap = graphicsLayer.toImageBitmap().asAndroidBitmap()
+                                    val cachePath = File(context.cacheDir, "images")
+                                    cachePath.mkdirs()
+                                    val file = File(cachePath, "Comprobante_${verifyId}.jpg")
+                                    FileOutputStream(file).use { stream ->
+                                        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
+                                    }
+                                    
+                                    val contentUri = androidx.core.content.FileProvider.getUriForFile(
+                                        context, 
+                                        "${context.packageName}.fileprovider", 
+                                        file
+                                    )
+
+                                    if (contentUri != null) {
+                                        val shareIntent = Intent().apply {
+                                            action = Intent.ACTION_SEND
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                            type = "image/jpeg"
+                                            putExtra(Intent.EXTRA_STREAM, contentUri)
+                                            clipData = android.content.ClipData.newRawUri("", contentUri)
+                                        }
+                                        context.startActivity(Intent.createChooser(shareIntent, "Enviar Comprobante"))
+                                    }
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        modifier = Modifier.weight(1.2f).height(50.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059)),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Icon(Icons.Default.Share, null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("COMPARTIR", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Black)
+                    }
+
+                    Button(
+                        onClick = { 
+                            coroutineScope.launch {
+                                try {
+                                    val bitmap = graphicsLayer.toImageBitmap().asAndroidBitmap()
+                                    val printHelper = PrintHelper(context)
+                                    printHelper.scaleMode = PrintHelper.SCALE_MODE_FIT
+                                    printHelper.printBitmap("Comprobante_${verifyId}", bitmap)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Error al imprimir", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        modifier = Modifier.weight(1f).height(50.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Icon(Icons.Default.Print, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("IMPRIMIR", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black)
+                    }
+                }
+                
+                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth().padding(top = 15.dp)) {
+                    Text("CERRAR VISTA", color = Color.Black.copy(alpha = 0.5f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+fun DashedDivider(modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier = modifier.fillMaxWidth().height(1.dp)) {
+        val pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+        drawLine(
+            color = Color.Black.copy(alpha = 0.3f),
+            start = androidx.compose.ui.geometry.Offset(0f, 0f),
+            end = androidx.compose.ui.geometry.Offset(size.width, 0f),
+            pathEffect = pathEffect,
+            strokeWidth = 2f
+        )
+    }
+}
+
+@Composable
+fun ReceiptRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        Text(label, color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(110.dp))
+        Text(value, color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+fun ReceiptRowFin(label: String, usd: String, bss: String) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+        Text(if(usd.isNotEmpty()) "$usd $bss" else bss, color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+    }
+}
+

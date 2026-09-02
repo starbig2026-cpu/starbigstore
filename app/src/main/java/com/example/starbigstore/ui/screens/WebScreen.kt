@@ -231,6 +231,74 @@ class WebAppInterface(
     fun requestBiometric() { onBiometricRequest() }
 
     @JavascriptInterface
+    fun print(jobName: String) {
+        android.util.Log.d("WebScreen", "Print requested: $jobName")
+        webView.post {
+            try {
+                val printManager = mContext.getSystemService(Context.PRINT_SERVICE) as android.print.PrintManager
+                // Aseguramos que el adapter se cree en el hilo principal
+                val printAdapter = webView.createPrintDocumentAdapter(jobName)
+                
+                printManager.print(jobName, printAdapter, android.print.PrintAttributes.Builder().build())
+                android.util.Log.d("WebScreen", "Print job sent to manager")
+            } catch (e: Exception) {
+                android.util.Log.e("WebScreen", "Print Error", e)
+                showToast("ERROR AL IMPRIMIR: ${e.localizedMessage}")
+            }
+        }
+    }
+
+    @JavascriptInterface
+    fun shareImage(base64: String, fileName: String) {
+        webView.post {
+            try {
+                val decodedString = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                val bitmap = android.graphics.BitmapFactory.decodeByteArray(decodedString, 0, decodedString.size)
+                
+                if (bitmap == null) {
+                    android.util.Log.e("WebScreen", "Bitmap decoding failed")
+                    showToast("ERROR: IMAGEN INVÁLIDA")
+                    return@post
+                }
+                
+                android.util.Log.d("WebScreen", "Bitmap created: ${bitmap.width}x${bitmap.height}")
+
+                val cachePath = java.io.File(mContext.cacheDir, "images")
+                if (!cachePath.exists()) cachePath.mkdirs()
+                
+                val file = java.io.File(cachePath, fileName)
+                java.io.FileOutputStream(file).use { stream ->
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 100, stream)
+                }
+
+                val authority = "${mContext.packageName}.fileprovider"
+                val contentUri = androidx.core.content.FileProvider.getUriForFile(mContext, authority, file)
+
+                if (contentUri != null) {
+                    val shareIntent = android.content.Intent().apply {
+                        action = android.content.Intent.ACTION_SEND
+                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        type = "image/jpeg"
+                        putExtra(android.content.Intent.EXTRA_STREAM, contentUri)
+                        clipData = android.content.ClipData.newRawUri("", contentUri)
+                    }
+                    
+                    val chooser = android.content.Intent.createChooser(shareIntent, "Compartir Comprobante")
+                    if (mContext !is android.app.Activity) {
+                        chooser.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    
+                    android.util.Log.d("WebScreen", "Starting share intent with URI: $contentUri")
+                    mContext.startActivity(chooser)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("WebScreen", "Share Error", e)
+                showToast("ERROR AL COMPARTIR: ${e.localizedMessage}")
+            }
+        }
+    }
+
+    @JavascriptInterface
     fun logoutUser() {
         FirebaseAuth.getInstance().signOut()
     }

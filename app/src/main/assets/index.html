@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/croppie/2.6.5/croppie.min.css" />
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/croppie/2.6.5/croppie.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
@@ -738,14 +739,17 @@
     <div class="modal-content" style="max-width: 450px; padding: 40px 20px; text-align: center;">
         <span class="close-modal" onclick="document.getElementById('receipt-modal').style.display='none'">&times;</span>
 
-        <div id="receipt-printable-area" style="background:white; color:black; padding:30px; border-radius:10px; font-family:'Courier New', Courier, monospace; text-align:left; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+        <div id="receipt-printable-area" style="background:white; color:black; padding:25px; border-radius:0px; font-family:'Courier New', Courier, monospace; text-align:left; border:1px solid #eee; width:350px; margin:0 auto;">
             <div style="text-align:center; border-bottom:2px dashed #000; padding-bottom:15px; margin-bottom:15px;">
-                <h2 style="font-family:'Playfair Display', serif; margin:0;">STARBIG STORE</h2>
-                <p style="font-size:10px; margin:5px 0;">BOUTIQUE EXCLUSIVA</p>
-                <p style="font-size:9px;">RIF: V-22727679-3</p>
+                <img src="logo_admin.png" id="receipt-logo" style="width:80px; height:80px; object-fit:contain; margin-bottom:10px; display:inline-block;"
+                     onload="this.style.display='inline-block'"
+                     onerror="this.src='https://via.placeholder.com/80/000000/C5A059?text=STARBIG';">
+                <h2 style="font-family:'Playfair Display', serif; margin:0; color:#c5a059;">STARBIG STORE</h2>
+                <p style="font-size:10px; font-weight:bold; margin:5px 0; letter-spacing:2px;">BOUTIQUE EXCLUSIVA</p>
+                <p style="font-size:9px; color:#666;">RIF: V-22727679-3</p>
             </div>
 
-            <h3 style="text-align:center; font-size:14px; margin-bottom:20px;">COMPROBANTE DE PAGO</h3>
+            <h3 style="text-align:center; font-size:13px; margin-bottom:20px; font-weight:900;">COMPROBANTE DE PAGO</h3>
 
             <div id="receipt-content" style="font-size:11px; line-height:1.8;">
                 <!-- Dinámico -->
@@ -759,8 +763,8 @@
         </div>
 
         <div style="display:flex; gap:10px; margin-top:25px;">
-            <button onclick="window.print()" class="btn-primary" style="flex:1; background:#000; border:1px solid #c5a059; color:#c5a059;"><i data-lucide="printer"></i> IMPRIMIR</button>
-            <button onclick="downloadReceiptImage()" class="btn-primary" style="flex:1;"><i data-lucide="download"></i> DESCARGAR JPG</button>
+            <button onclick="printReceipt()" class="btn-primary" style="flex:1; background:#000; border:1px solid #c5a059; color:#c5a059;"><i data-lucide="printer"></i> IMPRIMIR</button>
+            <button onclick="shareReceiptImage()" class="btn-primary" style="flex:1;"><i data-lucide="share-2"></i> COMPARTIR</button>
         </div>
         <button onclick="document.getElementById('receipt-modal').style.display='none'" class="btn-secondary full-width" style="margin-top:10px;">CERRAR</button>
     </div>
@@ -1766,10 +1770,11 @@
                 const req = doc.data();
                 const date = new Date(req.timestamp).toLocaleString();
                 const card = document.createElement('div');
-                card.style = "background:#121216; padding:15px; border:0.5px solid #c5a05944; color:white; margin-bottom:15px;";
+                card.style = "background:#121216; padding:15px; border:0.5px solid #c5a05944; color:white; margin-bottom:15px; position:relative;";
 
                 card.innerHTML = `
-                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                    <button onclick="deleteCreditRequest('${doc.id}')" style="position:absolute; top:10px; right:10px; background:none; border:none; color:#ff444455; cursor:pointer; z-index:10;"><i data-lucide="trash-2" style="width:14px; height:14px;"></i></button>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:10px; padding-right:25px;">
                         <span style="color:#888; font-size:10px;">${date}</span>
                         <span style="background:${req.status === 'pending' ? '#c5a059' : (req.status === 'approved' ? '#25D366' : '#ff4444')}; color:black; font-size:8px; font-weight:900; padding:2px 6px; border-radius:4px;">${req.status.toUpperCase()}</span>
                     </div>
@@ -1797,15 +1802,32 @@
                             <button onclick="updateCreditRequestWeb('${doc.id}', 'denied')" style="flex:1; background:#ff4444; color:white; border:none; padding:10px; font-weight:900; cursor:pointer;">DENEGAR</button>
                         </div>
                     ` : `
-                        <div style="font-size:10px; color:#666; font-style:italic;"><strong>NOTA:</strong> ${req.adminComment || 'Sin comentarios'}</div>
+                        <div style="font-size:10px; color:#666; font-style:italic; margin-bottom:15px;"><strong>NOTA:</strong> ${req.adminComment || 'Sin comentarios'}</div>
+                        ${req.status === 'approved' ? `
+                            <button onclick="generateDigitalReceipt('${doc.id}', 'credit')" class="btn-primary full-width" style="height:40px; font-size:10px;">
+                                <i data-lucide="printer" style="width:12px; height:12px; vertical-align:middle; margin-right:5px;"></i> VER COMPROBANTE
+                            </button>
+                        ` : ''}
                     `}
                 `;
 
                 if(req.status === 'approved') listApproved.appendChild(card);
-                else if(req.status === 'pending') listPending.appendChild(card);
+                else if(req.status === 'pending' || req.status === 'denied') listPending.appendChild(card);
             });
+            lucide.createIcons();
         });
     }
+
+    async function deleteCreditRequest(id) {
+        if(!confirm("¿Eliminar esta solicitud de crédito permanentemente?")) return;
+        try {
+            await db.collection("solicitudes_credito").doc(id).delete();
+            showNotification("Solicitud eliminada");
+        } catch(e) {
+            showNotification("Error al eliminar", "error");
+        }
+    }
+
 
     async function updateCreditRequestWeb(id, status) {
         const comment = document.getElementById('note-' + id).value;
@@ -2311,20 +2333,26 @@
 
     function startTrafficMonitor() {
         setInterval(async () => {
-            const snap = await db.collection("registros_clientes").get();
-            const total = snap.size;
-            const twoMinAgo = Date.now() - 120000;
-            const onlineSnap = await db.collection("presencia").where("ultimoPulso", ">", twoMinAgo).get();
-            const onlineCount = Math.max(1, onlineSnap.size);
+            try {
+                const snap = await db.collection("registros_clientes").get();
+                const total = snap.size;
+                const twoMinAgo = Date.now() - 120000;
+                const onlineSnap = await db.collection("presencia").where("ultimoPulso", ">", twoMinAgo).get();
+                const onlineCount = Math.max(1, onlineSnap.size);
 
-            document.getElementById('stat-online').innerText = onlineCount;
-            document.getElementById('stat-offline').innerText = Math.max(0, total - onlineCount);
-            document.getElementById('stat-total').innerText = total;
+                const elOnline = document.getElementById('stat-online');
+                const elOffline = document.getElementById('stat-offline');
+                const elTotal = document.getElementById('stat-total');
 
-            onlineHistory.shift(); onlineHistory.push(onlineCount);
-            offlineHistory.shift(); offlineHistory.push(Math.max(0, total - onlineCount));
-            drawTrafficGraph();
-        }, 3000);
+                if(elOnline) elOnline.innerText = onlineCount;
+                if(elOffline) elOffline.innerText = Math.max(0, total - onlineCount);
+                if(elTotal) elTotal.innerText = total;
+
+                onlineHistory.shift(); onlineHistory.push(onlineCount);
+                offlineHistory.shift(); offlineHistory.push(Math.max(0, total - onlineCount));
+                drawTrafficGraph();
+            } catch(e) { console.error("Traffic Monitor Error:", e); }
+        }, 30000); // Aumentado a 30s para ahorrar recursos
     }
 
     function drawTrafficGraph() {
@@ -2742,26 +2770,82 @@
             const data = doc.data();
             const date = new Date(data.timestamp).toLocaleString();
 
+            const subtotalBss = parseFloat(data.amountBss || data.totalBss?.replace(" BSS", "") || 0);
+            const amountUsd = parseFloat(data.amountUsd || data.totalUsd?.replace("$", "") || 0);
+            const rate = amountUsd > 0 ? subtotalBss / amountUsd : tasaBcv;
+
+            let totalBss = subtotalBss;
+            let interestBss = 0;
+            let planText = type === 'credit' ? data.plan : "CONTADO";
+            let scheduleHtml = "";
+
+            if (type === 'credit') {
+                const baseDate = new Date(data.timestamp);
+                if (data.plan === 'weekly_4') {
+                    interestBss = subtotalBss * 0.10;
+                    totalBss = subtotalBss + interestBss;
+                    planText = "4 PAGOS SEMANALES (CUOTAS + 10%)";
+                    const inst = totalBss / 4;
+                    for(let i=1; i<=4; i++) {
+                        baseDate.setDate(baseDate.getDate() + 7);
+                        scheduleHtml += `<div style="display:flex; justify-content:space-between;"><span>Cuota ${i} (${baseDate.toLocaleDateString()}):</span> <strong>${inst.toFixed(2)} BSS</strong></div>`;
+                    }
+                } else if (data.plan === 'weekly_interest') {
+                    const weeklyInt = subtotalBss * 0.10;
+                    interestBss = weeklyInt * 4;
+                    totalBss = subtotalBss + interestBss;
+                    planText = "INTERÉS SEMANAL 10% (CAPITAL AL FINAL)";
+                    for(let i=1; i<=3; i++) {
+                        baseDate.setDate(baseDate.getDate() + 7);
+                        scheduleHtml += `<div style="display:flex; justify-content:space-between;"><span>Interés Sem. (${baseDate.toLocaleDateString()}):</span> <strong>${weeklyInt.toFixed(2)} BSS</strong></div>`;
+                    }
+                    baseDate.setDate(baseDate.getDate() + 7);
+                    scheduleHtml += `<div style="display:flex; justify-content:space-between;"><span>Capital + Final (${baseDate.toLocaleDateString()}):</span> <strong>${(subtotalBss + weeklyInt).toFixed(2)} BSS</strong></div>`;
+                } else if (data.plan === 'full_30_days') {
+                    interestBss = subtotalBss * 0.30;
+                    totalBss = subtotalBss + interestBss;
+                    planText = "PAGO ÚNICO A 30 DÍAS (+30% INT)";
+                    baseDate.setDate(baseDate.getDate() + 30);
+                    scheduleHtml += `<div style="display:flex; justify-content:space-between;"><span>Pago Único (${baseDate.toLocaleDateString()}):</span> <strong>${totalBss.toFixed(2)} BSS</strong></div>`;
+                }
+            }
+
             document.getElementById('receipt-verify-id').innerText = id.substring(0,12).toUpperCase();
 
             let html = `
-                <div><strong>FECHA:</strong> ${date}</div>
-                <div><strong>CLIENTE:</strong> ${data.customerName.toUpperCase()}</div>
-                <div><strong>CORREO:</strong> ${data.customerEmail}</div>
-                <div style="border-bottom:1px solid #eee; margin:10px 0;"></div>
-                <div style="font-weight:bold; margin-bottom:5px;">CONCEPTO:</div>
-                <div style="padding-left:10px;">
-                    ${type === 'credit' ? `CRÉDITO PERSONAL APROBADO<br>PLAN: ${data.plan.toUpperCase()}` : `COMPRA DE PRODUCTOS`}
+                <div style="margin-bottom:15px;">
+                    <div><strong>FECHA EMISIÓN:</strong> ${date}</div>
+                    <div><strong>CLIENTE:</strong> ${data.customerName.toUpperCase()}</div>
+                    <div><strong>DOCUMENTO:</strong> ${data.idNumber || 'N/A'}</div>
+                    <div><strong>TASA BCV:</strong> ${rate.toFixed(2)} BSS/$</div>
                 </div>
-                <div style="border-bottom:1px solid #eee; margin:10px 0;"></div>
-                <div style="display:flex; justify-content:space-between; font-size:14px; font-weight:bold;">
-                    <span>TOTAL LIQUIDADO:</span>
-                    <span>$${data.amountUsd || data.totalUsd}</span>
+
+                <div style="margin-bottom:15px; border-top:1px solid #eee; padding-top:10px;">
+                    <div style="font-weight:bold; font-size:10px; color:#666;">PLAN ELEGIDO:</div>
+                    <div style="font-weight:bold; font-size:11px;">${planText.toUpperCase()}</div>
                 </div>
-                <div style="display:flex; justify-content:space-between; font-size:12px; color:#666;">
-                    <span>VALOR EN BSS:</span>
-                    <span>${data.amountBss || data.totalBss} BSS</span>
+
+                <div style="background:#f9f9f9; padding:10px; border-radius:5px; margin-bottom:15px;">
+                    <div style="display:flex; justify-content:space-between; font-size:10px;">
+                        <span>SUB-TOTAL CAPITAL:</span>
+                        <span>$${amountUsd.toFixed(2)} (${subtotalBss.toFixed(2)} BSS)</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-size:10px;">
+                        <span>INTERESES CARGADOS:</span>
+                        <span>${interestBss.toFixed(2)} BSS</span>
+                    </div>
+                    <div style="border-top:1px solid #ddd; margin:5px 0; padding-top:5px; display:flex; justify-content:space-between; font-size:13px; font-weight:bold;">
+                        <span>TOTAL A PAGAR:</span>
+                        <span>${totalBss.toFixed(2)} BSS</span>
+                    </div>
                 </div>
+
+                ${scheduleHtml ? `
+                <div style="border-top:1px solid #eee; padding-top:10px;">
+                    <div style="font-weight:bold; font-size:10px; color:#666; margin-bottom:5px;">CRONOGRAMA DE PAGOS:</div>
+                    <div style="font-size:10px; line-height:1.6;">${scheduleHtml}</div>
+                </div>
+                ` : ''}
             `;
 
             container.innerHTML = html;
@@ -2769,7 +2853,66 @@
             lucide.createIcons();
 
         } catch(e) {
+            console.error(e);
             showNotification("Error al generar recibo", "error");
+        }
+    }
+
+    function printReceipt() {
+        if(window.AndroidApp && window.AndroidApp.print) {
+            window.AndroidApp.print("Comprobante_Starbig_" + Date.now());
+        } else {
+            window.print();
+        }
+    }
+
+    async function shareReceiptImage() {
+        const element = document.getElementById('receipt-printable-area');
+        if(!element) return;
+
+        showNotification("GENERANDO IMAGEN...");
+
+        try {
+            // Pequeña espera para asegurar que el modal esté totalmente renderizado
+            await new Promise(r => setTimeout(r, 500));
+
+            const originalStyle = element.style.boxShadow;
+            element.style.boxShadow = 'none';
+
+            const canvas = await html2canvas(element, {
+                scale: 2, // Bajamos un poco la escala para evitar problemas de memoria
+                backgroundColor: "#ffffff",
+                logging: false,
+                useCORS: true,
+                allowTaint: true,
+                windowWidth: element.scrollWidth,
+                windowHeight: element.scrollHeight
+            });
+
+            element.style.boxShadow = originalStyle;
+
+            const base64Data = canvas.toDataURL('image/jpeg', 0.9);
+            const base64 = base64Data.split(',')[1];
+
+            if(!base64 || base64.length < 100) {
+                throw new Error("Imagen generada inválida");
+            }
+
+            if(window.AndroidApp && window.AndroidApp.shareImage) {
+                const verifyId = document.getElementById('receipt-verify-id').innerText || "ORD";
+                const safeId = verifyId.replace(/[^a-z0-9]/gi, '_');
+                const fileName = "Comprobante_" + safeId + ".jpg";
+                window.AndroidApp.shareImage(base64, fileName);
+            }
+ else {
+                const link = document.createElement('a');
+                link.download = 'Comprobante_Starbig.jpg';
+                link.href = base64Data;
+                link.click();
+            }
+        } catch(e) {
+            console.error("Share Image Error:", e);
+            showNotification("ERROR AL GENERAR IMAGEN: " + e.message, "error");
         }
     }
 
