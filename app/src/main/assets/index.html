@@ -324,6 +324,9 @@
             <div id="adm-tab-credits" class="admin-nav-btn" onclick="switchAdminTab('credits')">
                 <i data-lucide="credit-card"></i> CRÉDITOS
             </div>
+            <div id="adm-tab-summary" class="admin-nav-btn" onclick="switchAdminTab('summary')">
+                <i data-lucide="bar-chart-2"></i> RESUMEN
+            </div>
             <div id="adm-tab-pay" class="admin-nav-btn" onclick="switchAdminTab('payments')">
                 <i data-lucide="settings"></i> AJUSTES
             </div>
@@ -402,6 +405,35 @@
         <div id="admin-content-credits-history" class="admin-panel-section" style="display:none;">
             <h3 style="color:white; margin-bottom:20px; font-weight:900; font-size:14px; letter-spacing:2px;">CRÉDITOS OTORGADOS (HISTORIAL)</h3>
             <div id="admin-credits-list-approved" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;"></div>
+        </div>
+
+        <div id="admin-content-summary" class="admin-panel-section" style="display:none;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
+                <h3 style="color:white; letter-spacing: 2px; font-weight: 900; font-size: 14px;">RESUMEN DE VENTAS Y BÚSQUEDA DE CLIENTES</h3>
+                <div style="display:flex; gap:10px; flex:1; max-width:500px;">
+                    <input type="text" id="summary-search-input" placeholder="Buscar por Cédula, Referencia, Nombre o Correo..." style="flex:1; background:#121216; border:1px solid #c5a05966; color:white; padding:8px 12px; border-radius:6px; font-size:11px;" oninput="searchSalesSummary()">
+                    <button onclick="searchSalesSummary()" style="background:#C5A059; color:black; border:none; padding:8px 15px; font-weight:bold; border-radius:6px; cursor:pointer; font-size:11px;">BUSCAR</button>
+                </div>
+            </div>
+
+            <div id="summary-stats-banner" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:15px; margin-bottom:20px;">
+                <div style="background:#121216; padding:15px; border:1px solid #c5a05933; border-radius:8px;">
+                    <div style="color:#888; font-size:10px; font-weight:bold;">REGISTROS TOTALES</div>
+                    <div id="sum-stat-count" style="color:white; font-size:18px; font-weight:900;">0</div>
+                </div>
+                <div style="background:#121216; padding:15px; border:1px solid #c5a05933; border-radius:8px;">
+                    <div style="color:#888; font-size:10px; font-weight:bold;">TOTAL VENTAS $USD</div>
+                    <div id="sum-stat-usd" style="color:#C5A059; font-size:18px; font-weight:900;">$0.00</div>
+                </div>
+                <div style="background:#121216; padding:15px; border:1px solid #c5a05933; border-radius:8px;">
+                    <div style="color:#888; font-size:10px; font-weight:bold;">DEUDA PENDIENTE BSS</div>
+                    <div id="sum-stat-debt" style="color:#ff4444; font-size:18px; font-weight:900;">0.00 BSS</div>
+                </div>
+            </div>
+
+            <div id="summary-results-container" style="display: flex; flex-direction: column; gap: 20px;">
+                <!-- Dinámico -->
+            </div>
         </div>
     </div>
 </div>
@@ -1476,6 +1508,29 @@
         updateQtyPrice();
     }
 
+    async function changeProductStockInFirestore(productId, name, deltaStock) {
+        try {
+            let pDoc = null;
+            if (productId) {
+                const docSnap = await db.collection("productos").doc(productId).get();
+                if (docSnap && docSnap.exists) pDoc = docSnap;
+            }
+            if (!pDoc && name) {
+                const snap = await db.collection("productos").where("name", "==", name).get();
+                if (!snap.empty) pDoc = snap.docs[0];
+            }
+
+            if (pDoc && pDoc.exists) {
+                const currentStock = parseInt(pDoc.data().stock || 0);
+                const newStock = Math.max(0, currentStock + deltaStock);
+                await pDoc.ref.update({ stock: newStock });
+                console.log(`Stock en Firestore para ${name || productId}: ${currentStock} -> ${newStock}`);
+            }
+        } catch(err) {
+            console.error("Error al actualizar stock en Firestore:", err);
+        }
+    }
+
     function confirmAddToCart() {
         const qty = parseInt(document.getElementById('buy-quantity').value) || 1;
         if(currentViewingProduct) {
@@ -1497,9 +1552,12 @@
                 cart.push(cartItem);
             }
 
+            // Descontar stock inmediatamente al agregar al carrito
+            changeProductStockInFirestore(currentViewingProduct.id, currentViewingProduct.name, -qty);
+
             updateCartUI();
             saveCartToFirestore(); // Sincronizar con Firebase
-            showNotification(`✅ ${qty} x ${currentViewingProduct.name.toUpperCase()} AGREGADO`);
+            showNotification(`✅ ${qty} x ${currentViewingProduct.name.toUpperCase()} AGREGADO AL CARRITO`);
             document.getElementById('quantity-modal').style.display = 'none';
             closeProductDetail();
         }
@@ -1530,6 +1588,10 @@
             } else {
                 cart.push(cartItem);
             }
+
+            // Descontar stock inmediatamente al agregar al carrito desde el catálogo nativo
+            changeProductStockInFirestore(p.id, p.name, -qty);
+
             updateCartUI();
             saveCartToFirestore(); // Sincronizar
             showNotification(`✅ ${qty}x ${p.name.toUpperCase()} AGREGADO AL CARRITO`);
@@ -1667,19 +1729,30 @@
     }
 
     function removeFromCart(index) {
-        cart.splice(index, 1);
-        updateCartUI();
-        saveCartToFirestore();
-        showNotification("ARTÍCULO ELIMINADO", "error");
+        if(cart[index]) {
+            const item = cart[index];
+            // Devolver las unidades al stock en Firestore
+            changeProductStockInFirestore(item.id, item.name, +item.buyQty);
+
+            cart.splice(index, 1);
+            updateCartUI();
+            saveCartToFirestore();
+            showNotification("ARTÍCULO ELIMINADO - UNIDADES DEVUELTAS AL STOCK", "error");
+        }
     }
 
     function clearCart() {
         if(cart.length === 0) return;
         if(confirm("¿ESTÁS SEGURO DE QUE DESEAS VACIAR TODO EL CARRITO?")) {
+            // Devolver todas las unidades del carrito al stock en Firestore
+            cart.forEach(item => {
+                changeProductStockInFirestore(item.id, item.name, +item.buyQty);
+            });
+
             cart = [];
             updateCartUI();
             saveCartToFirestore();
-            showNotification("CARRITO VACIADO", "error");
+            showNotification("CARRITO VACIADO - UNIDADES DEVUELTAS AL STOCK", "error");
         }
     }
 
@@ -1772,6 +1845,9 @@
         document.getElementById('admin-content-credits').style.display = tab === 'credits' ? 'block' : 'none';
         document.getElementById('admin-content-credits-history').style.display = tab === 'credits-history' ? 'block' : 'none';
 
+        const sumPanel = document.getElementById('admin-content-summary');
+        if (sumPanel) sumPanel.style.display = tab === 'summary' ? 'block' : 'none';
+
         const payPanel = document.getElementById('admin-content-payments');
         if (payPanel) payPanel.style.display = tab === 'payments' ? 'block' : 'none';
 
@@ -1781,29 +1857,81 @@
             'users': 'adm-tab-users', 'db': 'adm-tab-db',
             'inventory': 'adm-tab-inv', 'news': 'adm-tab-news',
             'sales': 'adm-tab-sales', 'payments': 'adm-tab-pay',
-            'credits': 'adm-tab-credits', 'credits-history': 'adm-tab-credits-history'
+            'credits': 'adm-tab-credits', 'credits-history': 'adm-tab-credits-history',
+            'summary': 'adm-tab-summary'
         };
-        document.getElementById(tabIdMap[tab]).classList.add('active');
+        if (tabIdMap[tab] && document.getElementById(tabIdMap[tab])) {
+            document.getElementById(tabIdMap[tab]).classList.add('active');
+        }
         lucide.createIcons();
 
         if(tab === 'news') loadAdminNews();
         if(tab === 'sales') loadAdminSales();
         if(tab === 'payments') loadAdminPayments();
         if(tab === 'credits' || tab === 'credits-history') loadAdminCreditRequests();
+        if(tab === 'summary') loadAdminSalesSummary();
     }
 
     function loadAdminCreditRequests() {
-        db.collection("solicitudes_credito").orderBy("timestamp", "desc").onSnapshot(snap => {
+        db.collection("solicitudes_credito").orderBy("timestamp", "desc").onSnapshot(async snap => {
             const listPending = document.getElementById('admin-credits-list-pending');
             const listApproved = document.getElementById('admin-credits-list-approved');
             listPending.innerHTML = "";
             listApproved.innerHTML = "";
 
+            let registrosMap = {};
+            try {
+                const regSnap = await db.collection("registros_clientes").get();
+                regSnap.forEach(d => {
+                    const data = d.data();
+                    if(data.email) registrosMap[data.email.toLowerCase()] = data;
+                    if(data.idNumber) registrosMap[data.idNumber] = data;
+                });
+            } catch(e) { console.error("Error obteniendo registros_clientes:", e); }
+
             snap.forEach(doc => {
                 const req = doc.data();
                 const date = new Date(req.timestamp).toLocaleString();
                 const card = document.createElement('div');
-                card.style = "background:#121216; padding:15px; border:0.5px solid #c5a05944; color:white; margin-bottom:15px; position:relative;";
+                card.style = "background:#121216; padding:15px; border:0.5px solid #c5a05944; color:white; margin-bottom:15px; position:relative; border-radius:10px;";
+
+                const planMap = {
+                    'weekly_4': '4 Pagos Semanales (Monto + 10%)',
+                    'weekly_interest': 'Interés Semanal (10%)',
+                    'full_30_days': 'Pago Único a 30 Días (Monto + 30%)'
+                };
+                const planText = planMap[req.plan] || req.plan || 'No especificado';
+
+                const reg = (req.customerEmail && registrosMap[req.customerEmail.toLowerCase()]) || (req.idNumber && registrosMap[req.idNumber]);
+
+                let regHtml = '';
+                if(reg) {
+                    regHtml = `
+                        <div style="margin-top:10px; padding:10px; background:rgba(255,255,255,0.02); border:1px solid #ffffff11; border-radius:6px;">
+                            <div style="color:#c5a059; font-weight:800; font-size:9px; margin-bottom:5px;">VERIFICACIÓN DE IDENTIDAD:</div>
+                            <div style="font-size:10px; color:#aaa; margin-bottom:5px;">
+                                REGISTRO: <span style="color:${reg.status === 'active' ? '#25D366' : '#FFD700'}; font-weight:bold;">${(reg.status || 'UNVERIFIED').toUpperCase()}</span>
+                                ${reg.address ? ` | DIR: ${reg.address}` : ''}
+                            </div>
+                            <div style="display:flex; gap:10px; margin-top:8px;">
+                                ${reg.photoUrl ? `
+                                    <div style="flex:1; text-align:center;">
+                                        <div style="font-size:8px; color:#888; margin-bottom:2px;">FOTO PERFIL</div>
+                                        <img src="${fixDriveUrl(reg.photoUrl)}" style="width:100%; height:70px; object-fit:cover; border-radius:4px; cursor:pointer;" onclick="window.open('${fixDriveUrl(reg.photoUrl)}', '_blank')">
+                                    </div>
+                                ` : ''}
+                                ${reg.idCardUrl ? `
+                                    <div style="flex:1; text-align:center;">
+                                        <div style="font-size:8px; color:#888; margin-bottom:2px;">CÉDULA DE IDENTIDAD</div>
+                                        <img src="${fixDriveUrl(reg.idCardUrl)}" style="width:100%; height:70px; object-fit:contain; background:#000; border-radius:4px; cursor:pointer;" onclick="window.open('${fixDriveUrl(reg.idCardUrl)}', '_blank')">
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    regHtml = `<div style="font-size:9px; color:#666; font-style:italic; margin-top:8px;">Sin fotos de registro encontradas para el usuario.</div>`;
+                }
 
                 card.innerHTML = `
                     <button onclick="deleteCreditRequest('${doc.id}')" style="position:absolute; top:10px; right:10px; background:none; border:none; color:#ff444455; cursor:pointer; z-index:10;"><i data-lucide="trash-2" style="width:14px; height:14px;"></i></button>
@@ -1811,37 +1939,51 @@
                         <span style="color:#888; font-size:10px;">${date}</span>
                         <span style="background:${req.status === 'pending' ? '#c5a059' : (req.status === 'approved' ? '#25D366' : '#ff4444')}; color:black; font-size:8px; font-weight:900; padding:2px 6px; border-radius:4px;">${req.status.toUpperCase()}</span>
                     </div>
-                    <div style="font-weight:bold; font-size:14px; margin-bottom:5px;">${req.customerName.toUpperCase()}</div>
-                    <div style="color:#c5a059; font-size:11px; margin-bottom:10px;">C.I: ${req.idNumber} | TLF: ${req.phone}</div>
 
-                    <div style="background:rgba(255,255,255,0.03); padding:10px; border-radius:8px; margin-bottom:15px; font-size:11px;">
-                        <div style="color:#c5a059; font-weight:800; font-size:9px; margin-bottom:5px;">MOTIVO:</div>
-                        ${req.reason}
+                    <div style="font-weight:bold; font-size:15px; margin-bottom:3px; color:white;">${req.customerName.toUpperCase()}</div>
+                    <div style="color:#c5a059; font-size:11px; margin-bottom:8px;">
+                        <strong>C.I:</strong> ${req.idNumber || 'S/N'} | <strong>TLF:</strong> ${req.phone || 'S/T'}<br>
+                        <strong>CORREO:</strong> ${req.customerEmail || 'S/C'}
+                    </div>
+
+                    <div style="background:rgba(197, 160, 89, 0.05); padding:10px; border-radius:8px; border:1px solid #c5a05933; margin-bottom:10px;">
+                        <div style="font-size:16px; font-weight:900; color:#c5a059;">$${req.amountUsd} (${req.amountBss} BSS)</div>
+                        ${req.bcvAtRequest ? `<div style="font-size:9px; color:#888;">Tasa BCV al solicitar: ${req.bcvAtRequest} BSS/USD</div>` : ''}
+                        <div style="font-size:11px; color:white; margin-top:5px;"><strong>PLAN:</strong> ${planText}</div>
+                        ${req.dueDate ? `<div style="font-size:10px; color:#FFD700; font-weight:bold;"><strong>FECHA LÍMITE:</strong> ${req.dueDate}</div>` : ''}
+                    </div>
+
+                    <div style="background:rgba(255,255,255,0.03); padding:10px; border-radius:8px; margin-bottom:10px; font-size:11px;">
+                        <div style="color:#c5a059; font-weight:800; font-size:9px; margin-bottom:4px;">DATOS BANCARIOS CLIENTE (PARA TRANSFERIR):</div>
+                        <strong>BANCO:</strong> ${req.bank}<br>
+                        <strong>CUENTA / PAGO MÓVIL:</strong> ${req.account}
                         <div style="margin-top:8px; border-top:1px solid #ffffff11; padding-top:8px;">
-                            <strong>BANCO:</strong> ${req.bank}<br>
-                            <strong>CUENTA:</strong> ${req.account}
+                            <div style="color:#c5a059; font-weight:800; font-size:9px; margin-bottom:2px;">MOTIVO DE LA SOLICITUD:</div>
+                            ${req.reason || 'Sin motivo especificado'}
                         </div>
                     </div>
 
-                    <div style="font-size:16px; font-weight:900; color:#c5a059; margin-bottom:20px;">$${req.amountUsd} (${req.amountBss} BSS)</div>
+                    ${regHtml}
 
-                    ${req.status === 'pending' ? `
-                        <div class="input-group">
-                            <label style="font-size:8px;">COMENTARIO ADMIN</label>
-                            <input type="text" id="note-${doc.id}" style="background:#000; border:1px solid #333; color:white; padding:8px; width:100%; font-size:11px;">
-                        </div>
-                        <div style="display:flex; gap:10px;">
-                            <button onclick="updateCreditRequestWeb('${doc.id}', 'approved')" style="flex:1; background:#25D366; color:black; border:none; padding:10px; font-weight:900; cursor:pointer;">APROBAR</button>
-                            <button onclick="updateCreditRequestWeb('${doc.id}', 'denied')" style="flex:1; background:#ff4444; color:white; border:none; padding:10px; font-weight:900; cursor:pointer;">DENEGAR</button>
-                        </div>
-                    ` : `
-                        <div style="font-size:10px; color:#666; font-style:italic; margin-bottom:15px;"><strong>NOTA:</strong> ${req.adminComment || 'Sin comentarios'}</div>
-                        ${req.status === 'approved' ? `
-                            <button onclick="generateDigitalReceipt('${doc.id}', 'credit')" class="btn-primary full-width" style="height:40px; font-size:10px;">
-                                <i data-lucide="printer" style="width:12px; height:12px; vertical-align:middle; margin-right:5px;"></i> VER COMPROBANTE
-                            </button>
-                        ` : ''}
-                    `}
+                    <div style="margin-top:15px;">
+                        ${req.status === 'pending' ? `
+                            <div class="input-group">
+                                <label style="font-size:8px;">COMENTARIO ADMIN</label>
+                                <input type="text" id="note-${doc.id}" style="background:#000; border:1px solid #333; color:white; padding:8px; width:100%; font-size:11px; border-radius:4px; margin-bottom:8px;">
+                            </div>
+                            <div style="display:flex; gap:10px;">
+                                <button onclick="updateCreditRequestWeb('${doc.id}', 'approved')" style="flex:1; background:#25D366; color:black; border:none; padding:10px; font-weight:900; cursor:pointer; border-radius:4px;">APROBAR</button>
+                                <button onclick="updateCreditRequestWeb('${doc.id}', 'denied')" style="flex:1; background:#ff4444; color:white; border:none; padding:10px; font-weight:900; cursor:pointer; border-radius:4px;">DENEGAR</button>
+                            </div>
+                        ` : `
+                            <div style="font-size:10px; color:#aaa; font-style:italic; margin-bottom:10px;"><strong>NOTA ADMIN:</strong> ${req.adminComment || 'Sin comentarios'}</div>
+                            ${req.status === 'approved' ? `
+                                <button onclick="generateDigitalReceipt('${doc.id}', 'credit')" class="btn-primary full-width" style="height:40px; font-size:10px;">
+                                    <i data-lucide="printer" style="width:12px; height:12px; vertical-align:middle; margin-right:5px;"></i> VER COMPROBANTE
+                                </button>
+                            ` : ''}
+                        `}
+                    </div>
                 `;
 
                 if(req.status === 'approved') listApproved.appendChild(card);
@@ -2187,6 +2329,9 @@
             }
         });
 
+        // Filtrar elementos ocultos de Cobros (conservados en Resumen)
+        allItems = allItems.filter(item => !item.archivedFromCobros);
+
         // Ordenar por tiempo (más reciente primero)
         allItems.sort((a, b) => b.timestamp - a.timestamp);
 
@@ -2248,12 +2393,14 @@
     }
 
     async function deleteSingleSale(id, collection) {
-        if(!confirm("¿Eliminar este registro permanentemente del historial?")) return;
+        if(!confirm("¿Ocultar este recibo de la vista de Cobros? Se conservará todo el historial guardado en Resumen.")) return;
         try {
-            await db.collection(collection).doc(id).delete();
-            showNotification("Registro eliminado");
+            await db.collection(collection).doc(id).update({ archivedFromCobros: true });
+            showNotification("✅ Oculto de Cobros (Conservado en Resumen)");
+            renderCombinedAdminSales();
         } catch(e) {
-            showNotification("Error al eliminar", "error");
+            console.error(e);
+            showNotification("Error al ocultar", "error");
         }
     }
 
@@ -2293,6 +2440,25 @@
 
             // LÓGICA DE ACTUALIZACIÓN DE ESTADO Y DEUDA
             if (collection === "pedidos") {
+                // Restar stock de productos al confirmar venta inicial
+                if (item.remainingDebt === undefined || item.remainingDebt === null) {
+                    try {
+                        if (item.items && Array.isArray(item.items)) {
+                            for (let it of item.items) {
+                                const pSnap = await db.collection("productos").where("name", "==", it.name).get();
+                                if (!pSnap.empty) {
+                                    const pDoc = pSnap.docs[0];
+                                    const currStock = parseInt(pDoc.data().stock || 0);
+                                    const newStock = Math.max(0, currStock - (parseInt(it.buyQty) || 1));
+                                    await pDoc.ref.update({ stock: newStock });
+                                }
+                            }
+                        }
+                    } catch(errStock) {
+                        console.error("Error al restar stock:", errStock);
+                    }
+                }
+
                 const hasCredit = item.items && item.items.some(it => it.paymentMethod === 'credit');
                 if (hasCredit) {
                     const totalBss = parseFloat((item.totalBss || "0").toString().replace(" BSS", "")) || 0;
@@ -2387,15 +2553,16 @@
     }
 
     async function clearSalesHistory() {
-        if(!confirm("¿Deseas eliminar permanentemente todos los registros de pagos APROBADOS y RECHAZADOS? Los pedidos pendientes se mantendrán.")) return;
+        if(!confirm("¿Deseas eliminar permanentemente todos los registros de cobranzas procesados (aprobados y rechazados)?")) return;
 
         try {
-            const snapshot = await db.collection("pedidos").where("status", "in", ["paid", "rejected"]).get();
             const batch = db.batch();
 
-            snapshot.forEach(doc => {
-                batch.delete(doc.ref);
-            });
+            const pedidosSnap = await db.collection("pedidos").where("status", "in", ["paid", "rejected", "approved", "completed", "active_credit"]).get();
+            pedidosSnap.forEach(doc => batch.delete(doc.ref));
+
+            const creditsSnap = await db.collection("solicitudes_credito").where("status", "in", ["paid", "rejected", "denied", "approved"]).get();
+            creditsSnap.forEach(doc => batch.delete(doc.ref));
 
             await batch.commit();
             showNotification("✅ HISTORIAL DE COBRANZAS LIMPIO");
@@ -2676,13 +2843,43 @@
         summary.innerHTML = html;
     }
 
-    function openCreditRequestForm() {
+    async function openCreditRequestForm() {
         if(userStatus === "guest") { openAuth(); return; }
         if(userStatus === "unverified") { showNotification("⚠️ Cuenta en revisión.", "error"); return; }
 
         if (!currentUserData) {
             showNotification("⚠️ Cargando datos de perfil...", "error");
             return;
+        }
+
+        const email = currentUserData.email || auth.currentUser?.email;
+        if (!email) {
+            showNotification("⚠️ Error de sesión", "error");
+            return;
+        }
+
+        // Verificar el número de compras realizadas por el cliente (mínimo 10)
+        try {
+            const userOrdersSnap = await db.collection("pedidos")
+                .where("customerEmail", "==", email)
+                .get();
+
+            let completedPurchasesCount = 0;
+            userOrdersSnap.forEach(doc => {
+                const st = doc.data().status;
+                if (st === "paid" || st === "active_credit" || st === "approved" || st === "completed") {
+                    completedPurchasesCount++;
+                }
+            });
+
+            if (completedPurchasesCount < 10) {
+                const remainingNeeded = 10 - completedPurchasesCount;
+                alert(`⚠️ LÍMITE DE ELEGIBILIDAD:\n\nActualmente tienes ${completedPurchasesCount} de 10 compras requeridas.\n\nDebes completar 10 compras verificadas para poder solicitar un préstamo/crédito personal en efectivo. Te faltan ${remainingNeeded} compra(s).`);
+                showNotification(`⚠️ Requieres 10 compras para solicitar créditos (Llevas ${completedPurchasesCount}/10)`, "error");
+                return;
+            }
+        } catch(errCount) {
+            console.error("Error verificando compras para crédito:", errCount);
         }
 
         document.getElementById('cr-user-name').innerText = currentUserData.name || "S/N";
@@ -2833,6 +3030,210 @@
         document.getElementById('debt-pay-title').innerText = "Abonar a Crédito Personal: " + parseFloat(amountBss).toFixed(2) + " BSS";
     }
 
+    let allSalesSummaryCache = [];
+
+    async function loadAdminSalesSummary() {
+        const container = document.getElementById('summary-results-container');
+        if (!container) return;
+        container.innerHTML = "<div style='color:#888; text-align:center; padding:20px;'>Cargando resumen de ventas...</div>";
+
+        try {
+            // Cargar mapa de registros de clientes para completar C.I., TLF y Dirección
+            let customerRegMap = {};
+            try {
+                const regSnap = await db.collection("registros_clientes").get();
+                regSnap.forEach(d => {
+                    const uData = d.data();
+                    if(uData.email) customerRegMap[uData.email.toLowerCase()] = uData;
+                    if(uData.idNumber) customerRegMap[uData.idNumber] = uData;
+                });
+            } catch(e) { console.error("Error obteniendo registros_clientes:", e); }
+
+            const pedidosSnap = await db.collection("pedidos").orderBy("timestamp", "desc").get();
+            const creditsSnap = await db.collection("solicitudes_credito").orderBy("timestamp", "desc").get();
+
+            let items = [];
+
+            pedidosSnap.forEach(doc => {
+                const data = doc.data();
+                const totalUsdVal = parseFloat((data.totalUsd || "0").replace("$", "")) || 0;
+                const totalBssVal = parseFloat((data.totalBss || "0").replace("BSS", "").replace(",", ".")) || 0;
+                const hasCredit = data.hasCredit || (data.items && data.items.some(i => i.paymentMethod === 'credit'));
+                const remDebt = data.remainingDebt !== undefined ? data.remainingDebt : (hasCredit ? totalBssVal * 0.75 : 0);
+
+                const reg = (data.customerEmail && customerRegMap[data.customerEmail.toLowerCase()]) || (data.idNumber && customerRegMap[data.idNumber]);
+                const idNumberVal = data.idNumber || (reg ? reg.idNumber : "") || "";
+                const phoneVal = data.phone || (reg ? reg.phone : "") || "";
+                const addressVal = (reg ? reg.address : "") || "";
+                const nameVal = data.customerName || (reg ? reg.name : "") || "S/N";
+
+                items.push({
+                    id: doc.id,
+                    collection: "pedidos",
+                    orderId: data.orderId || doc.id.substring(0,8),
+                    customerName: nameVal,
+                    customerEmail: data.customerEmail || "",
+                    idNumber: idNumberVal,
+                    phone: phoneVal,
+                    address: addressVal,
+                    totalUsd: totalUsdVal,
+                    totalBss: totalBssVal,
+                    remainingDebtBss: remDebt,
+                    status: data.status || "pending",
+                    type: hasCredit ? "COMPRA A CRÉDITO" : "COMPRA CONTADO",
+                    description: (data.items || []).map(i => `${i.buyQty}x ${i.name}`).join(', '),
+                    referenceCode: data.paymentReport?.reference || "",
+                    timestamp: data.timestamp || 0
+                });
+            });
+
+            creditsSnap.forEach(doc => {
+                const data = doc.data();
+                const totalUsdVal = parseFloat(data.amountUsd || 0);
+                const totalBssVal = parseFloat(data.amountBss || 0);
+                const remDebt = data.remainingDebt !== undefined ? data.remainingDebt : totalBssVal;
+
+                const reg = (data.customerEmail && customerRegMap[data.customerEmail.toLowerCase()]) || (data.idNumber && customerRegMap[data.idNumber]);
+                const idNumberVal = data.idNumber || (reg ? reg.idNumber : "") || "";
+                const phoneVal = data.phone || (reg ? reg.phone : "") || "";
+                const addressVal = (reg ? reg.address : "") || "";
+                const nameVal = data.customerName || (reg ? reg.name : "") || "S/N";
+
+                items.push({
+                    id: doc.id,
+                    collection: "solicitudes_credito",
+                    orderId: doc.id.substring(0,12).toUpperCase(),
+                    customerName: nameVal,
+                    customerEmail: data.customerEmail || "",
+                    idNumber: idNumberVal,
+                    phone: phoneVal,
+                    address: addressVal,
+                    totalUsd: totalUsdVal,
+                    totalBss: totalBssVal,
+                    remainingDebtBss: remDebt,
+                    status: data.status || "pending",
+                    type: "CRÉDITO PERSONAL",
+                    description: `Plan: ${data.plan || 'N/A'} - ${data.reason || 'Sin motivo'}`,
+                    referenceCode: data.paymentReport?.reference || "",
+                    timestamp: data.timestamp || 0
+                });
+            });
+
+            items.sort((a, b) => b.timestamp - a.timestamp);
+            allSalesSummaryCache = items;
+            renderSalesSummaryResults();
+        } catch(e) {
+            console.error("Error cargando resumen:", e);
+            container.innerHTML = "<div style='color:#ff4444; text-align:center;'>Error al cargar resumen.</div>";
+        }
+    }
+
+    function searchSalesSummary() {
+        renderSalesSummaryResults();
+    }
+
+    function renderSalesSummaryResults() {
+        const container = document.getElementById('summary-results-container');
+        if (!container) return;
+
+        const queryInput = document.getElementById('summary-search-input');
+        const query = queryInput ? queryInput.value.trim().toLowerCase() : "";
+
+        let filtered = allSalesSummaryCache;
+        if (query) {
+            filtered = allSalesSummaryCache.filter(item =>
+                (item.idNumber && item.idNumber.toLowerCase().includes(query)) ||
+                (item.orderId && item.orderId.toLowerCase().includes(query)) ||
+                (item.referenceCode && item.referenceCode.toLowerCase().includes(query)) ||
+                (item.customerName && item.customerName.toLowerCase().includes(query)) ||
+                (item.customerEmail && item.customerEmail.toLowerCase().includes(query)) ||
+                (item.phone && item.phone.toLowerCase().includes(query))
+            );
+        }
+
+        const countEl = document.getElementById('sum-stat-count');
+        const usdEl = document.getElementById('sum-stat-usd');
+        const debtEl = document.getElementById('sum-stat-debt');
+
+        const totalUsd = filtered.reduce((acc, i) => acc + i.totalUsd, 0);
+        const totalDebtBss = filtered.reduce((acc, i) => acc + i.remainingDebtBss, 0);
+
+        if (countEl) countEl.innerText = filtered.length;
+        if (usdEl) usdEl.innerText = `$${totalUsd.toFixed(2)}`;
+        if (debtEl) debtEl.innerText = `${totalDebtBss.toFixed(2)} BSS`;
+
+        if (filtered.length === 0) {
+            container.innerHTML = "<div style='color:#888; text-align:center; padding:30px;'>No se encontraron registros de ventas o clientes para esta búsqueda.</div>";
+            return;
+        }
+
+        let groups = {};
+        filtered.forEach(item => {
+            const key = item.customerEmail || item.idNumber || item.customerName;
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(item);
+        });
+
+        let html = "";
+        Object.keys(groups).forEach(key => {
+            const groupList = groups[key];
+            const first = groupList[0];
+            const custUsd = groupList.reduce((acc, i) => acc + i.totalUsd, 0);
+            const custDebt = groupList.reduce((acc, i) => acc + i.remainingDebtBss, 0);
+
+            let txRows = groupList.map(tx => {
+                const date = new Date(tx.timestamp).toLocaleString();
+                const statusColor = tx.status === 'paid' || tx.status === 'approved' ? '#25D366' : (tx.status === 'pending' || tx.status === 'awaiting_verification' ? '#C5A059' : '#ff4444');
+                return `
+                    <div style="background:rgba(0,0,0,0.4); padding:12px; border-radius:6px; border:1px solid #ffffff11; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                        <div style="flex:1; min-width:200px;">
+                            <div style="display:flex; gap:8px; align-items:center; margin-bottom:4px;">
+                                <strong style="color:#C5A059; font-size:12px;">${tx.orderId}</strong>
+                                <span style="background:${statusColor}; color:black; font-size:8px; font-weight:bold; padding:2px 6px; border-radius:4px;">${tx.status.toUpperCase()}</span>
+                            </div>
+                            <div style="font-size:10px; color:#888;">${tx.type} • ${date}</div>
+                            <div style="font-size:11px; color:#ddd; margin-top:2px;">${tx.description}</div>
+                            ${tx.referenceCode ? `<div style="font-size:10px; color:#FFD700; margin-top:2px;">Ref Pago: ${tx.referenceCode}</div>` : ''}
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-weight:900; font-size:14px; color:white;">$${tx.totalUsd.toFixed(2)}</div>
+                            <div style="font-size:10px; color:#C5A059;">${tx.totalBss.toFixed(2)} BSS</div>
+                            <button onclick="generateDigitalReceipt('${tx.id}', '${tx.collection}')" style="margin-top:5px; background:transparent; color:#C5A059; border:1px solid #C5A059; padding:4px 10px; font-size:9px; font-weight:bold; border-radius:4px; cursor:pointer;">VER RECIBO</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            html += `
+                <div style="background:#121216; padding:18px; border:1px solid #c5a05933; border-radius:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #ffffff11; padding-bottom:10px; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+                        <div>
+                            <div style="font-weight:900; font-size:15px; color:white;">${first.customerName.toUpperCase()}</div>
+                            <div style="color:#C5A059; font-size:11px; font-weight:bold; margin-top:2px;">
+                                C.I: ${first.idNumber || 'S/C'} | TLF: ${first.phone || 'S/T'}
+                            </div>
+                            ${first.customerEmail ? `<div style="color:#888; font-size:10px;">CORREO: ${first.customerEmail}</div>` : ''}
+                            ${first.address ? `<div style="color:#aaa; font-size:10px; margin-top:2px;">DIR: ${first.address}</div>` : ''}
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="color:#C5A059; font-weight:900; font-size:14px;">TOTAL: $${custUsd.toFixed(2)}</div>
+                            <div style="font-size:11px; font-weight:bold; color:${custDebt > 0 ? '#ff4444' : '#25D366'}; margin-top:2px;">
+                                ${custDebt > 0 ? `DEUDA: ${custDebt.toFixed(2)} BSS` : 'AL DÍA (0 DEUDA)'}
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <div style="font-size:10px; color:#aaa; font-weight:bold; margin-bottom:8px;">HISTORIAL DE COMPRAS / CRÉDITOS (${groupList.length}):</div>
+                        ${txRows}
+                    </div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+        lucide.createIcons();
+    }
+
     async function generateDigitalReceipt(id, type) {
         const container = document.getElementById('receipt-content');
         const modal = document.getElementById('receipt-modal');
@@ -2845,7 +3246,8 @@
             if(!doc.exists) throw new Error("No se encontró el registro");
 
             const data = doc.data();
-            const date = new Date(data.timestamp || Date.now()).toLocaleString();
+            const dateObj = new Date(data.timestamp || Date.now());
+            const date = dateObj.toLocaleString();
             document.getElementById('receipt-verify-id').innerText = id.substring(0,12).toUpperCase();
 
             let html = "";
@@ -2854,95 +3256,233 @@
                 // RECIBO PARA CRÉDITO PERSONAL (EFECTIVO)
                 const subtotalBss = parseFloat(data.amountBss || 0);
                 const amountUsd = parseFloat(data.amountUsd || 0);
-                const rate = amountUsd > 0 ? subtotalBss / amountUsd : tasaBcv;
+                const rate = amountUsd > 0 ? subtotalBss / amountUsd : (data.bcvAtRequest || tasaBcv);
 
                 let totalBss = subtotalBss;
                 let interestBss = 0;
+                let incrementLabel = "0%";
                 let planText = data.plan || "ÚNICO";
                 let scheduleHtml = "";
 
+                const formatDateStr = (d) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+
                 if (data.plan === 'weekly_4') {
+                    incrementLabel = "+10%";
                     interestBss = subtotalBss * 0.10;
                     totalBss = subtotalBss + interestBss;
                     planText = "4 PAGOS SEMANALES (+10%)";
                     const inst = totalBss / 4;
-                    const baseDate = new Date(data.timestamp);
+                    const baseDate = new Date(data.timestamp || Date.now());
                     for(let i=1; i<=4; i++) {
                         baseDate.setDate(baseDate.getDate() + 7);
-                        scheduleHtml += `<div style="display:flex; justify-content:space-between;"><span>Cuota ${i}:</span> <strong>${inst.toFixed(2)} BSS</strong></div>`;
+                        scheduleHtml += `
+                            <div style="display:flex; justify-content:space-between; margin-bottom:3px; font-size:10px;">
+                                <span>Cuota ${i} (${formatDateStr(baseDate)}):</span>
+                                <strong>${inst.toFixed(2)} BSS</strong>
+                            </div>`;
                     }
                 } else if (data.plan === 'weekly_interest') {
+                    incrementLabel = "+10% Semanal";
                     const weeklyInt = subtotalBss * 0.10;
                     interestBss = weeklyInt * 4;
                     totalBss = subtotalBss + interestBss;
-                    planText = "INT. SEMANAL (CAPITAL AL FINAL)";
+                    planText = "INTERÉS SEMANAL (+10% x 4 SEMANAS)";
+                    const baseDate = new Date(data.timestamp || Date.now());
+                    for(let i=1; i<=3; i++) {
+                        baseDate.setDate(baseDate.getDate() + 7);
+                        scheduleHtml += `
+                            <div style="display:flex; justify-content:space-between; margin-bottom:3px; font-size:10px;">
+                                <span>Interés Sem. ${i} (${formatDateStr(baseDate)}):</span>
+                                <strong>${weeklyInt.toFixed(2)} BSS</strong>
+                            </div>`;
+                    }
+                    baseDate.setDate(baseDate.getDate() + 7);
+                    scheduleHtml += `
+                        <div style="display:flex; justify-content:space-between; margin-bottom:3px; font-size:10px;">
+                            <span>Capital + Final (${formatDateStr(baseDate)}):</span>
+                            <strong>${(subtotalBss + weeklyInt).toFixed(2)} BSS</strong>
+                        </div>`;
                 } else if (data.plan === 'full_30_days') {
+                    incrementLabel = "+30%";
                     interestBss = subtotalBss * 0.30;
                     totalBss = subtotalBss + interestBss;
-                    planText = "PAGO ÚNICO 30 DÍAS (+30%)";
+                    planText = "PAGO ÚNICO A 30 DÍAS (+30%)";
+                    const baseDate = new Date(data.timestamp || Date.now());
+                    baseDate.setDate(baseDate.getDate() + 30);
+                    scheduleHtml = `
+                        <div style="display:flex; justify-content:space-between; margin-bottom:3px; font-size:10px;">
+                            <span>Pago Único 30 Días (${formatDateStr(baseDate)}):</span>
+                            <strong>${totalBss.toFixed(2)} BSS</strong>
+                        </div>`;
                 }
 
+                const remaining = data.remainingDebt !== undefined ? data.remainingDebt : totalBss;
+
                 html = `
-                    <div style="margin-bottom:15px;">
+                    <div style="margin-bottom:12px; font-size:11px;">
                         <div><strong>FECHA:</strong> ${date}</div>
                         <div><strong>CLIENTE:</strong> ${data.customerName.toUpperCase()}</div>
-                        <div><strong>TASA:</strong> ${rate.toFixed(2)} BSS</div>
+                        ${data.idNumber ? `<div><strong>C.I:</strong> ${data.idNumber}</div>` : ''}
+                        ${data.phone ? `<div><strong>TELÉFONO:</strong> ${data.phone}</div>` : ''}
+                        ${data.customerEmail ? `<div><strong>CORREO:</strong> ${data.customerEmail}</div>` : ''}
+                        <div><strong>TASA BCV:</strong> ${rate.toFixed(2)} BSS/USD</div>
                     </div>
-                    <div style="margin-bottom:10px; border-top:1px solid #eee; padding-top:10px;">
-                        <strong>CONCEPTO:</strong> CRÉDITO PERSONAL<br>
-                        <strong>PLAN:</strong> ${planText}
+
+                    <div style="border-top:1px solid #eee; padding-top:8px; margin-bottom:10px; font-size:11px;">
+                        <div><strong>CONCEPTO:</strong> SOLICITUD DE CRÉDITO PERSONAL</div>
+                        <div><strong>PLAN SELECCIONADO:</strong> ${planText}</div>
+                        ${data.bank ? `<div><strong>BANCO:</strong> ${data.bank}</div>` : ''}
+                        ${data.account ? `<div><strong>CUENTA/PAGO MÓVIL:</strong> ${data.account}</div>` : ''}
                     </div>
-                    <div style="background:#f9f9f9; padding:10px; border-radius:5px; margin-bottom:10px;">
-                        <div style="display:flex; justify-content:space-between; font-size:10px;">
-                            <span>CAPITAL ORIGINAL:</span> <span>$${amountUsd.toFixed(2)} (${subtotalBss.toFixed(2)} BSS)</span>
+
+                    <!-- DESGLOSE DE MONTO E INCREMENTO -->
+                    <div style="background:#f9f9f9; padding:10px; border-radius:6px; border:1px solid #eee; margin-bottom:10px;">
+                        <div style="font-weight:bold; font-size:10px; color:#c5a059; margin-bottom:5px; border-bottom:1px solid #ddd; padding-bottom:3px;">
+                            DESGLOSE MONETARIO E INCREMENTO
                         </div>
-                        <div style="display:flex; justify-content:space-between; font-size:10px;">
-                            <span>TOTAL CON INTERÉS:</span> <span>${totalBss.toFixed(2)} BSS</span>
+                        <div style="display:flex; justify-content:space-between; font-size:10px; margin-bottom:3px;">
+                            <span>CAPITAL BASE (CONTADO):</span>
+                            <span>$${amountUsd.toFixed(2)} (${subtotalBss.toFixed(2)} BSS)</span>
                         </div>
-                        <div style="border-top:1px solid #ddd; margin:5px 0; padding-top:5px; display:flex; justify-content:space-between; font-size:12px; font-weight:bold; color: ${data.remainingDebt <= 0 ? '#25D366' : '#000'};">
-                            <span>SALDO PENDIENTE:</span> <span>${(data.remainingDebt !== undefined ? data.remainingDebt : totalBss).toFixed(2)} BSS</span>
+                        <div style="display:flex; justify-content:space-between; font-size:10px; margin-bottom:3px; color:#c5a059;">
+                            <span>RECARGO POR FINANCIAMIENTO (${incrementLabel}):</span>
+                            <span>+${interestBss.toFixed(2)} BSS</span>
                         </div>
-                        ${data.remainingDebt <= 0 ? '<div style="text-align:center; font-size:10px; font-weight:bold; color:#25D366; margin-top:5px;">¡LIQUIDADO!</div>' : ''}
+                        <div style="display:flex; justify-content:space-between; font-size:11px; font-weight:bold; border-top:1px dashed #ccc; padding-top:4px; margin-top:4px;">
+                            <span>TOTAL CON INCREMENTO:</span>
+                            <span>${totalBss.toFixed(2)} BSS</span>
+                        </div>
                     </div>
-                    ${scheduleHtml ? `<div style="font-size:9px; border-top:1px dashed #ccc; padding-top:5px;">${scheduleHtml}</div>` : ''}
+
+                    <!-- CRONOGRAMA DE FECHAS DE PAGO -->
+                    ${scheduleHtml ? `
+                        <div style="background:#fff8ee; padding:10px; border-radius:6px; border:1px solid #f0d5a8; margin-bottom:10px;">
+                            <div style="font-weight:bold; font-size:10px; color:#a37d2c; margin-bottom:5px; border-bottom:1px solid #f0d5a8; padding-bottom:3px;">
+                                CRONOGRAMA DE FECHAS DE PAGO
+                            </div>
+                            ${scheduleHtml}
+                        </div>
+                    ` : ''}
+
+                    <!-- SALDO PENDIENTE -->
+                    <div style="background:#f2f2f2; padding:8px 10px; border-radius:6px; display:flex; justify-content:space-between; font-size:11px; font-weight:bold; color: ${remaining <= 0 ? '#25D366' : '#ff4444'};">
+                        <span>SALDO PENDIENTE:</span>
+                        <span>${remaining.toFixed(2)} BSS</span>
+                    </div>
+                    ${remaining <= 0 ? '<div style="text-align:center; font-size:10px; font-weight:bold; color:#25D366; margin-top:5px;">¡CRÉDITO TOTALMENTE LIQUIDADO!</div>' : ''}
                 `;
             } else {
-                // RECIBO PARA COMPRAS (ARTÍCULOS)
+                // RECIBO PARA COMPRAS / PEDIDOS
                 const items = data.items || [];
-                const totalBss = parseFloat(data.totalBss?.replace(" BSS", "") || 0);
-                const totalUsd = data.totalUsd || "$0.00";
-                const remaining = data.remainingDebt !== undefined ? data.remainingDebt : (data.hasCredit ? totalBss * 0.75 : 0);
+                const totalBss = parseFloat(data.totalBss?.replace(" BSS", "").replace(",", ".") || 0);
+                const totalUsdVal = parseFloat(data.totalUsd?.replace("$", "") || 0);
+                const hasCredit = data.hasCredit || items.some(it => it.paymentMethod === 'credit');
+
+                const formatDateStr = (d) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
 
                 let itemsHtml = items.map(it => `
                     <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
-                        <span>${it.buyQty}x ${it.name.substring(0,20)}</span>
-                        <span>$${it.priceUsd}</span>
+                        <span>${it.buyQty}x ${it.name.substring(0,25)} ${it.paymentMethod === 'credit' ? '<small style="color:#c5a059;">(CRÉDITO)</small>' : ''}</span>
+                        <span>$${(parseFloat(it.priceUsd) || 0).toFixed(2)}</span>
                     </div>
                 `).join('');
 
+                let creditBreakdownHtml = "";
+
+                if (hasCredit) {
+                    const baseUsd = totalUsdVal / 1.10;
+                    const incrementUsd = totalUsdVal - baseUsd;
+                    const baseBss = totalBss / 1.10;
+                    const incrementBss = totalBss - baseBss;
+
+                    const initialBss = totalBss * 0.25;
+                    const remainingBss = totalBss * 0.75;
+
+                    const numCuotas = data.numCuotas || 2;
+                    const installmentBss = remainingBss / numCuotas;
+
+                    let scheduleHtml = "";
+                    const baseDate = new Date(data.timestamp || Date.now());
+                    for(let i=1; i<=numCuotas; i++) {
+                        baseDate.setDate(baseDate.getDate() + 7);
+                        scheduleHtml += `
+                            <div style="display:flex; justify-content:space-between; margin-bottom:3px; font-size:10px;">
+                                <span>Cuota ${i} (${formatDateStr(baseDate)}):</span>
+                                <strong>${installmentBss.toFixed(2)} BSS</strong>
+                            </div>`;
+                    }
+
+                    creditBreakdownHtml = `
+                        <div style="background:#f9f9f9; padding:10px; border-radius:6px; border:1px solid #eee; margin-top:10px; margin-bottom:10px;">
+                            <div style="font-weight:bold; font-size:10px; color:#c5a059; margin-bottom:5px; border-bottom:1px solid #ddd; padding-bottom:3px;">
+                                DESGLOSE DE CRÉDITO Y FINANCIAMIENTO (+10%)
+                            </div>
+                            <div style="display:flex; justify-content:space-between; font-size:10px; margin-bottom:3px;">
+                                <span>MONTO BASE (CONTADO):</span>
+                                <span>$${baseUsd.toFixed(2)} (${baseBss.toFixed(2)} BSS)</span>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; font-size:10px; margin-bottom:3px; color:#c5a059;">
+                                <span>RECARGO POR FINANCIAMIENTO (+10%):</span>
+                                <span>+$${incrementUsd.toFixed(2)} (+${incrementBss.toFixed(2)} BSS)</span>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; font-size:10px; font-weight:bold; border-top:1px dashed #ccc; padding-top:3px; margin-top:3px;">
+                                <span>TOTAL CON INCREMENTO:</span>
+                                <span>$${totalUsdVal.toFixed(2)} (${totalBss.toFixed(2)} BSS)</span>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; font-size:10px; color:#25D366; margin-top:3px;">
+                                <span>INICIAL INICIALMENTE ABONADA (25%):</span>
+                                <span>-${initialBss.toFixed(2)} BSS</span>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; font-size:10px; font-weight:bold; color:#000; margin-top:3px;">
+                                <span>SALDO A FINANCIAR EN CUOTAS:</span>
+                                <span>${remainingBss.toFixed(2)} BSS</span>
+                            </div>
+                        </div>
+
+                        <div style="background:#fff8ee; padding:10px; border-radius:6px; border:1px solid #f0d5a8; margin-bottom:10px;">
+                            <div style="font-weight:bold; font-size:10px; color:#a37d2c; margin-bottom:5px; border-bottom:1px solid #f0d5a8; padding-bottom:3px;">
+                                CRONOGRAMA DE FECHAS DE PAGO DE CUOTAS
+                            </div>
+                            ${scheduleHtml}
+                        </div>
+                    `;
+                }
+
+                const currentRemaining = data.remainingDebt !== undefined ? data.remainingDebt : (hasCredit ? totalBss * 0.75 : 0);
+
                 html = `
-                    <div style="margin-bottom:15px;">
-                        <div><strong>ORDEN:</strong> ${data.orderId || 'N/A'}</div>
+                    <div style="margin-bottom:12px; font-size:11px;">
+                        <div><strong>ÓRDEN:</strong> ${data.orderId || 'N/A'}</div>
                         <div><strong>FECHA:</strong> ${date}</div>
                         <div><strong>CLIENTE:</strong> ${data.customerName.toUpperCase()}</div>
+                        ${data.idNumber ? `<div><strong>C.I:</strong> ${data.idNumber}</div>` : ''}
+                        ${data.phone ? `<div><strong>TELÉFONO:</strong> ${data.phone}</div>` : ''}
+                        ${data.customerEmail ? `<div><strong>CORREO:</strong> ${data.customerEmail}</div>` : ''}
                     </div>
-                    <div style="border-top:1px solid #eee; padding-top:10px; margin-bottom:10px;">
-                        <strong>DETALLE PRODUCTOS:</strong>
-                        <div style="font-size:10px; margin-top:5px;">${itemsHtml}</div>
+
+                    <div style="border-top:1px solid #eee; padding-top:8px; margin-bottom:10px;">
+                        <strong style="font-size:11px;">DETALLE DE PRODUCTOS:</strong>
+                        <div style="font-size:10px; margin-top:5px; background:rgba(0,0,0,0.02); padding:8px; border-radius:4px;">${itemsHtml}</div>
                     </div>
-                    <div style="background:#f9f9f9; padding:10px; border-radius:5px; border:1px solid #eee;">
-                        <div style="display:flex; justify-content:space-between; font-weight:900;">
-                            <span>TOTAL USD:</span> <span>${totalUsd}</span>
+
+                    <div style="background:#f9f9f9; padding:10px; border-radius:6px; border:1px solid #eee;">
+                        <div style="display:flex; justify-content:space-between; font-weight:900; font-size:11px;">
+                            <span>TOTAL COMPRA USD:</span> <span>$${totalUsdVal.toFixed(2)}</span>
                         </div>
-                        <div style="display:flex; justify-content:space-between; color:#c5a059; font-weight:900;">
-                            <span>TOTAL BSS:</span> <span>${totalBss.toFixed(2)} BSS</span>
-                        </div>
-                        <div style="border-top:1px solid #ddd; margin:5px 0; padding-top:5px; display:flex; justify-content:space-between; font-size:11px; font-weight:bold; color: ${remaining <= 0 ? '#25D366' : '#ff4444'};">
-                            <span>SALDO PENDIENTE:</span> <span>${remaining.toFixed(2)} BSS</span>
+                        <div style="display:flex; justify-content:space-between; color:#c5a059; font-weight:900; font-size:11px;">
+                            <span>TOTAL COMPRA BSS:</span> <span>${totalBss.toFixed(2)} BSS</span>
                         </div>
                     </div>
-                    <div style="margin-top:10px; font-size:9px; color:#666;">
-                        MODALIDAD: ${data.hasCredit ? 'CRÉDITO' : 'CONTADO'}
+
+                    ${creditBreakdownHtml}
+
+                    <div style="margin-top:10px; background:#f2f2f2; padding:8px 10px; border-radius:6px; display:flex; justify-content:space-between; font-size:11px; font-weight:bold; color: ${currentRemaining <= 0 ? '#25D366' : '#ff4444'};">
+                        <span>SALDO PENDIENTE ACTUAL:</span>
+                        <span>${currentRemaining.toFixed(2)} BSS</span>
+                    </div>
+
+                    <div style="margin-top:10px; font-size:9px; color:#666; font-weight:bold;">
+                        MODALIDAD: ${hasCredit ? 'CRÉDITO FINANCIADO' : 'PAGO AL CONTADO'}
                     </div>
                 `;
             }
@@ -2950,10 +3490,9 @@
             container.innerHTML = html;
             modal.style.display = 'block';
             lucide.createIcons();
-
-        } catch(e) {
-            console.error(e);
-            showNotification("Error al generar recibo", "error");
+        } catch(err) {
+            console.error("Error al generar recibo:", err);
+            showNotification("ERROR AL GENERAR RECIBO: " + err.message, "error");
         }
     }
 
