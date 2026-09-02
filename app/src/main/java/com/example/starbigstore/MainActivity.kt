@@ -80,6 +80,7 @@ class MainActivity : FragmentActivity() {
                 var shouldShowCart by remember { mutableStateOf(false) }
                 var shouldShowCreditForm by remember { mutableStateOf(false) }
                 var addToCartCommand by remember { mutableStateOf<Triple<String, Int, String>?>(null) }
+                var cartCount by remember { mutableIntStateOf(0) }
                 
                 var newsList by remember { mutableStateOf(listOf<String>()) }
                 var showNewsOverlay by remember { mutableStateOf(false) }
@@ -148,7 +149,22 @@ class MainActivity : FragmentActivity() {
                                                     currentTab = index
                                                 }
                                             },
-                                            icon = { Icon(icon, null) },
+                                            icon = {
+                                                BadgedBox(
+                                                    badge = {
+                                                        if (index == 4 && cartCount > 0) {
+                                                            Badge(
+                                                                containerColor = Color(0xFFFF4444),
+                                                                contentColor = Color.White
+                                                            ) {
+                                                                Text(cartCount.toString())
+                                                            }
+                                                        }
+                                                    }
+                                                ) {
+                                                    Icon(icon, null)
+                                                }
+                                            },
                                             label = { Text(label, fontSize = 10.sp) },
                                             colors = NavigationBarItemDefaults.colors(
                                                 selectedIconColor = Color(0xFFC5A059),
@@ -188,7 +204,8 @@ class MainActivity : FragmentActivity() {
                                 onCreditFormTriggered = { shouldShowCreditForm = false },
                                 currentTab = currentTab,
                                 addToCartCommand = addToCartCommand,
-                                onAddToCartProcessed = { addToCartCommand = null }
+                                onAddToCartProcessed = { addToCartCommand = null },
+                                onCartCountUpdate = { cartCount = it }
                             )
 
                             // Capa de Pantallas Nativas

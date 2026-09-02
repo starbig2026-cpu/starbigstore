@@ -28,7 +28,7 @@
             </select>
             <button id="cart-nav-btn" class="icon-btn" onclick="toggleCart()" aria-label="Carrito" style="position: relative;">
                 <i data-lucide="shopping-cart"></i>
-                <span id="cart-count" style="position: absolute; top: -5px; right: -5px; background: #ff4444; color: white; font-size: 10px; padding: 2px 6px; border-radius: 50%; display: none;">0</span>
+                <span id="cart-count" class="notification-badge" style="display: none;">0</span>
             </button>
             <button class="icon-btn" onclick="openAuth()" aria-label="Usuario">
             <span id="user-photo-container" style="display: none; width: 32px; height: 32px; border-radius: 50%; overflow: hidden; border: 1px solid #c5a059;">
@@ -122,13 +122,12 @@
             </div>
 
             <div class="profile-menu-grid">
-                <button onclick="toggleCart()" class="menu-item-btn"><i data-lucide="shopping-cart"></i> CARRITO <span id="cart-count-profile" class="notification-badge" style="display: none;">0</span></button>
                 <button onclick="editProfile()" class="menu-item-btn"><i data-lucide="user-cog"></i> EDITAR PERFIL</button>
                 <button onclick="changePhoto()" class="menu-item-btn"><i data-lucide="camera"></i> CAMBIAR FOTO</button>
                 <button onclick="openSecurity()" class="menu-item-btn"><i data-lucide="lock"></i> SEGURIDAD</button>
                 <button onclick="viewPoints()" class="menu-item-btn"><i data-lucide="award"></i> PUNTOS: <span id="user-points">0</span></button>
                 <button onclick="openMyCredits()" class="menu-item-btn" style="background: rgba(197, 160, 89, 0.1); border-color: #c5a059;"><i data-lucide="calendar"></i> MIS PAGOS <span id="payments-count" class="notification-badge" style="display: none;">0</span></button>
-                <button onclick="openCreditStatus()" class="menu-item-btn" style="grid-column: span 2; background: rgba(197, 160, 89, 0.1); border-color: #c5a059;"><i data-lucide="file-text"></i> STATUS CRÉDITO <span id="credits-status-count" class="notification-badge" style="display: none;">0</span></button>
+                <button onclick="openCreditStatus()" class="menu-item-btn" style="background: rgba(197, 160, 89, 0.1); border-color: #c5a059;"><i data-lucide="file-text"></i> STATUS CRÉDITO <span id="credits-status-count" class="notification-badge" style="display: none;">0</span></button>
             </div>
 
             <button id="whatsapp-verify-btn" onclick="openContactChoice()" class="btn-primary full-width" style="background:#25D366; margin-top:25px; display:none;">WHATSAPP VERIFICACIÓN</button>
@@ -624,6 +623,7 @@
                 <span id="cart-total-bss">0.00 BSS</span>
             </div>
             <button onclick="checkout()" class="btn-primary full-width">FINALIZAR PEDIDO</button>
+            <button onclick="clearCart()" class="btn-secondary full-width" style="margin-top:10px; border-color:#ff4444; color:#ff4444;">VACIAR CARRITO</button>
         </div>
     </div>
 </div>
@@ -1004,7 +1004,7 @@
     listenToNews();
     startTrafficMonitor();
 
-    // Ocultar botón de carrito en navbar si estamos dentro de la App (porque ya tiene su barra inferior)
+    // Ocultar botón de carrito en navbar si estamos dentro de la App (porque ya tiene su barra inferior nativa con notificaciones)
     if(window.AndroidApp) {
         const navCartBtn = document.getElementById('cart-nav-btn');
         if(navCartBtn) navCartBtn.style.display = 'none';
@@ -1491,15 +1491,16 @@
 
     function updateCartUI() {
         const count = cart.reduce((sum, item) => sum + item.buyQty, 0);
+
+        // Notificar a la App Android si existe interfaz nativa
+        if (window.AndroidApp && window.AndroidApp.updateCartCount) {
+            window.AndroidApp.updateCartCount(count);
+        }
+
         const badge = document.getElementById('cart-count');
         if(badge) {
             badge.innerText = count;
             badge.style.display = count > 0 ? 'block' : 'none';
-        }
-        const profileBadge = document.getElementById('cart-count-profile');
-        if(profileBadge) {
-            profileBadge.innerText = count;
-            profileBadge.style.display = count > 0 ? 'block' : 'none';
         }
         renderCart();
     }
@@ -1618,6 +1619,17 @@
         cart.splice(index, 1);
         updateCartUI();
         saveCartToFirestore();
+        showNotification("ARTÍCULO ELIMINADO", "error");
+    }
+
+    function clearCart() {
+        if(cart.length === 0) return;
+        if(confirm("¿ESTÁS SEGURO DE QUE DESEAS VACIAR TODO EL CARRITO?")) {
+            cart = [];
+            updateCartUI();
+            saveCartToFirestore();
+            showNotification("CARRITO VACIADO", "error");
+        }
     }
 
     async function checkout() {

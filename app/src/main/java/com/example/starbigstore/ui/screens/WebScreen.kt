@@ -25,9 +25,15 @@ class WebAppInterface(
     private val mContext: Context,
     private val webView: WebView,
     private val onAdminRequest: () -> Unit,
-    private val onBiometricRequest: () -> Unit
+    private val onBiometricRequest: () -> Unit,
+    private val onCartCountUpdate: (Int) -> Unit = {}
 ) {
     private val googleSheetsUrl = "https://script.google.com/macros/s/AKfycbzTKwRkgCmy_m42ZeKjPbczOMr0YHmRKiSmrHPCSEdKixHzI9MG3fhEfEU3pChr45exvw/exec"
+
+    @JavascriptInterface
+    fun updateCartCount(count: Int) {
+        onCartCountUpdate(count)
+    }
 
     @JavascriptInterface
     fun registerUser(firstName: String, lastName: String, email: String, phone: String, address: String, photoBase64: String, idCardBase64: String, pass: String, idNumber: String) {
@@ -318,7 +324,8 @@ fun WebScreen(
     onCreditFormTriggered: () -> Unit = {},
     currentTab: Int = 0,
     addToCartCommand: Triple<String, Int, String>? = null,
-    onAddToCartProcessed: () -> Unit = {}
+    onAddToCartProcessed: () -> Unit = {},
+    onCartCountUpdate: (Int) -> Unit = {}
 ) {
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
 
@@ -363,7 +370,7 @@ fun WebScreen(
         factory = { context ->
             WebView(context).apply {
                 webViewInstance = this
-                val webInterface = WebAppInterface(context, this, onAdminRequest, onBiometricRequest)
+                val webInterface = WebAppInterface(context, this, onAdminRequest, onBiometricRequest, onCartCountUpdate)
                 addJavascriptInterface(webInterface, "AndroidApp")
                 
                 webViewClient = object : WebViewClient() {
