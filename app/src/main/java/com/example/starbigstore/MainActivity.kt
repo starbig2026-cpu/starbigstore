@@ -245,21 +245,7 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    private var isAuthenticatingOnResume = false
 
-    override fun onResume() {
-        super.onResume()
-        val prefs = getSharedPreferences("starbig_auth", MODE_PRIVATE)
-        val remember = prefs.getBoolean("remember_credentials", true)
-        val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-
-        if (currentUser != null && remember && !isAuthenticatingOnResume) {
-            isAuthenticatingOnResume = true
-            showBiometricPrompt {
-                isAuthenticatingOnResume = false
-            }
-        }
-    }
 
     fun showBiometricPrompt(onSuccess: (() -> Unit)? = null) {
         val executor = ContextCompat.getMainExecutor(this)

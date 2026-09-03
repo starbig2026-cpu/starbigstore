@@ -1430,6 +1430,26 @@ fun AddNewsDialog(onDismiss: () -> Unit, onConfirm: (Uri) -> Unit) {
     AlertDialog(onDismissRequest = onDismiss, containerColor = Color(0xFF121216), title = { Text("NUEVA NOVEDAD", color = Color.White) }, text = { Box(Modifier.fillMaxWidth().height(200.dp).background(Color.Black).clickable { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, Alignment.Center) { if(uri != null) AsyncImage(uri, null, Modifier.fillMaxSize()) else Icon(Icons.Default.AddPhotoAlternate, null, tint = Color(0xFFC5A059)) } }, confirmButton = { Button(onClick = { uri?.let { onConfirm(it) } }, enabled = uri != null) { Text("PUBLICAR") } })
 }
 
+data class SummaryTx(
+    val id: String = "",
+    val refId: String = "",
+    val customerName: String = "",
+    val customerEmail: String = "",
+    val idNumber: String = "",
+    val phone: String = "",
+    val date: String = "",
+    val timestamp: Long = 0,
+    val type: String = "",
+    val description: String = "",
+    val totalUsd: Double = 0.0,
+    val totalBss: String = "",
+    val status: String = "",
+    val remainingDebt: Double = 0.0,
+    val referenceCode: String = "",
+    val rawOrder: Order? = null,
+    val rawCreditRequest: CreditRequest? = null
+)
+
 @Composable
 fun SalesSummaryAndSearchSection(
     orders: List<Order>,
@@ -1439,32 +1459,10 @@ fun SalesSummaryAndSearchSection(
     onViewCreditReceipt: (CreditRequest) -> Unit,
     onDeleteTx: (String, String) -> Unit
 ) {
-    var searchQuery by remember { mutableStateOf("") }
-
-    data class CombinedTx(
-        val id: String,
-        val refId: String,
-        val customerName: String,
-        val customerEmail: String,
-        val idNumber: String,
-        val phone: String,
-        val date: String,
-        val timestamp: Long,
-        val type: String,
-        val description: String,
-        val totalUsd: Double,
-        val totalBss: String,
-        val status: String,
-        val remainingDebt: Double,
-        val referenceCode: String,
-        val rawOrder: Order? = null,
-        val rawCreditRequest: CreditRequest? = null
-    )
-
     val sdf = remember { java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()) }
 
     val allTxs = remember(orders, creditRequests, registrations) {
-        val list = mutableListOf<CombinedTx>()
+        val list = mutableListOf<SummaryTx>()
 
         orders.forEach { ord ->
             val matchingReg = registrations.firstOrNull { reg ->
@@ -1480,7 +1478,7 @@ fun SalesSummaryAndSearchSection(
             val itemsSummary = ord.items.joinToString(", ") { "${it.buyQty}x ${it.name}" }
 
             list.add(
-                CombinedTx(
+                SummaryTx(
                     id = ord.id,
                     refId = ord.orderId.ifEmpty { ord.id.take(8) },
                     customerName = ord.customerName.ifEmpty { matchingReg?.name ?: "S/N" },
@@ -1509,10 +1507,10 @@ fun SalesSummaryAndSearchSection(
             val idNum = req.idNumber.ifEmpty { matchingReg?.idNumber ?: "" }
             val phone = req.phone.ifEmpty { matchingReg?.phone ?: "" }
             val refCode = req.paymentReport?.reference ?: ""
-            val remDebt = req.remainingDebt ?: req.amountUsd
+            val remDebt = req.remainingDebt ?: (req.amountUsd)
 
             list.add(
-                CombinedTx(
+                SummaryTx(
                     id = req.id,
                     refId = req.id.take(12).uppercase(),
                     customerName = req.customerName.ifEmpty { matchingReg?.name ?: "S/N" },
@@ -1538,11 +1536,36 @@ fun SalesSummaryAndSearchSection(
 
     var searchInputText by remember { mutableStateOf("") }
     var activeSearchQuery by remember { mutableStateOf("") }
+    var activePeriod by remember { mutableStateOf("all") }
+    var showClosureDialog by remember { mutableStateOf(false) }
 
-    val filteredTxs = remember(allTxs, activeSearchQuery) {
+    val filteredTxs = remember(allTxs, activeSearchQuery, activePeriod) {
+        val now = System.currentTimeMillis()
+        val cal = java.util.Calendar.getInstance()
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        cal.set(java.util.Calendar.MINUTE, 0)
+        cal.set(java.util.Calendar.SECOND, 0)
+        val startOfToday = cal.timeInMillis
+
+        cal.set(java.util.Calendar.DAY_OF_MONTH, 1)
+        val startOfMonth = cal.timeInMillis
+
+        cal.set(java.util.Calendar.DAY_OF_YEAR, 1)
+        val startOfYear = cal.timeInMillis
+
+        val startOfWeek = now - (7 * 24 * 60 * 60 * 1000L)
+
+        val txsByPeriod = when(activePeriod) {
+            "today" -> allTxs.filter { it.timestamp >= startOfToday }
+            "week" -> allTxs.filter { it.timestamp >= startOfWeek }
+            "month" -> allTxs.filter { it.timestamp >= startOfMonth }
+            "year" -> allTxs.filter { it.timestamp >= startOfYear }
+            else -> allTxs
+        }
+
         val q = activeSearchQuery.trim().lowercase()
-        if (q.isBlank()) allTxs
-        else allTxs.filter { tx ->
+        if (q.isBlank()) txsByPeriod
+        else txsByPeriod.filter { tx ->
             tx.idNumber.lowercase().contains(q) ||
                     tx.refId.lowercase().contains(q) ||
                     tx.referenceCode.lowercase().contains(q) ||
@@ -1562,6 +1585,22 @@ fun SalesSummaryAndSearchSection(
 
     val totalUsdSum = filteredTxs.sumOf { it.totalUsd }
     val totalDebtSum = filteredTxs.sumOf { it.remainingDebt }
+
+    if (showClosureDialog) {
+        AccountingClosureDialog(
+            periodName = when(activePeriod) {
+                "today" -> "Diario (Hoy)"
+                "week" -> "Semanal (7 Días)"
+                "month" -> "Mensual"
+                "year" -> "Anual"
+                else -> "General Todo"
+            },
+            txs = filteredTxs,
+            totalUsd = totalUsdSum,
+            totalDebt = totalDebtSum,
+            onDismiss = { showClosureDialog = false }
+        )
+    }
 
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
         Text("RESUMEN DE VENTAS Y BÚSQUEDA", color = Color.White, fontWeight = FontWeight.Black, fontSize = 18.sp)
@@ -1610,6 +1649,51 @@ fun SalesSummaryAndSearchSection(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text("BUSCAR", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 11.sp)
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // BARRA DE CIERRE CONTABLE
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = Color(0xFF121216),
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, Color(0xFFC5A059).copy(0.3f))
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text("CIERRE CONTABLE Y FILTROS DE PERÍODO", color = Color(0xFFC5A059), fontSize = 10.sp, fontWeight = FontWeight.Black)
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val periods = listOf("today" to "HOY (DIARIO)", "week" to "7 DÍAS (SEMANAL)", "month" to "ESTE MES", "year" to "ESTE AÑO", "all" to "TODOS")
+                    periods.forEach { (pKey, pLabel) ->
+                        FilterChip(
+                            selected = activePeriod == pKey,
+                            onClick = { activePeriod = pKey },
+                            label = { Text(pLabel, fontSize = 9.sp, fontWeight = FontWeight.Bold) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFFC5A059),
+                                selectedLabelColor = Color.Black,
+                                containerColor = Color.Black.copy(0.3f),
+                                labelColor = Color.White
+                            )
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = { showClosureDialog = true },
+                    modifier = Modifier.fillMaxWidth().height(38.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Icon(Icons.Default.Print, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("REPORTE CIERRE CONTABLE (TAMAÑO CARTA)", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 10.sp)
+                }
             }
         }
 
@@ -2669,5 +2753,126 @@ private fun deleteNews(news: News, db: FirebaseFirestore, showToast: (String, Bo
         showToast("✅ NOVEDAD ELIMINADA", false)
     }.addOnFailureListener {
         showToast("❌ ERROR AL ELIMINAR", true)
+    }
+}
+
+@Composable
+fun AccountingClosureDialog(
+    periodName: String,
+    txs: List<SummaryTx>,
+    totalUsd: Double,
+    totalDebt: Double,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val nowStr = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.98f)
+                .padding(vertical = 16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Header Centrado Correctamente
+                Image(painterResource(R.drawable.logo_admin), null, Modifier.size(70.dp).padding(bottom = 4.dp))
+                Text("STARBIG STORE", color = Color(0xFFC5A059), fontSize = 22.sp, fontWeight = FontWeight.Black, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Text("BOUTIQUE EXCLUSIVA", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Text("RIF: V-22727679-3", color = Color.DarkGray, fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                DashedDivider(Modifier.padding(vertical = 10.dp))
+
+                Text("REPORTE DE CIERRE CONTABLE TAMAÑO CARTA", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Black, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Text("PERÍODO: ${periodName.uppercase()} | EMISIÓN: $nowStr", color = Color.DarkGray, fontSize = 9.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                DashedDivider(Modifier.padding(vertical = 10.dp))
+
+                // Resumen de Cuentas
+                Column(Modifier.fillMaxWidth().background(Color(0xFFF8F8F8), RoundedCornerShape(8.dp)).padding(12.dp)) {
+                    ReceiptRow("TRANSACCIONES TOTALES:", "${txs.size}")
+                    ReceiptRow("TOTAL VENTAS USD:", "$${totalUsd.format(2)}")
+                    ReceiptRow("DEUDA PENDIENTE:", "$${totalDebt.format(2)}")
+                }
+                DashedDivider(Modifier.padding(vertical = 10.dp))
+
+                // Desglose Detallado Completo
+                Text("DESGLOSE DETALLADO DE CUENTAS:", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Black)
+                Spacer(Modifier.height(8.dp))
+
+                txs.forEach { tx ->
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFFAFAFA), RoundedCornerShape(6.dp))
+                            .padding(8.dp)
+                    ) {
+                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                            Text("${tx.date} • ${tx.refId}", fontSize = 10.sp, fontWeight = FontWeight.Black, color = Color.Black)
+                            Text("$${tx.totalUsd.format(2)}", fontSize = 11.sp, fontWeight = FontWeight.Black, color = Color(0xFFC5A059))
+                        }
+                        Spacer(Modifier.height(2.dp))
+                        Text("CLIENTE: ${tx.customerName.uppercase()} | C.I: ${tx.idNumber.ifEmpty { "S/C" }}", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray)
+                        if (tx.phone.isNotEmpty()) Text("TELÉFONO: ${tx.phone}", fontSize = 8.sp, color = Color.Gray)
+                        if (tx.customerEmail.isNotEmpty()) Text("CORREO: ${tx.customerEmail}", fontSize = 8.sp, color = Color.Gray)
+                        Text("CONCEPTO: ${tx.description}", fontSize = 9.sp, color = Color.Black.copy(0.8f))
+                        if (tx.referenceCode.isNotEmpty()) Text("REF PAGO: ${tx.referenceCode}", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color(0xFFC5A059))
+                        Box(Modifier.padding(top = 4.dp).fillMaxWidth().height(1.dp).background(Color.LightGray.copy(0.4f)))
+                    }
+                    Spacer(Modifier.height(6.dp))
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                try {
+                                    val details = mutableListOf<Pair<String, String>>()
+                                    details.add("PERÍODO CIERRE:" to periodName.uppercase())
+                                    details.add("TRANSACCIONES:" to "${txs.size}")
+                                    details.add("TOTAL VENTAS USD:" to "$${totalUsd.format(2)}")
+                                    details.add("DEUDA PENDIENTE:" to "$${totalDebt.format(2)}")
+
+                                    txs.take(20).forEach {
+                                        details.add("${it.refId} (${it.customerName.take(12)}):" to "$${it.totalUsd.format(2)}")
+                                    }
+
+                                    val bitmap = createReceiptBitmap(
+                                        title = "CIERRE CONTABLE $periodName",
+                                        verifyId = "CIERRE-${System.currentTimeMillis().toString().takeLast(6)}",
+                                        date = nowStr,
+                                        customerName = "STARBIG STORE ADMIN",
+                                        idNumber = "V-22727679-3",
+                                        phone = "CONTABILIDAD",
+                                        email = "ADMINISTRACION",
+                                        details = details,
+                                        totalBss = "$${totalUsd.format(2)}"
+                                    )
+                                    printReceiptBitmap(context, bitmap, "Cierre_${periodName}")
+                                } catch(e: Exception) {
+                                    Toast.makeText(context, "Error al imprimir: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059))
+                    ) {
+                        Text("IMPRIMIR CARTA", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    }
+
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        border = BorderStroke(1.dp, Color.DarkGray)
+                    ) {
+                        Text("CERRAR", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    }
+                }
+            }
+        }
     }
 }

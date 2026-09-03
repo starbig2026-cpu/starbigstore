@@ -422,8 +422,31 @@
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
                 <h3 style="color:white; letter-spacing: 2px; font-weight: 900; font-size: 14px;">RESUMEN DE VENTAS Y BÚSQUEDA DE CLIENTES</h3>
                 <div style="display:flex; gap:10px; flex:1; max-width:500px;">
-                    <input type="text" id="summary-search-input" placeholder="Buscar por Cédula, Referencia, Nombre o Correo..." style="flex:1; background:#121216; border:1px solid #c5a05966; color:white; padding:8px 12px; border-radius:6px; font-size:11px;" oninput="searchSalesSummary()">
+                    <input type="text" id="summary-search-input" aria-label="Buscar en resumen de ventas" placeholder="Buscar por Cédula, Referencia, Nombre o Correo..." style="flex:1; background:#121216; border:1px solid #c5a05966; color:white; padding:8px 12px; border-radius:6px; font-size:11px;" oninput="searchSalesSummary()">
                     <button onclick="searchSalesSummary()" style="background:#C5A059; color:black; border:none; padding:8px 15px; font-weight:bold; border-radius:6px; cursor:pointer; font-size:11px;">BUSCAR</button>
+                </div>
+            </div>
+
+            <!-- BARRA DE CIERRE CONTABLE -->
+            <div style="background:#121216; padding:15px; border:1px solid #c5a05933; border-radius:8px; margin-bottom:20px;">
+                <div style="color:#C5A059; font-weight:900; font-size:11px; letter-spacing:1px; margin-bottom:10px; display:flex; align-items:center; gap:5px;">
+                    <i data-lucide="calculator" style="width:14px; height:14px;"></i> CIERRE CONTABLE Y EXPORTACIÓN DE ARCHIVOS
+                </div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                    <button id="closure-btn-today" onclick="filterSummaryClosure('today')" class="btn-secondary closure-btn" style="font-size:10px; padding:6px 12px; border-color:#C5A059; color:white;">CIERRE DIARIO (HOY)</button>
+                    <button id="closure-btn-week" onclick="filterSummaryClosure('week')" class="btn-secondary closure-btn" style="font-size:10px; padding:6px 12px; border-color:#C5A059; color:white;">CIERRE SEMANAL (7 DÍAS)</button>
+                    <button id="closure-btn-month" onclick="filterSummaryClosure('month')" class="btn-secondary closure-btn" style="font-size:10px; padding:6px 12px; border-color:#C5A059; color:white;">CIERRE MENSUAL</button>
+                    <button id="closure-btn-year" onclick="filterSummaryClosure('year')" class="btn-secondary closure-btn" style="font-size:10px; padding:6px 12px; border-color:#C5A059; color:white;">CIERRE ANUAL</button>
+                    <button id="closure-btn-all" onclick="filterSummaryClosure('all')" class="btn-secondary closure-btn" style="font-size:10px; padding:6px 12px; border-color:#888; color:#888;">TODOS</button>
+
+                    <div style="margin-left:auto; display:flex; gap:8px; flex-wrap:wrap;">
+                        <button onclick="exportSummaryExcel()" style="background:#25D366; color:black; border:none; padding:8px 14px; font-weight:900; font-size:10px; border-radius:6px; cursor:pointer;">
+                            <i data-lucide="file-spreadsheet" style="width:12px; height:12px; vertical-align:middle; margin-right:4px;"></i> EXCEL (.CSV)
+                        </button>
+                        <button onclick="exportSummaryLetterReport()" style="background:#C5A059; color:black; border:none; padding:8px 14px; font-weight:900; font-size:10px; border-radius:6px; cursor:pointer;">
+                            <i data-lucide="printer" style="width:12px; height:12px; vertical-align:middle; margin-right:4px;"></i> REPORTE CARTA
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -784,9 +807,8 @@
 
         <div id="receipt-printable-area" style="background:white; color:black; padding:25px; border-radius:0px; font-family:'Courier New', Courier, monospace; text-align:left; border:1px solid #eee; width:350px; margin:0 auto;">
             <div style="text-align:center; border-bottom:2px dashed #000; padding-bottom:15px; margin-bottom:15px;">
-                <img src="logo_admin.png" id="receipt-logo" style="width:80px; height:80px; object-fit:contain; margin-bottom:10px; display:inline-block;"
-                     onload="this.style.display='inline-block'"
-                     onerror="this.src='https://via.placeholder.com/80/000000/C5A059?text=STARBIG';">
+                <img src="logo_admin.png" id="receipt-logo" alt="Logo Starbig Store" style="width:80px; height:80px; object-fit:contain; margin-bottom:10px; display:inline-block;"
+                     onload="this.style.display='inline-block'">
                 <h2 style="font-family:'Playfair Display', serif; margin:0; color:#c5a059;">STARBIG STORE</h2>
                 <p style="font-size:10px; font-weight:bold; margin:5px 0; letter-spacing:2px;">BOUTIQUE EXCLUSIVA</p>
                 <p style="font-size:9px; color:#666;">RIF: V-22727679-3</p>
@@ -3206,8 +3228,169 @@
         }
     }
 
+    let currentClosurePeriod = 'all';
+
+    function filterSummaryClosure(period) {
+        currentClosurePeriod = period;
+        document.querySelectorAll('.closure-btn').forEach(b => {
+            b.style.borderColor = '#C5A059';
+            b.style.background = 'transparent';
+        });
+        const activeBtn = document.getElementById('closure-btn-' + period);
+        if (activeBtn) {
+            activeBtn.style.background = '#C5A059';
+            activeBtn.style.color = '#000';
+        }
+        renderSalesSummaryResults();
+    }
+
+    function getFilteredClosureItems() {
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        const startOfWeek = now.getTime() - (7 * 24 * 60 * 60 * 1000);
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+        const startOfYear = new Date(now.getFullYear(), 0, 1).getTime();
+
+        return allSalesSummaryCache.filter(item => {
+            if (currentClosurePeriod === 'today') return item.timestamp >= startOfToday;
+            if (currentClosurePeriod === 'week') return item.timestamp >= startOfWeek;
+            if (currentClosurePeriod === 'month') return item.timestamp >= startOfMonth;
+            if (currentClosurePeriod === 'year') return item.timestamp >= startOfYear;
+            return true;
+        });
+    }
+
     function searchSalesSummary() {
         renderSalesSummaryResults();
+    }
+
+    async function deleteSingleSaleFromSummary(id, collection) {
+        if (!confirm("¿Deseas eliminar permanentemente este registro de la base de datos (se borrará del Resumen)?")) return;
+        try {
+            await db.collection(collection).doc(id).delete();
+            showNotification("✅ REGISTRO ELIMINADO DE FIRESTORE", "success");
+            loadAdminSalesSummary();
+        } catch(e) {
+            console.error(e);
+            showNotification("Error al eliminar registro", "error");
+        }
+    }
+
+    function exportSummaryExcel() {
+        const filtered = getFilteredClosureItems();
+        if (filtered.length === 0) {
+            showNotification("NO HAY REGISTROS PARA EXPORTAR EN ESTE PERÍODO", "error");
+            return;
+        }
+
+        let csv = "\uFEFF"; // BOM para abrir directamente con acentos en Excel
+        csv += "STARBIG STORE - BOUTIQUE EXCLUSIVA;\n";
+        csv += "RIF: V-22727679-3;\n";
+        csv += `REPORTE DE CIERRE CONTABLE (${currentClosurePeriod.toUpperCase()});\n`;
+        csv += `FECHA Y HORA EMISION: ${new Date().toLocaleString()};\n;\n`;
+
+        // Columnas separadas por punto y coma (;) para separador nativo de Excel
+        csv += "FECHA;HORA;NRO. ORDEN/REF;CLIENTE;CEDULA;TELEFONO;CORREO;DESCRIPCION;MONTO USD;MONTO BSS;DEUDA PENDIENTE BSS;ESTADO\n";
+
+        filtered.forEach(tx => {
+            const d = new Date(tx.timestamp);
+            const dateStr = d.toLocaleDateString();
+            const timeStr = d.toLocaleTimeString();
+            const desc = (tx.description || "").replace(/;/g, ' ').replace(/\n/g, ' ');
+            const cust = (tx.customerName || "").replace(/;/g, ' ');
+
+            csv += `${dateStr};${timeStr};${tx.orderId};${cust};${tx.idNumber};${tx.phone};${tx.customerEmail};${desc};$${tx.totalUsd.toFixed(2)};${tx.totalBss.toFixed(2)} BSS;${tx.remainingDebtBss.toFixed(2)} BSS;${tx.status.toUpperCase()}\n`;
+        });
+
+        const totalUsd = filtered.reduce((a, i) => a + i.totalUsd, 0);
+        const totalDebt = filtered.reduce((a, i) => a + i.remainingDebtBss, 0);
+        csv += `;\nTOTALES;REGISTROS: ${filtered.length};;;;;;;$${totalUsd.toFixed(2)};;DEUDA PENDIENTE: ${totalDebt.toFixed(2)} BSS;\n`;
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Starbig_Cierre_Contable_${currentClosurePeriod}_${Date.now()}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showNotification("✅ ARCHIVO EXCEL (.CSV) ORGANIZADO Y DESCARGADO CORRECTAMENTE", "success");
+    }
+
+    function exportSummaryLetterReport() {
+        const filtered = getFilteredClosureItems();
+        if (filtered.length === 0) {
+            showNotification("NO HAY REGISTROS PARA IMPRIMIR EN ESTE PERÍODO", "error");
+            return;
+        }
+
+        const totalUsd = filtered.reduce((a, i) => a + i.totalUsd, 0);
+        const totalDebt = filtered.reduce((a, i) => a + i.remainingDebtBss, 0);
+        const nowStr = new Date().toLocaleString();
+
+        let rowsHtml = filtered.map(tx => `
+            <tr>
+                <td style="padding:6px; border:1px solid #ccc; font-size:9px;">${new Date(tx.timestamp).toLocaleString()}</td>
+                <td style="padding:6px; border:1px solid #ccc; font-size:9px; font-weight:bold;">${tx.orderId}</td>
+                <td style="padding:6px; border:1px solid #ccc; font-size:9px;">${tx.customerName.toUpperCase()} (${tx.idNumber || 'S/C'})</td>
+                <td style="padding:6px; border:1px solid #ccc; font-size:9px;">${tx.description}</td>
+                <td style="padding:6px; border:1px solid #ccc; font-size:9px; text-align:right;">$${tx.totalUsd.toFixed(2)}</td>
+                <td style="padding:6px; border:1px solid #ccc; font-size:9px; text-align:right; font-weight:bold; color:#C5A059;">${tx.totalBss.toFixed(2)} BSS</td>
+                <td style="padding:6px; border:1px solid #ccc; font-size:9px; text-align:center;">${tx.status.toUpperCase()}</td>
+            </tr>
+        `).join('');
+
+        const printWin = window.open('', '_blank');
+        printWin.document.write(`
+            <html>
+            <head>
+                <title>Reporte Cierre Contable Carta - Starbig Store</title>
+                <style>
+                    @page { size: letter; margin: 15mm; }
+                    body { font-family: Arial, sans-serif; color: #000; padding: 10px; }
+                    .header { text-align: center; border-bottom: 2px solid #C5A059; padding-bottom: 10px; margin-bottom: 15px; }
+                    .title { font-size: 20px; font-weight: bold; color: #C5A059; }
+                    .subtitle { font-size: 11px; font-weight: bold; margin-top: 3px; }
+                    .rif { font-size: 10px; color: #444; margin-top: 3px; }
+                    .stats { display: flex; justify-content: space-between; background: #f8f8f8; padding: 12px; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 15px; font-size: 11px; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                    th { background: #121216; color: #C5A059; font-size: 10px; padding: 8px; text-align: left; border: 1px solid #121216; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div class="title">STARBIG STORE</div>
+                    <div class="subtitle">BOUTIQUE EXCLUSIVA - CIERRE CONTABLE TAMAÑO CARTA</div>
+                    <div class="rif">RIF: V-22727679-3 | FECHA Y HORA DE EMISIÓN: ${nowStr}</div>
+                </div>
+                <div class="stats">
+                    <div><strong>PERÍODO:</strong> ${currentClosurePeriod.toUpperCase()}</div>
+                    <div><strong>TOTAL REGISTROS:</strong> ${filtered.length}</div>
+                    <div><strong>TOTAL VENTAS:</strong> $${totalUsd.toFixed(2)}</div>
+                    <div><strong>DEUDA PENDIENTE:</strong> ${totalDebt.toFixed(2)} BSS</div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>FECHA Y HORA</th>
+                            <th>ORDEN / REF</th>
+                            <th>CLIENTE / C.I.</th>
+                            <th>CONCEPTO / DETALLE</th>
+                            <th style="text-align:right;">MONTO $USD</th>
+                            <th style="text-align:right;">MONTO BSS</th>
+                            <th style="text-align:center;">ESTADO</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rowsHtml}
+                    </tbody>
+                </table>
+            </body>
+            </html>
+        `);
+        printWin.document.close();
+        printWin.focus();
+        setTimeout(() => printWin.print(), 500);
     }
 
     function renderSalesSummaryResults() {
@@ -3217,9 +3400,9 @@
         const queryInput = document.getElementById('summary-search-input');
         const query = queryInput ? queryInput.value.trim().toLowerCase() : "";
 
-        let filtered = allSalesSummaryCache;
+        let filtered = getFilteredClosureItems();
         if (query) {
-            filtered = allSalesSummaryCache.filter(item =>
+            filtered = filtered.filter(item =>
                 (item.idNumber && item.idNumber.toLowerCase().includes(query)) ||
                 (item.orderId && item.orderId.toLowerCase().includes(query)) ||
                 (item.referenceCode && item.referenceCode.toLowerCase().includes(query)) ||
@@ -3241,7 +3424,7 @@
         if (debtEl) debtEl.innerText = `${totalDebtBss.toFixed(2)} BSS`;
 
         if (filtered.length === 0) {
-            container.innerHTML = "<div style='color:#888; text-align:center; padding:30px;'>No se encontraron registros de ventas o clientes para esta búsqueda.</div>";
+            container.innerHTML = "<div style='color:#888; text-align:center; padding:30px;'>No se encontraron registros de ventas o clientes para esta búsqueda o período.</div>";
             return;
         }
 
@@ -3276,7 +3459,10 @@
                         <div style="text-align:right;">
                             <div style="font-weight:900; font-size:14px; color:white;">$${tx.totalUsd.toFixed(2)}</div>
                             <div style="font-size:10px; color:#C5A059;">${tx.totalBss.toFixed(2)} BSS</div>
-                            <button onclick="generateDigitalReceipt('${tx.id}', '${tx.collection}')" style="margin-top:5px; background:transparent; color:#C5A059; border:1px solid #C5A059; padding:4px 10px; font-size:9px; font-weight:bold; border-radius:4px; cursor:pointer;">VER RECIBO</button>
+                            <div style="margin-top:5px;">
+                                <button onclick="deleteSingleSaleFromSummary('${tx.id}', '${tx.collection}')" style="background:transparent; color:#ff4444; border:1px solid #ff4444; padding:4px 8px; font-size:9px; font-weight:bold; border-radius:4px; cursor:pointer; margin-right:4px;">ELIMINAR</button>
+                                <button onclick="generateDigitalReceipt('${tx.id}', '${tx.collection}')" style="background:transparent; color:#C5A059; border:1px solid #C5A059; padding:4px 8px; font-size:9px; font-weight:bold; border-radius:4px; cursor:pointer;">VER RECIBO</button>
+                            </div>
                         </div>
                     </div>
                 `;
