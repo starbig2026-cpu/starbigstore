@@ -1024,10 +1024,37 @@ fun AddProductDialog(
 @Composable
 fun PaymentSettingsSection(curr: Map<String, String>, onS: (Map<String, String>) -> Unit) {
     var z by remember(curr) { mutableStateOf(curr["zelle"] ?: "") }; var b by remember(curr) { mutableStateOf(curr["binance"] ?: "") }; var zi by remember(curr) { mutableStateOf(curr["zinli"] ?: "") }; var pm by remember(curr) { mutableStateOf(curr["pagomovil"] ?: "") }
+    val context = LocalContext.current
+
     Column(modifier = Modifier.padding(24.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("PAGOS", color = Color.White, fontWeight = FontWeight.Black)
+        Text("PAGOS Y CONFIGURACIÓN", color = Color.White, fontWeight = FontWeight.Black)
         AdminLargeTextField(z, { z = it }, "ZELLE"); AdminLargeTextField(b, { b = it }, "BINANCE"); AdminLargeTextField(zi, { zi = it }, "ZINLI"); AdminLargeTextField(pm, { pm = it }, "PAGO MÓVIL")
-        Button(onClick = { onS(mapOf("zelle" to z, "binance" to b, "zinli" to zi, "pagomovil" to pm)) }, Modifier.fillMaxWidth()) { Text("GUARDAR") }
+        Button(onClick = { onS(mapOf("zelle" to z, "binance" to b, "zinli" to zi, "pagomovil" to pm)) }, Modifier.fillMaxWidth()) { Text("GUARDAR METODOS DE PAGO") }
+
+        Spacer(Modifier.height(12.dp))
+
+        Button(
+            onClick = {
+                val db = FirebaseFirestore.getInstance()
+                val updateData = mapOf(
+                    "version" to "1.0.${System.currentTimeMillis()}",
+                    "message" to "✨ ¡Catálogo, precios y ofertas actualizados en tiempo real!",
+                    "updatedAt" to System.currentTimeMillis()
+                )
+                db.collection("config").document("app_version").set(updateData)
+                    .addOnSuccessListener {
+                        android.widget.Toast.makeText(context, "✨ Notificación enviada a todos los usuarios", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    .addOnFailureListener {
+                        android.widget.Toast.makeText(context, "❌ Error al notificar", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+            },
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC5A059)),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text("✨ NOTIFICAR ACTUALIZACIÓN EN TIEMPO REAL", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 11.sp)
+        }
     }
 }
 

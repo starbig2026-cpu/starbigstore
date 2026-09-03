@@ -1078,6 +1078,25 @@
     let onlineHistory = Array(20).fill(1);
     let offlineHistory = Array(20).fill(0);
 
+    // ESCUCHADOR DE ACTUALIZACIONES EN TIEMPO REAL SIN DESCARGAR APK
+    let currentAppVersion = "1.0.0";
+    db.collection("config").doc("app_version").onSnapshot(doc => {
+        if (doc && doc.exists) {
+            const data = doc.data();
+            const newVersion = data.version || "1.0.0";
+            const msg = data.message || "✨ ¡Nuevas funciones y ajustes aplicados en tiempo real!";
+
+            if (currentAppVersion && newVersion !== currentAppVersion) {
+                currentAppVersion = newVersion;
+                showNotification(`✨ ${msg}`, "success");
+                if (window.AndroidApp && window.AndroidApp.showToast) {
+                    window.AndroidApp.showToast(`✨ ${msg}`);
+                }
+                setTimeout(() => window.location.reload(), 2000);
+            }
+        }
+    });
+
     let currentEditingProductId = null;
     let currentAdminCategory = "Todos";
     let cart = [];
